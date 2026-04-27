@@ -138,7 +138,7 @@ export async function getNetWorthContext(): Promise<string> {
   const assetLines = (assets ?? []).length === 0
     ? ["  (no assets recorded)"]
     : (assets ?? []).map((a) => {
-        const catName = (a as any).asset_categories?.name ?? a.category ?? "Other";
+        const catName = (a).asset_categories?.name ?? a.category ?? "Other";
         return `  - ${a.name} [${catName}]: ${fmt(Number(a.value))}`;
       });
 

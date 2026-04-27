@@ -32,6 +32,7 @@ export type Database = {
           is_onboarded?: boolean
           updated_at?: string
         }
+        Relationships: []
       }
       budgets: {
         Row: {
@@ -61,6 +62,7 @@ export type Database = {
           is_locked?: boolean
           updated_at?: string
         }
+        Relationships: []
       }
       categories: {
         Row: {
@@ -92,6 +94,15 @@ export type Database = {
           allocated_amount?: number
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "categories_budget_id_fkey"
+            columns: ["budget_id"]
+            isOneToOne: false
+            referencedRelation: "budgets"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       budget_items: {
         Row: {
@@ -126,6 +137,15 @@ export type Database = {
           notes?: string | null
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "budget_items_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       goals: {
         Row: {
@@ -161,6 +181,7 @@ export type Database = {
           priority?: number
           updated_at?: string
         }
+        Relationships: []
       }
       asset_categories: {
         Row: {
@@ -182,6 +203,7 @@ export type Database = {
           icon?: string
           created_at?: string
         }
+        Relationships: []
       }
       asset_value_history: {
         Row: {
@@ -213,6 +235,7 @@ export type Database = {
           note?: string | null
           entry_date?: string
         }
+        Relationships: []
       }
       assets: {
         Row: {
@@ -248,6 +271,15 @@ export type Database = {
           invested_amount?: number
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "assets_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "asset_categories"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       debts: {
         Row: {
@@ -301,6 +333,7 @@ export type Database = {
           total_repayable?: number
           updated_at?: string
         }
+        Relationships: []
       }
       reports: {
         Row: {
@@ -330,6 +363,7 @@ export type Database = {
           summary_data?: Json
           updated_at?: string
         }
+        Relationships: []
       }
       net_worth_snapshots: {
         Row: {
@@ -356,6 +390,7 @@ export type Database = {
           net_worth?: number
           snapshot_date?: string
         }
+        Relationships: []
       }
       activity_logs: {
         Row: {
@@ -379,6 +414,7 @@ export type Database = {
           created_at?: string
         }
         Update: Record<string, never>
+        Relationships: []
       }
     }
     Views: {

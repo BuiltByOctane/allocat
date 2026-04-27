@@ -82,7 +82,21 @@ export async function addDebt(
   return data;
 }
 
-export async function updateDebt(id: string, updates: any) {
+type DebtUpdate = Partial<{
+  name: string;
+  principal: number;
+  interest_rate: number;
+  monthly_minimum: number;
+  expected_payoff_date: string | null;
+  is_closed: boolean;
+  interest_type: "flat" | "diminishing";
+  loan_tenure_months: number | null;
+  total_paid: number;
+  total_repayable: number;
+  icon: string;
+}>;
+
+export async function updateDebt(id: string, updates: DebtUpdate) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
@@ -270,7 +284,7 @@ export async function getDebtPaymentTrend() {
   ]);
 
   const paid30d = (logs || []).reduce((sum, log) => {
-    return sum + (Number((log.metadata as any)?.amount) || 0);
+    return sum + (Number((log.metadata)?.amount) || 0);
   }, 0);
 
   const totalOutstanding = (debts || []).reduce((sum, d) => {

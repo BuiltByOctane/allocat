@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 
 const navItems = [
@@ -15,6 +16,11 @@ const navItems = [
 export default function BottomNav() {
   const pathname = usePathname();
   const haptic = useHaptic();
+  const router = useRouter();
+
+  useEffect(() => {
+    navItems.forEach((item) => router.prefetch(item.href));
+  }, [router]);
 
   return (
     <nav className="md:hidden fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-background/95 backdrop-blur-md border-t border-border px-4 pt-3 pb-7 z-50">

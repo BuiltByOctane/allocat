@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 
 const navItems = [
@@ -16,11 +17,16 @@ const navItems = [
 export default function SidebarNav() {
   const pathname = usePathname();
   const haptic = useHaptic();
+  const router = useRouter();
   const [showMobileHint, setShowMobileHint] = useState(false);
 
   useEffect(() => {
     if (!localStorage.getItem("mobile-hint-dismissed")) setShowMobileHint(true);
   }, []);
+
+  useEffect(() => {
+    navItems.forEach((item) => router.prefetch(item.href));
+  }, [router]);
 
   const dismissHint = () => {
     localStorage.setItem("mobile-hint-dismissed", "1");

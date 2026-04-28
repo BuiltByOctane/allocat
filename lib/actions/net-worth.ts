@@ -77,7 +77,7 @@ export async function addAsset(
       user_id: user.id,
       name,
       category_id: categoryId,
-      category: "",
+      category: "other",
       value,
       invested_amount: value,
       icon: icon ?? null,

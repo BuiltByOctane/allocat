@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter_Tight, Instrument_Serif, JetBrains_Mono } from "next/font/google";
+import { Inter_Tight, Bricolage_Grotesque, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import QueryProvider from "@/lib/providers/QueryProvider";
 import { ThemeProvider } from "@/lib/providers/ThemeProvider";
@@ -10,11 +10,10 @@ const interTight = Inter_Tight({
   weight: ["300", "400", "500", "600"],
 });
 
-const instrumentSerif = Instrument_Serif({
+const bricolageGrotesque = Bricolage_Grotesque({
   subsets: ["latin"],
   variable: "--font-display",
-  weight: ["400"],
-  style: ["normal", "italic"],
+  weight: ["400", "500", "600", "700"],
 });
 
 const jetbrainsMono = JetBrains_Mono({
@@ -70,7 +69,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${interTight.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} font-sans antialiased text-foreground bg-background`}
+        className={`${interTight.variable} ${bricolageGrotesque.variable} ${jetbrainsMono.variable} font-sans antialiased text-foreground bg-background`}
       >
         <ThemeProvider
           attribute="class"

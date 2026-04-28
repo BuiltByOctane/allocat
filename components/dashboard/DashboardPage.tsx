@@ -1,13 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { InlineEditableNumber } from "@/components/ui/InlineEditableNumber";
 import QuickSpendInput from "@/components/dashboard/QuickSpendInput";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { useHaptic } from "@/lib/hooks/useHaptic";
-import {
-  useUpdateBudgetTotal,
-} from "@/lib/hooks/useDashboard";
 
 interface DashboardProps {
   data: {
@@ -55,12 +51,6 @@ function NetWorthChart({ data }: { data: { net_worth: number | string; snapshot_
 export default function DashboardPage({ data }: DashboardProps) {
   const haptic = useHaptic();
 
-  const updateBudgetMutation = useUpdateBudgetTotal();
-  const budgetError =
-    updateBudgetMutation.error instanceof Error
-      ? updateBudgetMutation.error.message
-      : "Couldn't update the total budget right now.";
-
   const currentNetWorth =
     data.netWorthHistory.length > 0
       ? Number(data.netWorthHistory[data.netWorthHistory.length - 1].net_worth)
@@ -78,12 +68,6 @@ export default function DashboardPage({ data }: DashboardProps) {
     const date = new Date(d.snapshot_date);
     return date.toLocaleString("default", { month: "short" }).toUpperCase();
   });
-
-  function handleUpdateBudget(totalAmount: number) {
-    if (data.budget) {
-      updateBudgetMutation.mutate({ budgetId: data.budget.id, totalAmount });
-    }
-  }
 
   const budgetSpentPct =
     data.budget && data.budget.totalBudget > 0
@@ -118,57 +102,71 @@ export default function DashboardPage({ data }: DashboardProps) {
       <div className="md:grid md:grid-cols-[1fr_1.5fr] md:gap-x-0">
         {/* Left column */}
         <div className="md:border-r border-border">
-          {/* Budget Summary */}
-          <div id="dashboard-budget-summary" className="px-7 py-6 border-b border-border">
-            <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mb-3">
-              Monthly Budget
+          {/* Budget Summary — clickable, routes to /budget */}
+          <Link
+            id="dashboard-budget-summary"
+            href="/budget"
+            onClick={() => haptic.light()}
+            className="block px-7 py-6 border-b border-border hover:bg-muted/30 transition-colors"
+          >
+            <div className="flex items-baseline justify-between mb-3">
+              <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
+                Budget Remaining
+              </div>
+              <span className="font-mono text-[10px] tracking-[0.08em] text-muted-foreground">
+                manage →
+              </span>
             </div>
-            <div className="text-[48px] leading-[0.95] tracking-[-0.025em] text-foreground tabular-nums">
-              {data.budget ? (
-                <InlineEditableNumber
-                  value={data.budget.totalBudget}
-                  onSave={handleUpdateBudget}
-                />
-              ) : (
-                <CurrencyText value={0} />
-              )}
-            </div>
-            {data.budget && (
-              <div className="mt-4 space-y-2">
-                <div className="flex justify-between font-mono text-[10px] text-muted-foreground tabular-nums">
-                  <span>
-                    <CurrencyText value={data.budget.spent} /> spent
-                  </span>
-                  <span>
-                    <CurrencyText value={data.budget.remaining} /> left
-                  </span>
+
+            {data.budget ? (
+              <>
+                <div
+                  className="text-[48px] leading-[0.95] tracking-[-0.025em] tabular-nums"
+                  style={{ color: data.budget.remaining < 0 ? "#ef4444" : "var(--foreground)" }}
+                >
+                  <CurrencyText value={data.budget.remaining} />
                 </div>
-                <div id="dashboard-budget-progress" className="flex gap-[2px]">
-                  {Array.from({ length: 30 }).map((_, j) => (
-                    <div
-                      key={j}
-                      className="flex-1"
-                      style={{
-                        height: 3,
-                        background:
-                          j / 30 < budgetSpentPct / 100
-                            ? data.budget!.spent > data.budget!.totalBudget
-                              ? "#ef4444"
-                              : "var(--foreground)"
-                            : "var(--progress-empty)",
-                      }}
-                    />
-                  ))}
+                <div className="mt-4 space-y-2">
+                  <div className="flex justify-between font-mono text-[10px] text-muted-foreground tabular-nums">
+                    <span><CurrencyText value={data.budget.spent} /> spent</span>
+                    <span>of <CurrencyText value={data.budget.totalBudget} /></span>
+                  </div>
+                  <div id="dashboard-budget-progress" className="flex gap-[2px]">
+                    {Array.from({ length: 30 }).map((_, j) => (
+                      <div
+                        key={j}
+                        className="flex-1"
+                        style={{
+                          height: 3,
+                          background:
+                            j / 30 < budgetSpentPct / 100
+                              ? data.budget!.spent > data.budget!.totalBudget
+                                ? "#ef4444"
+                                : "var(--foreground)"
+                              : "var(--progress-empty)",
+                        }}
+                      />
+                    ))}
+                  </div>
                 </div>
-                {updateBudgetMutation.isError && (
-                  <p className="font-mono text-[10px] text-red-400">{budgetError}</p>
-                )}
+              </>
+            ) : (
+              <div className="border border-border py-6 px-4 space-y-3">
+                <div className="font-mono text-[10px] tracking-[0.1em] uppercase text-muted-foreground">
+                  No allocation set
+                </div>
+                <div className="font-mono text-[11px] text-muted-foreground leading-relaxed">
+                  Create your monthly budget to start tracking spending.
+                </div>
+                <div className="font-mono text-[10px] tracking-[0.08em] text-foreground">
+                  Go to Budget →
+                </div>
               </div>
             )}
-          </div>
+          </Link>
 
           {/* Quick Log */}
-          {data.budget && (
+          {data.budget && data.categories.length > 0 && (
             <div id="dashboard-quick-spend" className="px-7 py-6 border-b border-border md:border-b-0">
               <QuickSpendInput categories={data.categories} />
             </div>

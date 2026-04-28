@@ -224,7 +224,7 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
           <div className="h-px bg-border mx-7" />
 
           {/* Spend Meter */}
-          <div id="budget-spend-meter" className="px-7 pt-[22px] pb-5">
+          <div id="budget-spend-meter" className="px-7 pt-[22px] pb-5 bg-card">
             <div className="flex justify-between items-baseline">
               <div>
                 <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">

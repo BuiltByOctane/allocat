@@ -286,7 +286,7 @@ const trendPct = trendData?.trendPct ?? 0;
         <div className="h-px bg-border mx-7" />
 
         {/* ── Sub-stats ─────────────────────────────────────────────── */}
-        <div className="px-7 py-5 flex justify-between items-baseline">
+        <div className="px-7 py-5 flex justify-between items-baseline bg-card">
           <div>
             <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mb-1">Avg Interest</div>
             <div className="font-display text-[34px] leading-none tracking-[-0.02em] tabular-nums text-foreground">
@@ -302,7 +302,7 @@ const trendPct = trendData?.trendPct ?? 0;
 
         {/* Tick ruler */}
         {totalRepayableAll > 0 && (
-          <div id="debt-progress-ruler" className="px-7 pb-6">
+          <div id="debt-progress-ruler" className="px-7 pb-6 bg-card">
             <TickRuler pct={overallPct} />
           </div>
         )}
@@ -311,8 +311,8 @@ const trendPct = trendData?.trendPct ?? 0;
 
         {/* ── Quick Payment ─────────────────────────────────────────── */}
         {quickPayDebts.length > 0 && (
-          <>
-            <div id="debt-quick-section" className="px-7 pt-5 pb-1 flex justify-between items-baseline">
+          <div className="bg-card">
+            <div id="debt-quick-section" className="px-7 pt-5 pb-1 flex justify-between items-baseline bg-card">
               <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
                 Quick Payment
               </span>
@@ -380,7 +380,7 @@ const trendPct = trendData?.trendPct ?? 0;
             </div>
 
             <div className="h-px bg-border mx-7 mt-1" />
-          </>
+          </div>
         )}
 
         {/* ── Tabs ─────────────────────────────────────────────────── */}
@@ -474,6 +474,15 @@ const trendPct = trendData?.trendPct ?? 0;
                   </button>
                 );
               })}
+            </div>
+
+            <div className="px-7 pt-4 pb-2">
+              <button
+                onClick={openAddSheet}
+                className="w-full py-3.5 bg-foreground text-background font-mono text-[10px] tracking-[0.14em] uppercase active:scale-[0.98] transition-all"
+              >
+                + New Debt
+              </button>
             </div>
           </>
         ) : (

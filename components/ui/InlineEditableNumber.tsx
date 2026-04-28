@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, KeyboardEvent } from "react";
+import { Pencil } from "lucide-react";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 
@@ -61,7 +62,8 @@ export function InlineEditableNumber({ value, onSave, className = "", formatAsCu
         onChange={(e) => setCurrentVal(e.target.value)}
         onBlur={handleSave}
         onKeyDown={handleKeyDown}
-        className={`bg-background text-foreground rounded outline-none border border-border focus:border-primary px-1 w-full max-w-[120px] tabular-nums text-right ${className}`}
+        style={{ fontSize: "inherit", lineHeight: "inherit", letterSpacing: "inherit", fontFamily: "inherit" }}
+        className={`bg-background text-foreground rounded outline-none border border-border focus:border-primary px-1 w-full tabular-nums ${className}`}
       />
     );
   }
@@ -74,8 +76,9 @@ export function InlineEditableNumber({ value, onSave, className = "", formatAsCu
         haptic.light();
         setIsEditing(true);
       }}
-      className={`cursor-pointer hover:bg-muted transition-colors rounded px-1 -mx-1 font-mono ${className}`}
+      className={`relative inline-flex cursor-pointer hover:bg-muted transition-colors rounded px-1 -mx-1 font-mono ${className}`}
     >
+      <Pencil className="absolute -top-1 -right-2 w-2.5 h-2.5 text-muted-foreground shrink-0" />
       {formatAsCurrency ? <CurrencyText value={value} /> : displayVal}
     </span>
   );

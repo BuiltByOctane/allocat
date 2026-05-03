@@ -162,68 +162,60 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
 
   return (
     <>
-      <div className="md:grid md:grid-cols-[1fr_1.5fr] md:gap-x-0">
+      <div className="md:grid md:grid-cols-[1fr_1.5fr] md:gap-x-0 ">
         {/* Left column / mobile full */}
         <div>
           {/* Masthead */}
-          <div className="px-7 pt-6 pb-[18px] flex items-end justify-between">
-            <div>
-              <div className="font-display text-[32px] leading-none tracking-[-0.02em] text-foreground">
-                AlloCat
-              </div>
-              <div className="mt-2 flex items-center gap-1">
-                <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
-                  Vol. {volNum} ·
-                </span>
-                <BottomSheetSelect
-                  title="Select Month"
-                  options={MONTHS.map((m, i) => ({ value: String(i), label: `${m} ${defaultYear}` }))}
-                  value={String(defaultMonth - 1)}
-                  onChange={(val) => handleMonthChange(Number(val))}
-                  className="bg-transparent border-0 p-0 focus:outline-none inline-flex items-center font-mono text-[10px] tracking-[0.14em] uppercase"
-                />
+          <div className="fixed w-full top-0 z-10 bg-background">
+            <div className="px-7 pt-6 pb-[18px] flex items-end justify-between">
+              <div>
+                <div className="font-display text-[32px] leading-none tracking-[-0.02em] text-foreground">
+                  AlloCat
+                </div>
+                <div className="mt-2 flex items-center gap-1">
+                  <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
+                    Vol. {volNum} ·
+                  </span>
+                  <BottomSheetSelect
+                    title="Select Month"
+                    options={MONTHS.map((m, i) => ({ value: String(i), label: `${m} ${defaultYear}` }))}
+                    value={String(defaultMonth - 1)}
+                    onChange={(val) => handleMonthChange(Number(val))}
+                    className="bg-transparent border-0 p-0 focus:outline-none inline-flex items-center font-mono text-[10px] tracking-[0.14em] uppercase"
+                  />
+                </div>
               </div>
             </div>
-            <Link
-              href="/profile"
-              className="size-[34px] rounded-full border border-border flex items-center justify-center text-muted-foreground shrink-0 hover:border-foreground transition-colors"
-            >
-              <span className="material-symbols-outlined text-[16px]">person</span>
-            </Link>
+            {/* Hairline */}
+            <div className="h-px bg-border mx-7" />
           </div>
 
-          {/* Hairline */}
-          <div className="h-px bg-border mx-7" />
-
-          {/* Hero Budget */}
-          <div id="budget-hero-section" className="px-7 pt-[26px] pb-[22px]">
+          {/* Hero — Remaining */}
+          <div id="budget-hero-section" className="px-7 pt-7 mt-20 pb-[22px]">
             <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
-              Total Budget · {monthName.substring(0, 3)}
+              {totalRemaining < 0 ? "Over Budget" : "Remaining"} · {monthName.substring(0, 3)}
             </div>
-            <div className="text-[72px] md:text-[84px] leading-[0.95] tracking-[-0.025em] mt-2.5 text-foreground tabular-nums">
-              <InlineEditableNumber
-                value={data.totalBudget}
-                onSave={handleUpdateBudget}
-              />
+            <div
+              className="text-[72px] md:text-[84px] leading-[0.95] tracking-[-0.025em] mt-2.5 tabular-nums"
+              style={{ color: totalRemaining < 0 ? "#ef4444" : "var(--foreground)" }}
+            >
+              {totalRemaining < 0 ? "−" : ""}
+              <CurrencyText value={Math.abs(totalRemaining)} />
             </div>
-            {budgetTotalError ? (
-              <p className="mt-2 font-mono text-[11px] text-red-400">{budgetTotalError}</p>
-            ) : (
-              <div className="flex flex-wrap gap-x-[18px] gap-y-1 mt-3.5 font-mono text-[11px] text-muted-foreground">
-                <span>
-                  ↳ allocated <CurrencyText value={totalAllocated} />
-                </span>
-                <span className="text-foreground">
-                  · free <CurrencyText value={unallocatedBudget} />
-                </span>
-              </div>
-            )}
+            <div className="flex flex-wrap gap-x-[18px] gap-y-1 mt-3.5 font-mono text-[11px] text-muted-foreground">
+              <span>
+                ↳ allocated <CurrencyText value={totalAllocated} />
+              </span>
+              <span className="text-foreground">
+                · free <CurrencyText value={unallocatedBudget} />
+              </span>
+            </div>
           </div>
 
           {/* Hairline */}
           <div className="h-px bg-border mx-7" />
 
-          {/* Spend Meter */}
+          {/* Spent + Budget + meter */}
           <div id="budget-spend-meter" className="px-7 pt-[22px] pb-5 bg-card">
             <div className="flex justify-between items-baseline">
               <div>
@@ -232,27 +224,31 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
                 </div>
                 <CurrencyText
                   value={totalSpent}
-                  className="text-[38px] tracking-[-0.02em] mt-1 text-foreground"
+                  className="text-[38px] tracking-[-0.02em] mt-1 text-foreground tabular-nums"
                 />
               </div>
               <div className="text-right">
                 <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
-                  {totalRemaining < 0 ? "Over Budget" : "Remaining"}
+                  Budget
                 </div>
-                <div
-                  className="font-mono text-[14px] mt-1.5 tabular-nums"
-                  style={{ color: totalRemaining < 0 ? "#ef4444" : "var(--muted-foreground)" }}
-                >
-                  {totalRemaining < 0 ? "−" : ""}
-                  <CurrencyText value={Math.abs(totalRemaining)} />
-                  <span className="text-[11px] font-mono tabular-nums">
-                    {" "} / {spentPct}%
-                  </span>
+                <div className="text-[22px] tracking-[-0.02em] mt-1 text-muted-foreground tabular-nums">
+                  <InlineEditableNumber
+                    value={data.totalBudget}
+                    onSave={handleUpdateBudget}
+                  />
                 </div>
               </div>
             </div>
+            {budgetTotalError && (
+              <p className="mt-2 font-mono text-[11px] text-red-400 text-right">{budgetTotalError}</p>
+            )}
+            <div className="flex justify-end mt-3">
+              <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground tabular-nums">
+                {spentPct}% used
+              </span>
+            </div>
             <div id="budget-tick-ruler">
-            <TickRuler pct={Math.min(spentPct, 100)} />
+              <TickRuler pct={Math.min(spentPct, 100)} />
             </div>
             <div
               className="flex justify-between mt-1.5 font-mono text-[9px] tracking-[0.08em]"

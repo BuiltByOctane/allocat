@@ -4,6 +4,37 @@ import { useEffect, useState } from "react";
 import { usePWAInstall } from "@/lib/hooks/usePWAInstall";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 
+function playChime() {
+  try {
+    const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    const now = ctx.currentTime;
+    const notes = [
+      { f: 1046.5, t: 0 },
+      { f: 1396.91, t: 0.07 },
+      { f: 2093.0, t: 0.14 },
+    ];
+    const master = ctx.createGain();
+    master.gain.value = 0.12;
+    master.connect(ctx.destination);
+    notes.forEach(({ f, t }) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(f, now + t);
+      const start = now + t;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(1, start + 0.005);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.35);
+      osc.connect(gain).connect(master);
+      osc.start(start);
+      osc.stop(start + 0.36);
+    });
+    setTimeout(() => ctx.close(), 800);
+  } catch {}
+}
+
 export function InstallPrompt() {
   const { canInstall, isIOS, prompt, dismiss } = usePWAInstall();
   const haptic = useHaptic();
@@ -11,7 +42,10 @@ export function InstallPrompt() {
 
   useEffect(() => {
     if (!canInstall) return;
-    const t = setTimeout(() => setVisible(true), 800);
+    const t = setTimeout(() => {
+      setVisible(true);
+      playChime();
+    }, 800);
     return () => clearTimeout(t);
   }, [canInstall]);
 

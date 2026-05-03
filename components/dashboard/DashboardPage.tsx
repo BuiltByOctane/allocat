@@ -77,29 +77,30 @@ export default function DashboardPage({ data }: DashboardProps) {
   return (
     <div>
       {/* Header */}
-      <div className="px-7 pt-6 pb-[18px] flex items-end justify-between">
-        <div>
-          <div className="font-display text-[32px] leading-none tracking-[-0.02em] text-foreground">
-            Dashboard
+      <div className="fixed w-full top-0 z-10 bg-background">
+        <div className="px-7 pt-6 pb-[18px] flex items-end justify-between">
+          <div>
+            <div className="font-display text-[32px] leading-none tracking-[-0.02em] text-foreground">
+              Dashboard
+            </div>
+            <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mt-2">
+              Financial Overview
+            </div>
           </div>
-          <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mt-2">
-            Financial Overview
+          <div className="md:hidden">
+            <Link
+              href="/profile"
+              className="size-[34px] rounded-full border border-border flex items-center justify-center text-muted-foreground hover:border-foreground transition-colors"
+            >
+              <span className="material-symbols-outlined text-[16px]">person</span>
+            </Link>
           </div>
         </div>
-        <div className="md:hidden">
-          <Link
-            href="/profile"
-            className="size-[34px] rounded-full border border-border flex items-center justify-center text-muted-foreground hover:border-foreground transition-colors"
-          >
-            <span className="material-symbols-outlined text-[16px]">person</span>
-          </Link>
-        </div>
+        {/* Hairline */}
+        <div className="h-px bg-border mx-7" />
       </div>
 
-      {/* Hairline */}
-      <div className="h-px bg-border mx-7" />
-
-      <div className="md:grid md:grid-cols-[1fr_1.5fr] md:gap-x-0">
+      <div className="md:grid md:grid-cols-[1fr_1.5fr] md:gap-x-0 mt-20">
         {/* Left column */}
         <div className="md:border-r border-border">
           {/* Budget Summary — clickable, routes to /budget */}

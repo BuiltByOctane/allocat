@@ -30,7 +30,7 @@ type Lent = {
 
 // ── Lent Detail Sheet ─────────────────────────────────────────────────────────
 
-function LentDetailSheet({
+export function LentDetailSheet({
   mode,
   lent,
   open,
@@ -55,22 +55,31 @@ function LentDetailSheet({
   const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  const [prevOpen, setPrevOpen] = useState(open);
+  const [prevLentId, setPrevLentId] = useState(lent?.id);
+  if (open !== prevOpen || lent?.id !== prevLentId) {
+    setPrevOpen(open);
+    setPrevLentId(lent?.id);
+    if (open) {
+      if (mode === "edit" && lent) {
+        setName(lent.name);
+        setAmount(String(lent.principal));
+        setExpectedDate(lent.expectedPayoffDate ?? "");
+      } else {
+        setName("");
+        setAmount("");
+        setExpectedDate("");
+      }
+      setError("");
+      setConfirmDelete(false);
+    }
+  }
+
   useEffect(() => {
     if (!open) return;
-    if (mode === "edit" && lent) {
-      setName(lent.name);
-      setAmount(String(lent.principal));
-      setExpectedDate(lent.expectedPayoffDate ?? "");
-    } else {
-      setName("");
-      setAmount("");
-      setExpectedDate("");
-    }
-    setError("");
-    setConfirmDelete(false);
     const timer = setTimeout(() => nameRef.current?.focus(), 80);
     return () => clearTimeout(timer);
-  }, [open, lent?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, lent?.id]);
 
   function handleSave() {
     if (!name.trim()) { setError("Name is required."); haptic.error(); return; }
@@ -229,7 +238,7 @@ function LentDetailSheet({
 
 // ── Quick Payment Sheet ───────────────────────────────────────────────────────
 
-function PaymentSheet({
+export function PaymentSheet({
   lent,
   open,
   onClose,
@@ -243,7 +252,11 @@ function PaymentSheet({
   const haptic = useHaptic();
   const [amount, setAmount] = useState("");
 
-  useEffect(() => { if (open) setAmount(""); }, [open]);
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) setAmount("");
+  }
 
   function handlePay() {
     if (!lent) return;
@@ -504,7 +517,7 @@ export default function LentListView({ lents, onBack }: { lents: Lent[]; onBack:
                 )}
                 <button
                   onClick={() => openPay(lent)}
-                  className="mt-3 w-full py-2 border border-border rounded-lg font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-all"
+                  className="mt-3 w-full py-3 bg-foreground text-background font-mono text-[10px] tracking-[0.14em] uppercase active:scale-[0.98] transition-all"
                 >
                   Log Payment →
                 </button>

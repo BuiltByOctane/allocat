@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState } from "react";
 import { OAuthButtons } from "@/components/auth/OAuthButtons";
 import { signup } from "@/lib/actions/auth";
@@ -27,100 +28,138 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="relative flex min-h-[100dvh] w-full flex-col bg-black overflow-x-hidden">
-      <div className="flex items-center bg-black p-4 pb-2 justify-between max-w-[480px] mx-auto w-full">
-        <h2 className="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center pr-12">Create Account</h2>
-      </div>
+    <div className="min-h-[100dvh] w-full bg-background text-foreground flex flex-col">
+      <header className="border-b border-border">
+        <div className="max-w-[480px] mx-auto w-full px-6 py-5 flex items-center gap-3">
+          <div className="bg-white rounded-full p-1.5 flex items-center justify-center">
+            <Image
+              src="/paw-white.png"
+              alt="AlloCat"
+              width={24}
+              height={24}
+              className="invert"
+              priority
+            />
+          </div>
+          <div className="flex flex-col leading-none">
+            <span className="font-display text-[20px] tracking-[-0.02em] text-foreground">
+              AlloCat
+            </span>
+            <span className="font-mono text-[9px] tracking-[0.14em] uppercase text-muted-foreground mt-1">
+              Financial Overview
+            </span>
+          </div>
+        </div>
+      </header>
 
-      <div className="max-w-[480px] w-full mx-auto px-4">
-        <h1 className="text-white tracking-tight text-[40px] font-bold leading-tight pb-3 pt-10">Start Tracking</h1>
-        <p className="text-zinc-400 text-base font-normal leading-normal pb-8 pt-1">Create an account to take control of your finances.</p>
+      <main className="flex-1 w-full max-w-[480px] mx-auto px-6 py-12">
+        <p className="font-mono text-[10px] tracking-[0.18em] uppercase text-muted-foreground mb-3">
+          Create Account
+        </p>
+        <h1 className="font-display text-[40px] leading-[1.05] tracking-[-0.02em] text-foreground">
+          Start tracking
+        </h1>
+        <p className="text-muted-foreground text-[15px] leading-relaxed mt-3 mb-10">
+          Create an account to take control of your finances.
+        </p>
 
         <form action={handleSubmit} className="flex flex-col gap-6">
           {errorMsg && (
-            <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-sm font-medium">
+            <div className="border border-red-500/30 bg-red-500/5 px-4 py-3 text-red-500 text-sm font-mono tracking-wide">
               {errorMsg}
             </div>
           )}
-          
-          <div className="flex flex-col gap-2">
-            <label className="flex flex-col min-w-40 flex-1">
-              <span className="text-white text-sm font-medium leading-normal pb-2">Full Name</span>
-              <input 
-                name="full_name"
-                type="text"
+
+          <label className="flex flex-col gap-2">
+            <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
+              Full Name
+            </span>
+            <input
+              name="full_name"
+              type="text"
+              required
+              autoComplete="name"
+              className="w-full h-12 bg-card border border-border px-4 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-foreground transition-colors"
+              placeholder="John Doe"
+            />
+          </label>
+
+          <label className="flex flex-col gap-2">
+            <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
+              Email Address
+            </span>
+            <input
+              name="email"
+              type="email"
+              required
+              autoComplete="email"
+              className="w-full h-12 bg-card border border-border px-4 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-foreground transition-colors"
+              placeholder="name@example.com"
+            />
+          </label>
+
+          <label className="flex flex-col gap-2">
+            <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
+              Password
+            </span>
+            <div className="flex items-stretch border border-border bg-card focus-within:border-foreground transition-colors">
+              <input
+                name="password"
+                type={showPassword ? "text" : "password"}
                 required
-                className="flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-xl text-white focus:outline-0 focus:ring-1 focus:ring-zinc-600 border border-zinc-800 bg-zinc-900 focus:border-zinc-700 h-14 placeholder:text-zinc-500 p-[15px] text-base font-normal leading-normal" 
-                placeholder="John Doe" 
+                minLength={6}
+                autoComplete="new-password"
+                className="flex-1 h-12 bg-transparent px-4 text-foreground placeholder:text-muted-foreground focus:outline-none"
+                placeholder="Create a secure password"
               />
-            </label>
-          </div>
+              <button
+                type="button"
+                onClick={() => {
+                  haptic.light();
+                  setShowPassword(!showPassword);
+                }}
+                className="px-3 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                <span className="material-symbols-outlined text-[20px]">
+                  {showPassword ? "visibility_off" : "visibility"}
+                </span>
+              </button>
+            </div>
+            <span className="font-mono text-[9px] tracking-[0.12em] uppercase text-muted-foreground mt-1">
+              Min 6 characters
+            </span>
+          </label>
 
-          <div className="flex flex-col gap-2">
-            <label className="flex flex-col min-w-40 flex-1">
-              <span className="text-white text-sm font-medium leading-normal pb-2">Email Address</span>
-              <input 
-                name="email"
-                type="email"
-                required
-                className="flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-xl text-white focus:outline-0 focus:ring-1 focus:ring-zinc-600 border border-zinc-800 bg-zinc-900 focus:border-zinc-700 h-14 placeholder:text-zinc-500 p-[15px] text-base font-normal leading-normal" 
-                placeholder="name@example.com" 
-              />
-            </label>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <label className="flex flex-col min-w-40 flex-1">
-              <span className="text-white text-sm font-medium leading-normal pb-2">Password</span>
-              <div className="flex w-full flex-1 items-stretch rounded-xl overflow-hidden border border-zinc-800 focus-within:ring-1 focus-within:ring-zinc-600 focus-within:border-zinc-700 bg-zinc-900">
-                <input 
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  required
-                  minLength={6}
-                  className="flex w-full min-w-0 flex-1 resize-none overflow-hidden text-white focus:outline-0 focus:ring-0 border-0 bg-transparent h-14 placeholder:text-zinc-500 p-[15px] pr-2 text-base font-normal leading-normal" 
-                  placeholder="Create a secure password" 
-                />
-                <button 
-                  type="button"
-                  onClick={() => {
-                    haptic.light();
-                    setShowPassword(!showPassword);
-                  }}
-                  className="text-zinc-500 flex items-center justify-center pr-[15px] cursor-pointer hover:text-white"
-                >
-                  <span className="material-symbols-outlined text-[24px]">
-                    {showPassword ? "visibility_off" : "visibility"}
-                  </span>
-                </button>
-              </div>
-            </label>
-          </div>
-
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={isPending}
-            className="mt-4 w-full h-14 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-colors active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+            className="mt-2 w-full h-12 bg-foreground text-background font-mono text-[11px] tracking-[0.18em] uppercase hover:opacity-85 transition-opacity active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {isPending ? "Creating account..." : "Create Account"}
+            {isPending ? "Creating account…" : "Create Account"}
           </button>
         </form>
 
-        <div className="relative flex py-5 items-center">
-          <div className="flex-grow border-t border-zinc-800"></div>
-          <span className="flex-shrink mx-4 text-zinc-500 text-sm">or continue with</span>
-          <div className="flex-grow border-t border-zinc-800"></div>
+        <div className="flex items-center gap-4 my-8">
+          <div className="flex-1 h-px bg-border" />
+          <span className="font-mono text-[9px] tracking-[0.18em] uppercase text-muted-foreground">
+            or continue with
+          </span>
+          <div className="flex-1 h-px bg-border" />
         </div>
 
         <OAuthButtons />
 
-        <p className="text-center text-zinc-400 text-sm mt-8">
+        <p className="text-center text-muted-foreground text-sm mt-10">
           Already have an account?{" "}
-          <Link className="text-white font-bold hover:underline" href="/auth/login">Sign in</Link>
+          <Link
+            className="text-foreground font-medium underline underline-offset-4 hover:no-underline"
+            href="/auth/login"
+          >
+            Sign in
+          </Link>
         </p>
-      </div>
-      <div className="h-20 bg-black"></div>
-      <div className="fixed bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-zinc-800 to-transparent opacity-50"></div>
+      </main>
     </div>
   );
 }

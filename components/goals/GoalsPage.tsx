@@ -143,7 +143,7 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
   return (
     <>
       {/* Header */}
-      <header className="px-7 pt-6 pb-[18px] border-b border-border">
+      <header className="fixed w-full top-0 z-10 bg-background px-7 pt-6 pb-[18px] border-b border-border">
         <div className="flex items-center gap-2">
           <button
             onClick={() => { haptic.light(); router.back(); }}
@@ -160,7 +160,7 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
         </div>
       </header>
 
-      <main className="pb-10">
+      <main className="pb-10 mt-20">
         {/* ── Quick Progress Update ─────────────────────────────── */}
         {goals.length > 0 && (
           <>

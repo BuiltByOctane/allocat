@@ -12,14 +12,16 @@ export default function ProfilePage() {
   const tour = useTour();
 
   return (
-    <div className="pt-6 px-6 max-w-2xl mx-auto space-y-12 pb-24">
-      {/* Header Section */}
-      <header className=" border-b border-border">
-        <div className="font-display text-[32px] leading-none tracking-[-0.02em] text-foreground">Profile</div>
-        <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mt-2">
-          Financial Identity
+    <>
+      <header className="fixed w-full top-0 z-10 bg-background px-6 pt-6 pb-[18px] border-b border-border">
+        <div className="max-w-2xl mx-auto">
+          <div className="font-display text-[32px] leading-none tracking-[-0.02em] text-foreground">Profile</div>
+          <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mt-2">
+            Financial Identity
+          </div>
         </div>
       </header>
+      <div className="px-6 max-w-2xl mx-auto space-y-12 pb-24 pt-6 mt-20">
 
       {/* User Profile Section */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-8 items-center bg-card/50 p-8 rounded-lg border border-border">
@@ -148,5 +150,6 @@ export default function ProfilePage() {
         </footer>
       </section>
     </div>
+    </>
   );
 }

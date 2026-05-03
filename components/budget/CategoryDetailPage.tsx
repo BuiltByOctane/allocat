@@ -362,7 +362,7 @@ function CategoryDetailContent({
   return (
     <div className="flex flex-col min-h-full">
       {/* Header */}
-      <header className="px-7 pt-14 pb-5 flex items-center justify-between">
+      <header className="sticky top-0 z-10 bg-background px-7 pt-14 pb-5 flex items-center justify-between">
         <button
           id="category-back"
           onClick={() => { haptic.light(); router.back(); }}
@@ -406,37 +406,41 @@ function CategoryDetailContent({
       <div className="md:grid md:grid-cols-[1fr_1.5fr] flex-1">
         {/* Left — stats */}
         <div className="md:border-r border-border">
-          {/* Stats row */}
-          <div className="px-7 py-6 grid grid-cols-3 gap-0 border-b border-border">
-            {/* Budget (editable) */}
-            <div className="flex flex-col gap-1 pr-4 border-r border-border">
-              <span className="font-mono text-[9px] tracking-[0.14em] uppercase text-muted-foreground">Budget</span>
-              <div className="text-[22px] leading-none tracking-[-0.02em] text-foreground tabular-nums mt-1">
-                <InlineEditableNumber
-                  value={categoryAllocation}
-                  onSave={handleUpdateCategoryAllocation}
-                />
-              </div>
-              <span className="font-mono text-[9px] text-muted-foreground mt-0.5">tap to edit</span>
-            </div>
-
-            {/* Spent */}
-            <div className="flex flex-col gap-1 px-4 border-r border-border">
-              <span className="font-mono text-[9px] tracking-[0.14em] uppercase text-muted-foreground">Spent</span>
-              <CurrencyText
-                value={totalActual}
-                className="text-[22px] leading-none tracking-[-0.02em] text-foreground mt-1"
-              />
-            </div>
-
-            {/* Left */}
-            <div className="flex flex-col gap-1 pl-4">
-              <span className="font-mono text-[9px] tracking-[0.14em] uppercase text-muted-foreground">Left</span>
+          {/* Stats — Left as hero */}
+          <div className="px-7 py-6 border-b border-border">
+            <div className="flex flex-col gap-1">
+              <span className="font-mono text-[9px] tracking-[0.14em] uppercase text-muted-foreground">
+                {left < 0 ? "Over Budget" : "Left"}
+              </span>
               <div
-                className="text-[22px] leading-none tracking-[-0.02em] tabular-nums mt-1"
+                className="text-[44px] md:text-[52px] leading-[0.95] tracking-[-0.025em] tabular-nums mt-1"
                 style={{ color: left < 0 ? "#ef4444" : "var(--foreground)" }}
               >
-                <CurrencyText value={left} />
+                {left < 0 ? "−" : ""}
+                <CurrencyText value={Math.abs(left)} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-0 mt-5 pt-4 border-t border-border">
+              {/* Budget (editable) */}
+              <div className="flex flex-col gap-1 pr-4 border-r border-border">
+                <span className="font-mono text-[9px] tracking-[0.14em] uppercase text-muted-foreground">Budget</span>
+                <div className="text-[20px] leading-none tracking-[-0.02em] text-muted-foreground tabular-nums mt-1">
+                  <InlineEditableNumber
+                    value={categoryAllocation}
+                    onSave={handleUpdateCategoryAllocation}
+                  />
+                </div>
+                <span className="font-mono text-[9px] text-muted-foreground mt-0.5">tap to edit</span>
+              </div>
+
+              {/* Spent */}
+              <div className="flex flex-col gap-1 pl-4">
+                <span className="font-mono text-[9px] tracking-[0.14em] uppercase text-muted-foreground">Spent</span>
+                <CurrencyText
+                  value={totalActual}
+                  className="text-[20px] leading-none tracking-[-0.02em] text-foreground mt-1 tabular-nums"
+                />
               </div>
             </div>
           </div>

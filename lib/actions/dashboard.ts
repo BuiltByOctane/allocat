@@ -1,6 +1,11 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import type { Database } from "@/lib/types/database";
+
+type CategoryRow = Database["public"]["Tables"]["categories"]["Row"];
+type BudgetItemRow = Database["public"]["Tables"]["budget_items"]["Row"];
+type CategoryWithItems = CategoryRow & { budget_items: BudgetItemRow[] | null };
 
 export async function getDashboardData() {
   const supabase = await createClient();
@@ -24,13 +29,13 @@ export async function getDashboardData() {
 
   if (budget) {
     let spent = 0;
-    budget.categories?.forEach((c: any) => {
+    (budget.categories as CategoryWithItems[] | null)?.forEach((c) => {
       summaryCategories.push({
         id: c.id,
         name: c.name,
         icon: c.icon,
       });
-      c.budget_items?.forEach((item: any) => {
+      c.budget_items?.forEach((item) => {
         spent += Number(item.actual_amount || 0);
       });
     });

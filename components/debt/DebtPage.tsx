@@ -215,6 +215,7 @@ export default function DebtPage({ data }: { data: Debt[] }) {
     );
   }
 
+
 const trendPct = trendData?.trendPct ?? 0;
   const trendLabel = trendPct === 0
     ? "—"
@@ -232,7 +233,7 @@ const trendPct = trendData?.trendPct ?? 0;
   if (!hasDebts && !hasLents) {
     return (
       <>
-        <header className="px-7 pt-14 pb-[18px] border-b border-border">
+        <header className="sticky top-0 z-10 bg-background px-7 pt-14 pb-[18px] border-b border-border">
           <div className="font-display text-[32px] leading-none tracking-[-0.02em] text-foreground">Debt</div>
           <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mt-2">
             Liability Tracker · <MonthCaption />
@@ -254,14 +255,14 @@ const trendPct = trendData?.trendPct ?? 0;
   return (
     <>
       {/* ── Masthead ─────────────────────────────────────────────── */}
-      <header className="px-7 pt-6 pb-[18px] border-b border-border">
+      <header className="fixed w-full top-0 z-10 bg-background px-7 pt-6 pb-[18px] border-b border-border">
         <div className="font-display text-[32px] leading-none tracking-[-0.02em] text-foreground">Debt</div>
         <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mt-2">
           Liability Tracker · <MonthCaption />
         </div>
       </header>
 
-      <main className="pb-10">
+      <main className="pb-10 mt-20">
         {/* ── Hero ─────────────────────────────────────────────────── */}
         <div id="debt-hero-section" className="px-7 pt-7 pb-6">
           <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mb-2">
@@ -526,6 +527,27 @@ const trendPct = trendData?.trendPct ?? 0;
             </div>
           </>
         )}
+
+        {/* ── Out to Friends nav ──────────────────────────────────────── */}
+        <div className="h-px bg-border mx-7 mt-4" />
+        <div className="px-7 pt-4 pb-6">
+          <button
+            onClick={() => { haptic.light(); setShowLentList(true); }}
+            className="w-full py-4 border border-border flex items-center justify-between px-5 active:scale-[0.98] transition-all"
+          >
+            <div className="text-left">
+              <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mb-0.5">Out to Friends</div>
+              <div className="font-display text-[22px] leading-none tracking-[-0.02em] text-foreground">
+                {totalLent > 0 ? (
+                  <CurrencyText value={totalLent} />
+                ) : (
+                  <span className="font-mono text-[13px] text-muted-foreground">No active lends</span>
+                )}
+              </div>
+            </div>
+            <span className="font-mono text-[11px] text-muted-foreground">→</span>
+          </button>
+        </div>
       </main>
 
       {/* ── Sheets & Modals ───────────────────────────────────────── */}
@@ -560,6 +582,7 @@ const trendPct = trendData?.trendPct ?? 0;
         description="This debt record will be permanently deleted. This action cannot be undone."
         confirmText="Delete"
       />
+
     </>
   );
 }

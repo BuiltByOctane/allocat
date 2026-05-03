@@ -107,7 +107,7 @@ function NetWorthVariationChart({
 
   if (history.length < 2) {
     return (
-      <div className="px-7 py-5">
+      <div className="px-7 py-5 bg-card">
         <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mb-3">
           Net worth trend
         </div>
@@ -147,7 +147,7 @@ function NetWorthVariationChart({
   );
 
   return (
-    <div className="px-7 py-5">
+    <div className="px-7 py-5 bg-card">
       <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mb-3">
         Net worth trend
       </div>
@@ -270,22 +270,24 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
     return (
       <>
         {/* Masthead */}
-        <div className="px-7 pt-16 pb-[18px] flex items-end justify-between">
-          <div>
-            <div className="font-display text-[32px] leading-none tracking-[-0.02em] text-foreground">Net Worth</div>
-            <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mt-2">
-              Ledger · {monthLabel}
+        <div className="sticky top-0 z-10 bg-background">
+          <div className="px-7 pt-6 pb-[18px] flex items-end justify-between">
+            <div>
+              <div className="font-display text-[32px] leading-none tracking-[-0.02em] text-foreground">Net Worth</div>
+              <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mt-2">
+                Ledger · {monthLabel}
+              </div>
             </div>
+            <button
+              onClick={() => openAddSheet()}
+              className="size-[34px] rounded-full border border-border flex items-center justify-center text-foreground hover:border-foreground transition-colors"
+              aria-label="Add asset"
+            >
+              <span className="font-sans text-lg font-light leading-none">+</span>
+            </button>
           </div>
-          <button
-            onClick={() => openAddSheet()}
-            className="size-[34px] rounded-full border border-border flex items-center justify-center text-foreground hover:border-foreground transition-colors"
-            aria-label="Add asset"
-          >
-            <span className="font-sans text-lg font-light leading-none">+</span>
-          </button>
+          <div className="h-px bg-border mx-7" />
         </div>
-        <div className="h-px bg-border mx-7" />
         <main className="p-4">
           <NetWorthEmptyState onAddAsset={() => openAddSheet()} />
         </main>
@@ -297,26 +299,27 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
   return (
     <>
       {/* Masthead */}
-      <div className="px-7 pt-6 pb-[18px] flex items-end justify-between">
-        <div>
-          <div className="font-display text-[32px] leading-none tracking-[-0.02em] text-foreground">Net Worth</div>
-          <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mt-2">
-            Ledger · {monthLabel}
+      <div className="fixed w-full top-0 z-10 bg-background">
+        <div className="px-7 pt-6 pb-[18px] flex items-end justify-between">
+          <div>
+            <div className="font-display text-[32px] leading-none tracking-[-0.02em] text-foreground">Net Worth</div>
+            <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mt-2">
+              Ledger · {monthLabel}
+            </div>
           </div>
+          <button
+            onClick={() => openAddSheet()}
+            className="size-[34px] rounded-full border border-border flex items-center justify-center text-foreground hover:border-foreground transition-colors shrink-0"
+            aria-label="Add asset"
+          >
+            <span className="font-sans text-lg font-light leading-none">+</span>
+          </button>
         </div>
-        <button
-          onClick={() => openAddSheet()}
-          className="size-[34px] rounded-full border border-border flex items-center justify-center text-foreground hover:border-foreground transition-colors shrink-0"
-          aria-label="Add asset"
-        >
-          <span className="font-sans text-lg font-light leading-none">+</span>
-        </button>
+        <div className="h-px bg-border mx-7" />
       </div>
 
-      <div className="h-px bg-border mx-7" />
-
       {/* Hero — total net worth */}
-      <div id="net-worth-hero" className="px-7 pt-[26px] pb-[22px]">
+      <div id="net-worth-hero" className="px-7 pt-[26px] pb-[22px] mt-20">
         <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
           Total net worth
         </div>
@@ -339,7 +342,7 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
       <div className="h-px bg-border mx-7" />
 
       {/* Assets / Liabilities split */}
-      <div className="px-7 py-5 grid grid-cols-2">
+      <div className="px-7 py-5 grid grid-cols-2 bg-card">
         <div>
           <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
             Total assets
@@ -359,7 +362,7 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
       </div>
 
       {/* Monthly net worth trend chart */}
-      <div id="net-worth-chart-section">
+      <div id="net-worth-chart-section bg-card">
       <NetWorthVariationChart history={history} />
       </div>
 

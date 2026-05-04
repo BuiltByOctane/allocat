@@ -191,6 +191,12 @@ export function useDeleteDebt() {
     mutationFn: async (id: string) => {
       const db = getDB();
       await db.debts.delete(id);
+      const linkedItems = await db.budget_items
+        .where({ link_type: "debt", link_id: id })
+        .toArray();
+      for (const item of linkedItems) {
+        await db.budget_items.update(item.id, { link_type: null, link_id: null });
+      }
       await enqueue({
         table: "debts",
         operation: "DELETE",

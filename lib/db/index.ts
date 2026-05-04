@@ -25,7 +25,6 @@ export type {
   BudgetRow,
   CategoryRow,
   BudgetItemRow,
-  GoalRow,
   AssetRow,
   DebtRow,
   ReportRow,

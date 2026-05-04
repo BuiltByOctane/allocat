@@ -9,7 +9,7 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { SyncEngine } from "@/lib/sync/SyncEngine";
-import { hydrateAllTables } from "@/lib/db/hydrate";
+import { hydrateAllTables, forceRefreshTable } from "@/lib/db/hydrate";
 import { prefetchAllQueries } from "@/lib/db/prefetch";
 import type { SyncQueueItem } from "@/lib/db";
 
@@ -39,7 +39,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const [engine] = useState(() => new SyncEngine());
 
   const handleSynced = useCallback(
-    (item: SyncQueueItem) => {
+    async (item: SyncQueueItem) => {
       // After a successful sync, real IDs replace temp ones in IDB. Invalidate
       // the queries that read affected tables so UI links pick up real IDs.
       if (
@@ -51,21 +51,55 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         qc.invalidateQueries({ queryKey: ["categoryData"] });
         qc.invalidateQueries({ queryKey: ["dashboard"] });
       }
-      if (item.table === "goals") {
-        qc.invalidateQueries({ queryKey: ["goals"] });
-        qc.invalidateQueries({ queryKey: ["dashboard"] });
-      }
       if (
         item.table === "assets" ||
         item.table === "asset_categories" ||
         item.table === "asset_value_history"
       ) {
         qc.invalidateQueries({ queryKey: ["net-worth"] });
+        qc.invalidateQueries({ queryKey: ["goals"] });
         qc.invalidateQueries({ queryKey: ["dashboard"] });
       }
       if (item.table === "debts") {
         qc.invalidateQueries({ queryKey: ["debt"] });
         qc.invalidateQueries({ queryKey: ["dashboard"] });
+      }
+
+      // Server-side cascade can mutate other tables. Pull fresh state for
+      // those so IDB matches the server before any subsequent read.
+      if (
+        item.table === "budget_items" &&
+        (item.operation === "UPDATE" || item.operation === "PAYMENT")
+      ) {
+        try {
+          await Promise.all([
+            forceRefreshTable("assets"),
+            forceRefreshTable("asset_value_history"),
+            forceRefreshTable("debts"),
+          ]);
+          qc.refetchQueries({ queryKey: ["net-worth"], type: "all" });
+          qc.refetchQueries({ queryKey: ["goals"], type: "all" });
+          qc.refetchQueries({ queryKey: ["debt"], type: "all" });
+          qc.refetchQueries({ queryKey: ["asset-history"], type: "all" });
+          qc.refetchQueries({ queryKey: ["dashboard"], type: "all" });
+        } catch (err) {
+          console.warn("[SyncEngine] Post-sync refresh failed:", err);
+        }
+      }
+      if (item.table === "assets" && item.operation === "ACHIEVE") {
+        try {
+          await Promise.all([
+            forceRefreshTable("assets"),
+            forceRefreshTable("budget_items"),
+            forceRefreshTable("net_worth_snapshots"),
+          ]);
+          qc.refetchQueries({ queryKey: ["net-worth"], type: "all" });
+          qc.refetchQueries({ queryKey: ["goals"], type: "all" });
+          qc.refetchQueries({ queryKey: ["budget"], type: "all" });
+          qc.refetchQueries({ queryKey: ["dashboard"], type: "all" });
+        } catch (err) {
+          console.warn("[SyncEngine] Post-achieve refresh failed:", err);
+        }
       }
     },
     [qc]
@@ -81,11 +115,12 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         qc.invalidateQueries({ queryKey: ["budget"] });
         qc.invalidateQueries({ queryKey: ["categoryData"] });
       }
-      if (item.table === "goals" || item.table === "budgets") {
+      if (item.table === "budgets") {
         qc.invalidateQueries({ queryKey: ["dashboard"] });
       }
       if (item.table === "assets" || item.table === "debts") {
         qc.invalidateQueries({ queryKey: ["net-worth"] });
+        qc.invalidateQueries({ queryKey: ["goals"] });
         qc.invalidateQueries({ queryKey: ["dashboard"] });
       }
       if (item.table === "debts") {

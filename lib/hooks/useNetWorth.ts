@@ -11,7 +11,10 @@ export const NET_WORTH_KEY = ["net-worth"] as const;
 
 export async function getNetWorthFromIDB() {
   const db = getDB();
-  const assets = await db.assets.orderBy("created_at").toArray();
+  const allAssets = await db.assets.orderBy("created_at").toArray();
+  // Achieved goal-assets are excluded from net worth list
+  const assets = allAssets.filter((a) => !a.achieved_at);
+
   if (assets.length === 0) {
     const debtCount = await db.debts.count();
     if (debtCount === 0) return null;
@@ -32,6 +35,9 @@ export async function getNetWorthFromIDB() {
       category_icon: cat?.icon ?? "📦",
       value: Number(a.value),
       invested_amount: Number(a.invested_amount ?? a.value),
+      is_goal: Boolean(a.is_goal),
+      target_amount: a.target_amount != null ? Number(a.target_amount) : null,
+      achieved_at: a.achieved_at ?? null,
       created_at: a.created_at,
       updated_at: a.updated_at,
     };
@@ -78,11 +84,15 @@ export function useAddAsset() {
       categoryId,
       value,
       icon,
+      isGoal = false,
+      targetAmount = null,
     }: {
       name: string;
       categoryId: string | null;
       value: number;
       icon?: string | null;
+      isGoal?: boolean;
+      targetAmount?: number | null;
     }) => {
       const db = getDB();
       const tempId = `temp_${crypto.randomUUID()}`;
@@ -98,6 +108,9 @@ export function useAddAsset() {
         category_id: categoryId,
         value,
         invested_amount: value,
+        is_goal: isGoal,
+        target_amount: isGoal ? targetAmount : null,
+        achieved_at: null,
         created_at: now,
         updated_at: now,
       });
@@ -120,7 +133,14 @@ export function useAddAsset() {
         operation: "INSERT",
         recordId: tempId,
         tempId,
-        payload: { name, categoryId, value, icon: icon ?? null },
+        payload: {
+          name,
+          categoryId,
+          value,
+          icon: icon ?? null,
+          isGoal,
+          targetAmount: isGoal ? targetAmount : null,
+        },
       });
 
       return { id: tempId };
@@ -142,13 +162,25 @@ export function useUpdateAsset() {
       updates,
     }: {
       id: string;
-      updates: { name?: string; icon?: string; category_id?: string | null };
+      updates: {
+        name?: string;
+        icon?: string;
+        category_id?: string | null;
+        is_goal?: boolean;
+        target_amount?: number | null;
+      };
     }) => {
       const db = getDB();
-      await db.assets.update(id, {
+      const idbPatch: Record<string, unknown> = {
         ...updates,
         updated_at: new Date().toISOString(),
-      });
+      };
+      // Mirror server semantics: toggling is_goal off clears goal fields
+      if (updates.is_goal === false) {
+        idbPatch.target_amount = null;
+        idbPatch.achieved_at = null;
+      }
+      await db.assets.update(id, idbPatch);
       await enqueue({
         table: "assets",
         operation: "UPDATE",
@@ -191,6 +223,16 @@ export function useDeleteAsset() {
     mutationFn: async (id: string) => {
       const db = getDB();
       await db.assets.delete(id);
+
+      // Clear linked references in IDB so cascades don't fire on stale ids.
+      // Server-side triggers handle the same cleanup once sync flushes.
+      const linkedItems = await db.budget_items
+        .where({ link_type: "asset", link_id: id })
+        .toArray();
+      for (const item of linkedItems) {
+        await db.budget_items.update(item.id, { link_type: null, link_id: null });
+      }
+
       await enqueue({
         table: "assets",
         operation: "DELETE",

@@ -35,6 +35,7 @@ async function getCategoryFromIDB(categoryId: string) {
     id: category.id,
     name: category.name,
     icon: category.icon,
+    type: category.type,
     categoryAllocation: Number(category.allocated_amount),
     totalBudget: Number(budget.total_budget),
     otherAllocated,
@@ -45,6 +46,8 @@ async function getCategoryFromIDB(categoryId: string) {
       actual: Number(item.actual_amount),
       is_completed: item.is_completed,
       notes: item.notes ?? null,
+      link_type: (item.link_type as "asset" | "debt" | null) ?? null,
+      link_id: item.link_id ?? null,
     })),
   };
 }

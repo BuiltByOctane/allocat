@@ -1,11 +1,21 @@
 "use client";
 
 import { Drawer } from "vaul";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CurrencyText } from "@/components/ui/CurrencyText";
+import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 import { useHaptic } from "@/lib/hooks/useHaptic";
+import { suggestLink } from "@/lib/utils/link-suggest";
 
 export const NEW_ITEM_ID = "__new__";
+
+export type LinkType = "asset" | "debt";
+
+export interface LinkTarget {
+  id: string;
+  name: string;
+  icon?: string | null;
+}
 
 interface ItemData {
   id: string;
@@ -14,6 +24,8 @@ interface ItemData {
   actual: number;
   is_completed: boolean;
   notes: string | null;
+  link_type?: LinkType | null;
+  link_id?: string | null;
 }
 
 interface ItemDetailSheetProps {
@@ -21,8 +33,13 @@ interface ItemDetailSheetProps {
   category: {
     name: string;
     icon: string | null;
+    type?: "needs" | "wants" | "investments" | "misc" | null;
     allocation: number;
     otherItemsPlanned: number;
+  };
+  linkTargets?: {
+    assets: LinkTarget[];
+    debts: LinkTarget[];
   };
   onClose: () => void;
   onSave: (
@@ -33,6 +50,8 @@ interface ItemDetailSheetProps {
       actual_amount?: number;
       is_completed?: boolean;
       notes?: string | null;
+      link_type?: LinkType | null;
+      link_id?: string | null;
     }
   ) => Promise<void>;
   onCreate: (data: {
@@ -41,6 +60,8 @@ interface ItemDetailSheetProps {
     actual_amount: number;
     is_completed: boolean;
     notes: string | null;
+    link_type?: LinkType | null;
+    link_id?: string | null;
   }) => Promise<void>;
   onDelete: (itemId: string) => void;
 }
@@ -57,6 +78,7 @@ function fmt(value: number) {
 export function ItemDetailSheet({
   item,
   category,
+  linkTargets,
   onClose,
   onSave,
   onCreate,
@@ -74,6 +96,9 @@ export function ItemDetailSheet({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [linkType, setLinkType] = useState<LinkType | "none">("none");
+  const [linkId, setLinkId] = useState<string>("");
+  const [userTouchedLink, setUserTouchedLink] = useState(false);
 
   useEffect(() => {
     if (item) {
@@ -82,6 +107,9 @@ export function ItemDetailSheet({
       setActual(item.actual > 0 ? String(item.actual) : "");
       setIsCompleted(isNew ? false : item.is_completed);
       setNotes(isNew ? "" : (item.notes ?? ""));
+      setLinkType(isNew ? "none" : ((item.link_type as LinkType) ?? "none"));
+      setLinkId(isNew ? "" : (item.link_id ?? ""));
+      setUserTouchedLink(false);
       setError("");
       setConfirmDelete(false);
       setIsSaving(false);
@@ -90,6 +118,36 @@ export function ItemDetailSheet({
       return () => clearTimeout(timer);
     }
   }, [item?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Smart-suggest link type when creating a new item — only until the user
+  // explicitly touches the picker.
+  const suggestion = useMemo(
+    () => suggestLink(category.type ?? null, name),
+    [category.type, name]
+  );
+  useEffect(() => {
+    if (!isNew || userTouchedLink) return;
+    if (suggestion.link_type && linkType === "none") {
+      setLinkType(suggestion.link_type);
+    }
+  }, [suggestion.link_type, isNew, userTouchedLink, linkType]);
+
+  const targetOptions = useMemo(() => {
+    if (linkType === "asset") return linkTargets?.assets ?? [];
+    if (linkType === "debt") return linkTargets?.debts ?? [];
+    return [];
+  }, [linkType, linkTargets]);
+
+  // Clear stale linkId when type changes
+  useEffect(() => {
+    if (linkType === "none") {
+      setLinkId("");
+      return;
+    }
+    if (linkId && !targetOptions.some((t) => t.id === linkId)) {
+      setLinkId("");
+    }
+  }, [linkType, targetOptions, linkId]);
 
   const plannedNum = parseFloat(planned) || 0;
   const hasCategoryBudget = category.allocation > 0;
@@ -122,6 +180,12 @@ export function ItemDetailSheet({
       return;
     }
 
+    if (linkType !== "none" && !linkId) {
+      setError("Pick a target for the link, or set Link to None.");
+      haptic.error();
+      return;
+    }
+
     setIsSaving(true);
     setError("");
 
@@ -129,6 +193,8 @@ export function ItemDetailSheet({
       const plannedVal = parseFloat(planned) || 0;
       const actualVal = parseFloat(actual) || 0;
       const notesVal = notes.trim() || null;
+      const finalLinkType: LinkType | null = linkType === "none" ? null : linkType;
+      const finalLinkId: string | null = finalLinkType ? linkId : null;
 
       if (isNew) {
         await onCreate({
@@ -137,6 +203,8 @@ export function ItemDetailSheet({
           actual_amount: actualVal,
           is_completed: isCompleted,
           notes: notesVal,
+          link_type: finalLinkType,
+          link_id: finalLinkId,
         });
       } else {
         const updates: Parameters<typeof onSave>[1] = {};
@@ -145,6 +213,10 @@ export function ItemDetailSheet({
         if (actualVal !== item.actual) updates.actual_amount = actualVal;
         if (isCompleted !== item.is_completed) updates.is_completed = isCompleted;
         if (notesVal !== item.notes) updates.notes = notesVal;
+        const prevLinkType = (item.link_type as LinkType | null) ?? null;
+        const prevLinkId = item.link_id ?? null;
+        if (finalLinkType !== prevLinkType) updates.link_type = finalLinkType;
+        if (finalLinkId !== prevLinkId) updates.link_id = finalLinkId;
         await onSave(item.id, updates);
       }
 
@@ -395,6 +467,58 @@ export function ItemDetailSheet({
                   {isCompleted ? "Marked as done" : "Mark as done"}
                 </span>
               </button>
+
+              {/* Link to (cross-section) */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  Link to
+                </label>
+                <BottomSheetSelect<"none" | LinkType>
+                  title="Link this item to"
+                  placeholder="None"
+                  value={linkType}
+                  onChange={(v) => {
+                    setUserTouchedLink(true);
+                    setLinkType(v);
+                  }}
+                  options={[
+                    { value: "none", label: "None" },
+                    { value: "asset", label: "Asset / Goal", description: "Investment, savings, or goal" },
+                    { value: "debt", label: "Debt", description: "Loan repayment" },
+                  ]}
+                />
+                {linkType !== "none" && (
+                  <BottomSheetSelect
+                    title={`Pick ${linkType}`}
+                    placeholder={
+                      targetOptions.length === 0
+                        ? `No ${linkType}s yet — create one first`
+                        : `Select ${linkType}`
+                    }
+                    value={linkId}
+                    onChange={setLinkId}
+                    disabled={targetOptions.length === 0}
+                    options={targetOptions.map((t) => ({
+                      value: t.id,
+                      label: t.name,
+                      icon: t.icon ?? undefined,
+                    }))}
+                  />
+                )}
+                {!userTouchedLink &&
+                  isNew &&
+                  suggestion.link_type &&
+                  linkType === suggestion.link_type && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Suggested · {suggestion.reason}
+                    </p>
+                  )}
+                {linkType !== "none" && linkId && (
+                  <p className="text-[10px] text-muted-foreground">
+                    Spend on this item also flows to the linked {linkType}.
+                  </p>
+                )}
+              </div>
 
               {/* Notes */}
               <div className="space-y-1.5">

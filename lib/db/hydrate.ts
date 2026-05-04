@@ -45,7 +45,6 @@ export async function hydrateAllTables(): Promise<void> {
     { data: budgets },
     { data: categories },
     { data: budgetItems },
-    { data: goals },
     { data: assets },
     { data: assetCategories },
     { data: assetValueHistory },
@@ -58,7 +57,6 @@ export async function hydrateAllTables(): Promise<void> {
     supabase.from("budgets").select("*").eq("user_id", userId),
     supabase.from("categories").select("*").eq("user_id", userId),
     supabase.from("budget_items").select("*").eq("user_id", userId),
-    supabase.from("goals").select("*").eq("user_id", userId),
     supabase.from("assets").select("*").eq("user_id", userId),
     supabase.from("asset_categories").select("*").eq("user_id", userId),
     supabase
@@ -93,7 +91,6 @@ export async function hydrateAllTables(): Promise<void> {
     budgetItems?.length
       ? db.budget_items.bulkPut(budgetItems)
       : Promise.resolve(),
-    goals?.length ? db.goals.bulkPut(goals) : Promise.resolve(),
     assets?.length ? db.assets.bulkPut(assets) : Promise.resolve(),
     assetCategories?.length
       ? db.asset_categories.bulkPut(assetCategories)
@@ -118,7 +115,6 @@ export async function hydrateAllTables(): Promise<void> {
     "budgets",
     "categories",
     "budget_items",
-    "goals",
     "assets",
     "asset_categories",
     "asset_value_history",
@@ -142,7 +138,6 @@ export async function refreshTableIfStale(
     | "budgets"
     | "categories"
     | "budget_items"
-    | "goals"
     | "assets"
     | "asset_categories"
     | "asset_value_history"
@@ -170,6 +165,37 @@ export async function refreshTableIfStale(
   await db.sync_meta.put({ table, lastSynced: Date.now() });
 }
 
+/**
+ * Force-refresh a single table from Supabase regardless of staleness.
+ * Use after a sync that may have triggered server-side cascades (e.g. a
+ * budget_items UPDATE that cascaded into assets / debts).
+ */
+export async function forceRefreshTable(
+  table:
+    | "budgets"
+    | "categories"
+    | "budget_items"
+    | "assets"
+    | "asset_categories"
+    | "asset_value_history"
+    | "debts"
+    | "net_worth_snapshots"
+    | "reports"
+): Promise<void> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const db = getDB();
+  const { data } = await supabase.from(table).select("*").eq("user_id", user.id);
+  if (data?.length) {
+    await db.table(table).bulkPut(data);
+  }
+  await db.sync_meta.put({ table, lastSynced: Date.now() });
+}
+
 /** Wipes all user data from IDB — also called when a different user logs in. */
 export async function clearDB(): Promise<void> {
   const db = getDB();
@@ -178,7 +204,6 @@ export async function clearDB(): Promise<void> {
     db.budgets.clear(),
     db.categories.clear(),
     db.budget_items.clear(),
-    db.goals.clear(),
     db.assets.clear(),
     db.asset_categories.clear(),
     db.asset_value_history.clear(),

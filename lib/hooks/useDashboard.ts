@@ -51,7 +51,23 @@ export async function getDashboardFromIDB() {
     };
   }
 
-  const goals = await db.goals.orderBy("created_at").toArray();
+  // Goals are now assets with is_goal=true; surface only active ones for dashboard
+  const allAssets = await db.assets.toArray();
+  const goals = allAssets
+    .filter((a) => a.is_goal === true && !a.achieved_at)
+    .map((a) => ({
+      id: a.id,
+      user_id: a.user_id,
+      name: a.name,
+      icon: a.icon,
+      target_amount: Number(a.target_amount ?? 0),
+      current_amount: Number(a.value ?? 0),
+      notes: null,
+      priority: 0,
+      created_at: a.created_at,
+      updated_at: a.updated_at,
+    }))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
 
   // Compute monthly net worth from asset_value_history (same as net worth page).
   // This stays accurate even when asset values are updated without add/delete.
@@ -118,122 +134,15 @@ export function useUpdateBudgetTotal() {
   });
 }
 
-export function useAddGoal() {
-  const qc = useQueryClient();
-  const enqueue = useEnqueue();
-
-  return useMutation({
-    mutationFn: async ({
-      name,
-      targetAmount,
-    }: {
-      name: string;
-      targetAmount: number;
-    }) => {
-      const db = getDB();
-      const tempId = `temp_${crypto.randomUUID()}`;
-      const now = new Date().toISOString();
-
-      await db.goals.add({
-        id: tempId,
-        user_id: "__pending__",
-        name,
-        icon: null,
-        target_amount: targetAmount,
-        current_amount: 0,
-        notes: null,
-        priority: 0,
-        created_at: now,
-        updated_at: now,
-      });
-
-      await enqueue({
-        table: "goals",
-        operation: "INSERT",
-        recordId: tempId,
-        tempId,
-        payload: { name, targetAmount },
-      });
-
-      return { id: tempId };
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
-    },
-  });
-}
-
-export function useUpdateGoal() {
-  const qc = useQueryClient();
-  const enqueue = useEnqueue();
-
-  return useMutation({
-    mutationFn: async ({
-      id,
-      updates,
-    }: {
-      id: string;
-      updates: { name?: string; current_amount?: number; target_amount?: number };
-    }) => {
-      const db = getDB();
-      await db.goals.update(id, {
-        ...updates,
-        updated_at: new Date().toISOString(),
-      });
-      await enqueue({
-        table: "goals",
-        operation: "UPDATE",
-        recordId: id,
-        payload: { id, updates },
-      });
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
-    },
-  });
-}
-
-export function useDeleteGoal() {
-  const qc = useQueryClient();
-  const enqueue = useEnqueue();
-
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const db = getDB();
-      await db.goals.delete(id);
-      await enqueue({
-        table: "goals",
-        operation: "DELETE",
-        recordId: id,
-        payload: { id },
-      });
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
-    },
-  });
-}
-
-export function useUpdateGoalIcon() {
-  const qc = useQueryClient();
-  const enqueue = useEnqueue();
-
-  return useMutation({
-    mutationFn: async ({ id, icon }: { id: string; icon: string }) => {
-      const db = getDB();
-      await db.goals.update(id, { icon, updated_at: new Date().toISOString() });
-      await enqueue({
-        table: "goals",
-        operation: "UPDATE",
-        recordId: id,
-        payload: { id, updates: { icon } },
-      });
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
-    },
-  });
-}
+// Goal mutation hooks live in `lib/hooks/useGoals.ts` — they now operate on
+// assets where is_goal=true. Re-export from here for any legacy callers.
+export {
+  useAddGoal,
+  useUpdateGoal,
+  useDeleteGoal,
+  useUpdateGoalIcon,
+  useAchieveGoalAsset,
+} from "./useGoals";
 
 /**
  * Fetches budget items for a given category — used by the Quick Spend item dropdown.

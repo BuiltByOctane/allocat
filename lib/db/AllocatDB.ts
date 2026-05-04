@@ -6,7 +6,6 @@ export type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
 export type BudgetRow = Database["public"]["Tables"]["budgets"]["Row"];
 export type CategoryRow = Database["public"]["Tables"]["categories"]["Row"];
 export type BudgetItemRow = Database["public"]["Tables"]["budget_items"]["Row"];
-export type GoalRow = Database["public"]["Tables"]["goals"]["Row"];
 export type AssetRow = Database["public"]["Tables"]["assets"]["Row"];
 export type AssetCategoryRow = Database["public"]["Tables"]["asset_categories"]["Row"];
 export type AssetValueHistoryRow = Database["public"]["Tables"]["asset_value_history"]["Row"];
@@ -22,7 +21,6 @@ export type SyncTable =
   | "budgets"
   | "categories"
   | "budget_items"
-  | "goals"
   | "assets"
   | "asset_categories"
   | "asset_value_history"
@@ -35,7 +33,8 @@ export type SyncOperation =
   | "UPDATE"
   | "DELETE"
   | "PAYMENT"
-  | "BULK_SETUP";
+  | "BULK_SETUP"
+  | "ACHIEVE";
 
 export type SyncStatus = "pending" | "processing" | "done" | "failed";
 
@@ -74,7 +73,6 @@ export class AllocatDB extends Dexie {
   budgets!: Table<BudgetRow, string>;
   categories!: Table<CategoryRow, string>;
   budget_items!: Table<BudgetItemRow, string>;
-  goals!: Table<GoalRow, string>;
   assets!: Table<AssetRow, string>;
   asset_categories!: Table<AssetCategoryRow, string>;
   asset_value_history!: Table<AssetValueHistoryRow, string>;
@@ -123,5 +121,37 @@ export class AllocatDB extends Dexie {
     this.version(4).stores({
       activity_logs: "id, user_id, created_at, category",
     });
+
+    this.version(5).stores({
+      budget_items: "id, category_id, user_id, [link_type+link_id]",
+      goals: "id, user_id, created_at, linked_asset_id",
+    });
+
+    // v6: drop `goals` table — merged into `assets` with is_goal/target_amount.
+    // Add asset indexes for goal queries + achievement state.
+    this.version(6)
+      .stores({
+        goals: null,
+        assets: "id, user_id, created_at, [user_id+is_goal], achieved_at",
+      })
+      .upgrade(async (tx) => {
+        // Clear any stale link_type='goal' values on existing IDB budget_items.
+        // The server-side migration rewrote these to link_type='asset' with
+        // mapped link_id; hydration will overwrite with the correct values.
+        // Until that happens, null them out so client-side cascade no-ops
+        // safely instead of getting stuck on an unknown link_type.
+        const items = tx.table("budget_items");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await items.toCollection().modify((item: any) => {
+          if (item.link_type === "goal") {
+            item.link_type = null;
+            item.link_id = null;
+          }
+        });
+        // Force re-hydration of budget_items + assets next mount
+        const meta = tx.table("sync_meta");
+        await meta.delete("budget_items");
+        await meta.delete("assets");
+      });
   }
 }

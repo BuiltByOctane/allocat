@@ -334,6 +334,8 @@ export function BudgetSetupSheet({
             actual_amount: 0,
             is_completed: false,
             notes: null,
+            link_type: null,
+            link_id: null,
             created_at: now,
             updated_at: now,
           });

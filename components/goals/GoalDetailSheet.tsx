@@ -233,6 +233,9 @@ export function GoalDetailSheet({
                       onChange={(e) => setCurrentAmount(e.target.value)}
                       className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-sm font-mono tabular-nums text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                     />
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Tracked as an asset in Net Worth.
+                    </p>
                   </div>
                 </div>
 

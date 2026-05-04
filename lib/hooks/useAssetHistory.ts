@@ -111,10 +111,11 @@ export function useAddAssetEntry() {
 
       return { id: tempId, runningTotal };
     },
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: NET_WORTH_KEY });
-      qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
-      qc.invalidateQueries({ queryKey: assetHistoryKey(vars.assetId) });
+    onSuccess: async (_, vars) => {
+      await qc.refetchQueries({ queryKey: NET_WORTH_KEY, type: "all" });
+      await qc.refetchQueries({ queryKey: ["goals"], type: "all" });
+      await qc.refetchQueries({ queryKey: DASHBOARD_KEY, type: "all" });
+      await qc.refetchQueries({ queryKey: assetHistoryKey(vars.assetId), type: "all" });
     },
   });
 }

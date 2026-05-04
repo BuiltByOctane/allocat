@@ -83,17 +83,20 @@ export async function getGoalsContext(): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
+  // Goals are now assets with is_goal=true; only surface active ones
   const { data: goals } = await supabase
-    .from("goals")
-    .select("*")
+    .from("assets")
+    .select("name, value, target_amount")
     .eq("user_id", user.id)
+    .eq("is_goal", true)
+    .is("achieved_at", null)
     .order("created_at");
 
   if (!goals || goals.length === 0) return "=== GOALS ===\nNone set yet.";
 
   const lines = goals.map((g) => {
-    const current = Number(g.current_amount);
-    const target = Number(g.target_amount);
+    const current = Number(g.value);
+    const target = Number(g.target_amount ?? 0);
     const pct = target > 0 ? Math.round((current / target) * 100) : 0;
     const gap = target - current;
     return `  - ${g.name}: ${fmt(current)} saved of ${fmt(target)} (${pct}% complete, ${fmt(gap)} remaining)`;

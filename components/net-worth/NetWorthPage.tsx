@@ -16,6 +16,9 @@ interface Asset {
   category_icon: string;
   value: number;
   invested_amount?: number;
+  is_goal?: boolean;
+  target_amount?: number | null;
+  achieved_at?: string | null;
 }
 
 interface NetWorthData {
@@ -210,8 +213,11 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
   const [addSheetOpen, setAddSheetOpen] = useState(false);
   const [addDefaultCategoryId, setAddDefaultCategoryId] = useState<string | null>(null);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [tab, setTab] = useState<"all" | "goals">("all");
 
-  const assets = data.assets;
+  const allAssets = data.assets;
+  const goalAssets = allAssets.filter((a) => a.is_goal);
+  const assets = tab === "goals" ? goalAssets : allAssets;
   const totalAssets = assets.reduce((s, a) => s + a.value, 0);
   const netWorth = totalAssets - data.totalLiabilities;
   const history = data.netWorthHistory ?? [];
@@ -219,7 +225,7 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
   // Derive from live data so sheet always reflects latest values
   const selectedAsset = selectedAssetId
     ? (() => {
-        const a = assets.find(x => x.id === selectedAssetId);
+        const a = allAssets.find(x => x.id === selectedAssetId);
         if (!a) return null;
         return {
           id: a.id,
@@ -230,6 +236,9 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
           category_icon: a.category_icon,
           value: a.value,
           invested_amount: a.invested_amount ?? a.value,
+          is_goal: Boolean(a.is_goal),
+          target_amount: a.target_amount ?? null,
+          achieved_at: a.achieved_at ?? null,
         } satisfies AssetDetail;
       })()
     : null;
@@ -368,6 +377,7 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
 
       <div className="h-px bg-border mx-7" />
 
+
       {/* Asset distribution */}
       <div id="net-worth-distribution-section" className="px-7 pt-5 pb-3 flex justify-between items-baseline">
         <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
@@ -377,11 +387,25 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
           {assets.length} holdings
         </div>
       </div>
-
-      {/* Existing pie chart — unchanged */}
+  {/* Existing pie chart — unchanged */}
       <div className="px-7 pb-6 flex justify-center">
         <PieChart assets={assets} totalAssets={totalAssets} />
       </div>
+      {/* Tabs: All / Goals */}
+      <div className="px-7 pt-4 flex gap-1">
+        {(["all", "goals"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => { haptic.light(); setTab(t); }}
+            className={`font-mono text-[10px] tracking-[0.14em] uppercase px-3 py-2 border-b-2 transition-colors ${
+              tab === t ? "text-foreground border-foreground" : "text-muted-foreground border-transparent"
+            }`}
+          >
+            {t === "all" ? `All · ${allAssets.length}` : `Goals · ${goalAssets.length}`}
+          </button>
+        ))}
+      </div>
+    
 
       <div className="h-px bg-border mx-7" />
 
@@ -424,6 +448,7 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
                           <span className="font-mono text-[10px] shrink-0" style={{ color: "var(--dimmer)" }}>
                             {String(i + 1).padStart(2, "0")}
                           </span>
+                          {asset.is_goal && <span className="text-[14px] shrink-0">🎯</span>}
                           <span className="text-[17px] font-medium tracking-[-0.01em] text-foreground truncate">
                             {asset.name}
                           </span>
@@ -433,9 +458,20 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
                         </div>
                         <div className="font-mono text-[12px] tabular-nums shrink-0 whitespace-nowrap text-foreground">
                           <CurrencyText value={asset.value} />
+                          {asset.is_goal && asset.target_amount && asset.target_amount > 0 && (
+                            <span className="text-muted-foreground">
+                              {" "}/ <CurrencyText value={Number(asset.target_amount)} />
+                            </span>
+                          )}
                         </div>
                       </div>
-                      <SegBar pct={pct} />
+                      <SegBar
+                        pct={
+                          asset.is_goal && asset.target_amount && asset.target_amount > 0
+                            ? Math.min(1, asset.value / Number(asset.target_amount))
+                            : pct
+                        }
+                      />
                     </div>
                   </button>
                 );

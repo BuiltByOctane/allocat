@@ -4,6 +4,30 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/types/database";
 import { logActivity, fmt } from "@/lib/server/activity-logger";
 import { computeAutoCompletion } from "@/lib/utils/budget-completion";
+import { addAssetEntry } from "@/lib/actions/asset-history";
+import { makePayment } from "@/lib/actions/debt";
+
+type LinkType = "asset" | "debt";
+
+async function validateBudgetItemLink(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  linkType: LinkType,
+  linkId: string
+) {
+  const tableMap: Record<LinkType, "assets" | "debts"> = {
+    asset: "assets",
+    debt: "debts",
+  };
+  const { data, error } = await supabase
+    .from(tableMap[linkType])
+    .select("id")
+    .eq("id", linkId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error(`Linked ${linkType} not found`);
+}
 
 type BudgetItemRow = Database["public"]["Tables"]["budget_items"]["Row"];
 type CategoryRow = Database["public"]["Tables"]["categories"]["Row"];
@@ -387,7 +411,12 @@ export async function deleteCategory(categoryId: string) {
   return true;
 }
 
-export async function addBudgetItem(categoryId: string, name: string, planned: number = 0) {
+export async function addBudgetItem(
+  categoryId: string,
+  name: string,
+  planned: number = 0,
+  link?: { link_type: LinkType; link_id: string } | null
+) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
@@ -399,6 +428,10 @@ export async function addBudgetItem(categoryId: string, name: string, planned: n
   const itemContext = await getItemAllocationContext(supabase, user.id, categoryId, null);
   validateItemAllocationChange(itemContext.categoryAllocation, itemContext.otherItemsPlanned, Number(planned || 0));
 
+  if (link) {
+    await validateBudgetItemLink(supabase, user.id, link.link_type, link.link_id);
+  }
+
   const { data, error } = await supabase
     .from("budget_items")
     .insert({
@@ -409,6 +442,8 @@ export async function addBudgetItem(categoryId: string, name: string, planned: n
       actual_amount: 0,
       is_completed: false,
       notes: null,
+      link_type: link?.link_type ?? null,
+      link_id: link?.link_id ?? null,
     })
     .select()
     .single();
@@ -420,7 +455,13 @@ export async function addBudgetItem(categoryId: string, name: string, planned: n
     category: "budget",
     title: `Added "${trimmedName}" to budget`,
     description: `New budget item "${trimmedName}" created with planned amount ${fmt(planned)}`,
-    metadata: { itemId: data.id, name: trimmedName, categoryId, planned_amount: planned },
+    metadata: {
+      itemId: data.id,
+      name: trimmedName,
+      categoryId,
+      planned_amount: planned,
+      ...(link ? { link_type: link.link_type, link_id: link.link_id } : {}),
+    },
   });
 
   return data;
@@ -434,6 +475,8 @@ export async function updateBudgetItem(
     actual_amount?: number;
     is_completed?: boolean;
     notes?: string | null;
+    link_type?: LinkType | null;
+    link_id?: string | null;
   }
 ) {
   const supabase = await createClient();
@@ -442,7 +485,7 @@ export async function updateBudgetItem(
 
   const { data: existingItem, error: existingItemError } = await supabase
     .from("budget_items")
-    .select("id, category_id, planned_amount, actual_amount, is_completed")
+    .select("id, category_id, planned_amount, actual_amount, is_completed, link_type, link_id, name")
     .eq("id", itemId)
     .eq("user_id", user.id)
     .single();
@@ -468,6 +511,11 @@ export async function updateBudgetItem(
       itemContext.otherItemsPlanned,
       Number(updates.planned_amount)
     );
+  }
+
+  if (updates.link_type !== undefined && updates.link_type !== null) {
+    if (!updates.link_id) throw new Error("link_id is required when link_type is set");
+    await validateBudgetItemLink(supabase, user.id, updates.link_type, updates.link_id);
   }
 
   const finalUpdates: typeof updates = { ...updates };
@@ -505,6 +553,42 @@ export async function updateBudgetItem(
     .single();
 
   if (error) throw new Error(error.message);
+
+  // Cascade on positive actual_amount delta when item is linked.
+  // Use post-update link state (allows changing link in same call).
+  const effectiveLinkType =
+    (updates.link_type !== undefined ? updates.link_type : existingItem.link_type) as
+      LinkType | null;
+  const effectiveLinkId =
+    (updates.link_id !== undefined ? updates.link_id : existingItem.link_id) as
+      string | null;
+
+  if (
+    updates.actual_amount !== undefined &&
+    effectiveLinkType &&
+    effectiveLinkId &&
+    Number(updates.actual_amount) > Number(existingItem.actual_amount)
+  ) {
+    const delta = Number(updates.actual_amount) - Number(existingItem.actual_amount);
+    try {
+      if (effectiveLinkType === "asset") {
+        await addAssetEntry(effectiveLinkId, "add_funds", delta, `Budget: ${data.name}`, undefined, { suppressLog: true });
+      } else if (effectiveLinkType === "debt") {
+        await makePayment(effectiveLinkId, delta, { suppressLog: true });
+      }
+    } catch (cascadeErr) {
+      // Revert the budget item update so the client can retry cleanly
+      await supabase
+        .from("budget_items")
+        .update({
+          actual_amount: existingItem.actual_amount,
+          is_completed: existingItem.is_completed,
+        })
+        .eq("id", itemId)
+        .eq("user_id", user.id);
+      throw cascadeErr;
+    }
+  }
 
   const itemName = data.name;
   let title: string;
@@ -612,13 +696,11 @@ export async function quickLogSpend(itemId: string, amount: number) {
 
   if (!item) throw new Error("Item not found");
 
-  const newActual = Number(item.actual_amount) + Number(amount);
+  const previousActual = Number(item.actual_amount);
+  const previousCompleted = Boolean(item.is_completed);
+  const newActual = previousActual + Number(amount);
   const planned = Number(item.planned_amount);
-  const nextCompleted = computeAutoCompletion(
-    planned,
-    newActual,
-    Boolean(item.is_completed)
-  );
+  const nextCompleted = computeAutoCompletion(planned, newActual, previousCompleted);
 
   const { data: updatedItem, error } = await supabase
     .from("budget_items")
@@ -630,24 +712,82 @@ export async function quickLogSpend(itemId: string, amount: number) {
 
   if (error) throw new Error(error.message);
 
-  await logActivity(supabase, user.id, {
-    action_type: "spend_logged",
-    category: "budget",
-    title: `Logged ${fmt(amount)} spend on "${updatedItem.name}"`,
-    description: `${fmt(amount)} spent on "${updatedItem.name}"`,
-    metadata: {
-      itemId,
-      itemName: updatedItem.name,
-      amount,
-      newTotal: updatedItem.actual_amount,
-    },
-  });
+  // Cascade to linked target. If cascade fails, revert the item update.
+  let cascadeSummary: { kind: "asset" | "goal" | "debt"; targetName: string } | null = null;
+  const linkType = item.link_type as LinkType | null | undefined;
+  const linkId = item.link_id as string | null | undefined;
+
+  if (linkType && linkId) {
+    try {
+      if (linkType === "asset") {
+        const { data: asset } = await supabase
+          .from("assets")
+          .select("name")
+          .eq("id", linkId)
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (!asset) throw new Error("Linked asset missing");
+        await addAssetEntry(linkId, "add_funds", Number(amount), `Budget: ${item.name}`, undefined, { suppressLog: true });
+        cascadeSummary = { kind: "asset", targetName: asset.name };
+      } else if (linkType === "debt") {
+        const { data: debt } = await supabase
+          .from("debts")
+          .select("name")
+          .eq("id", linkId)
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (!debt) throw new Error("Linked debt missing");
+        await makePayment(linkId, Number(amount), { suppressLog: true });
+        cascadeSummary = { kind: "debt", targetName: debt.name };
+      }
+    } catch (cascadeErr) {
+      // Revert the item update so client retry doesn't double-spend
+      await supabase
+        .from("budget_items")
+        .update({ actual_amount: previousActual, is_completed: previousCompleted })
+        .eq("id", itemId)
+        .eq("user_id", user.id);
+      throw cascadeErr;
+    }
+  }
+
+  if (cascadeSummary) {
+    await logActivity(supabase, user.id, {
+      action_type: "budget_linked_spend",
+      category: "budget",
+      title: `Logged ${fmt(amount)} on "${updatedItem.name}" → ${cascadeSummary.targetName}`,
+      description: `${fmt(amount)} from "${updatedItem.name}" applied to ${cascadeSummary.kind} "${cascadeSummary.targetName}"`,
+      metadata: {
+        itemId,
+        itemName: updatedItem.name,
+        amount,
+        newTotal: updatedItem.actual_amount,
+        link_type: cascadeSummary.kind,
+        link_id: linkId,
+        targetName: cascadeSummary.targetName,
+      },
+    });
+  } else {
+    await logActivity(supabase, user.id, {
+      action_type: "spend_logged",
+      category: "budget",
+      title: `Logged ${fmt(amount)} spend on "${updatedItem.name}"`,
+      description: `${fmt(amount)} spent on "${updatedItem.name}"`,
+      metadata: {
+        itemId,
+        itemName: updatedItem.name,
+        amount,
+        newTotal: updatedItem.actual_amount,
+      },
+    });
+  }
 
   return {
     itemName: updatedItem.name,
     remaining: updatedItem.planned_amount - updatedItem.actual_amount,
     planned: updatedItem.planned_amount,
     actual: updatedItem.actual_amount,
+    cascade: cascadeSummary,
   };
 }
 
@@ -823,6 +963,7 @@ export async function getCategoryData(categoryId: string) {
     id: categoryWithItems.id,
     name: categoryWithItems.name,
     icon: categoryWithItems.icon,
+    type: categoryWithItems.type,
     categoryAllocation: Number(categoryWithItems.allocated_amount || 0),
     totalBudget: allocationContext.totalBudget,
     otherAllocated: allocationContext.otherAllocated,
@@ -833,6 +974,8 @@ export async function getCategoryData(categoryId: string) {
       actual: Number(item.actual_amount || 0),
       is_completed: item.is_completed,
       notes: item.notes ?? null,
+      link_type: item.link_type ?? null,
+      link_id: item.link_id ?? null,
     })),
   };
 }

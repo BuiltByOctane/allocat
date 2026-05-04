@@ -10,7 +10,8 @@ export async function addAssetEntry(
   entryType: EntryType,
   amount: number,
   note?: string | null,
-  entryDate?: string
+  entryDate?: string,
+  options?: { suppressLog?: boolean }
 ) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -79,8 +80,8 @@ export async function addAssetEntry(
 
   await upsertTodaySnapshot();
 
-  // Log activity for user-initiated entries (not initial)
-  if (entryType !== "initial") {
+  // Log activity for user-initiated entries (not initial, not suppressed by cascade caller)
+  if (entryType !== "initial" && !options?.suppressLog) {
     const actionMap: Record<string, string> = {
       add_funds: "asset_funds_added",
       withdraw: "asset_funds_withdrawn",
@@ -137,7 +138,8 @@ export async function upsertTodaySnapshot() {
   const { data: assets } = await supabase
     .from("assets")
     .select("value")
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .is("achieved_at", null);
 
   const { data: debts } = await supabase
     .from("debts")

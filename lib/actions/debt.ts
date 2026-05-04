@@ -216,7 +216,7 @@ export async function updateDebtIcon(id: string, icon: string) {
   return data;
 }
 
-export async function makePayment(id: string, amount: number) {
+export async function makePayment(id: string, amount: number, options?: { suppressLog?: boolean }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
@@ -249,13 +249,15 @@ export async function makePayment(id: string, amount: number) {
 
   if (error) throw new Error(error.message);
 
-  await logActivity(supabase, user.id, {
-    action_type: "debt_payment_made",
-    category: "debts",
-    title: `Paid ${fmt(amount)} toward "${debt.name}"`,
-    description: `Payment of ${fmt(amount)} made on "${debt.name}"`,
-    metadata: { debtId: id, debtName: debt.name, amount, totalPaid: newTotalPaid },
-  });
+  if (!options?.suppressLog) {
+    await logActivity(supabase, user.id, {
+      action_type: "debt_payment_made",
+      category: "debts",
+      title: `Paid ${fmt(amount)} toward "${debt.name}"`,
+      description: `Payment of ${fmt(amount)} made on "${debt.name}"`,
+      metadata: { debtId: id, debtName: debt.name, amount, totalPaid: newTotalPaid },
+    });
+  }
 
   return data;
 }

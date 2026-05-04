@@ -26,6 +26,8 @@ export function AddAssetSheet({ open, defaultCategoryId, onClose }: AddAssetShee
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
+  const [isGoal, setIsGoal] = useState(false);
+  const [targetAmount, setTargetAmount] = useState("");
 
   // New category creation
   const [showNewCategory, setShowNewCategory] = useState(false);
@@ -48,6 +50,8 @@ export function AddAssetSheet({ open, defaultCategoryId, onClose }: AddAssetShee
       setShowNewCategory(false);
       setNewCatName("");
       setNewCatIcon("📦");
+      setIsGoal(false);
+      setTargetAmount("");
       const timer = setTimeout(() => nameRef.current?.focus(), 80);
       return () => clearTimeout(timer);
     }
@@ -85,6 +89,15 @@ export function AddAssetSheet({ open, defaultCategoryId, onClose }: AddAssetShee
       haptic.error();
       return;
     }
+    let goalTarget: number | null = null;
+    if (isGoal) {
+      goalTarget = parseFloat(targetAmount);
+      if (isNaN(goalTarget) || goalTarget <= 0) {
+        setError("Goal target must be greater than 0.");
+        haptic.error();
+        return;
+      }
+    }
 
     setIsSaving(true);
     setError("");
@@ -94,6 +107,8 @@ export function AddAssetSheet({ open, defaultCategoryId, onClose }: AddAssetShee
         categoryId: selectedCategoryId,
         value: numValue,
         icon,
+        isGoal,
+        targetAmount: goalTarget,
       });
       haptic.success();
       onClose();
@@ -226,6 +241,54 @@ export function AddAssetSheet({ open, defaultCategoryId, onClose }: AddAssetShee
                     className="w-full bg-background border border-border rounded-xl pl-8 pr-4 py-3 text-lg font-semibold text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-foreground"
                   />
                 </div>
+              </div>
+
+              {/* Goal toggle */}
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => { haptic.selection(); setIsGoal((v) => !v); }}
+                  className={`w-full flex items-center justify-between rounded-xl border px-4 py-3 transition-colors ${
+                    isGoal ? "border-foreground bg-muted/40" : "border-border bg-background"
+                  }`}
+                >
+                  <span className="flex items-center gap-2 text-sm">
+                    <span className="text-base leading-none">🎯</span>
+                    <span className="font-medium text-foreground">Make this a goal</span>
+                  </span>
+                  <span
+                    className={`w-9 h-5 rounded-full relative transition-colors ${
+                      isGoal ? "bg-foreground" : "bg-muted"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-background transition-transform ${
+                        isGoal ? "translate-x-4" : ""
+                      }`}
+                    />
+                  </span>
+                </button>
+                {isGoal && (
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      Target Amount
+                    </label>
+                    <div className="relative">
+                      <span className="currency-symbol absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
+                        ₹
+                      </span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        placeholder="0"
+                        value={targetAmount}
+                        onChange={(e) => { setTargetAmount(e.target.value); setError(""); }}
+                        className="w-full bg-background border border-border rounded-xl pl-8 pr-4 py-3 text-lg font-semibold text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-foreground"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {error && (

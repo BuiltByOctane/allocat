@@ -3,7 +3,13 @@ import { getBudgetForPeriod } from "@/lib/actions/budget";
 import { getDB } from "@/lib/db";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { computeAutoCompletion } from "@/lib/utils/budget-completion";
+import { applyLinkedSpendCascadeIDB } from "@/lib/utils/budget-cascade";
 import { DASHBOARD_KEY } from "./useDashboard";
+import { NET_WORTH_KEY } from "./useNetWorth";
+import { GOALS_KEY } from "./useGoals";
+import { DEBT_KEY } from "./useDebt";
+
+type LinkType = "asset" | "debt";
 
 export function budgetKey(month: number, year: number) {
   return ["budget", month, year] as const;
@@ -232,10 +238,12 @@ export function useAddBudgetItem() {
       categoryId,
       name,
       planned = 0,
+      link = null,
     }: {
       categoryId: string;
       name: string;
       planned?: number;
+      link?: { link_type: LinkType; link_id: string } | null;
       month: number;
       year: number;
     }) => {
@@ -252,6 +260,8 @@ export function useAddBudgetItem() {
         actual_amount: 0,
         is_completed: false,
         notes: null,
+        link_type: link?.link_type ?? null,
+        link_id: link?.link_id ?? null,
         created_at: now,
         updated_at: now,
       });
@@ -261,7 +271,7 @@ export function useAddBudgetItem() {
         operation: "INSERT",
         recordId: tempId,
         tempId,
-        payload: { categoryId, name: name.trim(), planned: planned ?? 0 },
+        payload: { categoryId, name: name.trim(), planned: planned ?? 0, link },
       });
 
       return { id: tempId };
@@ -288,29 +298,35 @@ export function useUpdateBudgetItem() {
         actual_amount?: number;
         is_completed?: boolean;
         notes?: string | null;
+        link_type?: LinkType | null;
+        link_id?: string | null;
       };
       month: number;
       year: number;
     }) => {
       const db = getDB();
+      const existing = await db.budget_items.get(itemId);
       const finalUpdates = { ...updates };
       if (
         updates.actual_amount !== undefined &&
-        updates.is_completed === undefined
+        updates.is_completed === undefined &&
+        existing
       ) {
-        const existing = await db.budget_items.get(itemId);
-        if (existing) {
-          const planned =
-            updates.planned_amount !== undefined
-              ? Number(updates.planned_amount)
-              : Number(existing.planned_amount);
-          finalUpdates.is_completed = computeAutoCompletion(
-            planned,
-            Number(updates.actual_amount),
-            Boolean(existing.is_completed)
-          );
-        }
+        const planned =
+          updates.planned_amount !== undefined
+            ? Number(updates.planned_amount)
+            : Number(existing.planned_amount);
+        finalUpdates.is_completed = computeAutoCompletion(
+          planned,
+          Number(updates.actual_amount),
+          Boolean(existing.is_completed)
+        );
       }
+
+      const cascade = existing
+        ? await applyLinkedSpendCascadeIDB(existing, updates)
+        : { touchedNetWorth: false, touchedGoals: false, touchedDebt: false };
+
       await db.budget_items.update(itemId, {
         ...finalUpdates,
         updated_at: new Date().toISOString(),
@@ -321,10 +337,21 @@ export function useUpdateBudgetItem() {
         recordId: itemId,
         payload: { itemId, updates: finalUpdates },
       });
+
+      return cascade;
     },
-    onSuccess: (_data, { month, year }) => {
+    onSuccess: async (_result, { month, year, updates }) => {
       qc.invalidateQueries({ queryKey: budgetKey(month, year) });
       qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
+      // Force refetch unconditionally on actual_amount changes so cross-section
+      // caches reflect the cascade — covers legacy IDB rows where link_type
+      // hadn't been rewritten yet.
+      if (updates.actual_amount !== undefined) {
+        await qc.refetchQueries({ queryKey: NET_WORTH_KEY, type: "all" });
+        await qc.refetchQueries({ queryKey: GOALS_KEY, type: "all" });
+        await qc.refetchQueries({ queryKey: DEBT_KEY, type: "all" });
+        await qc.refetchQueries({ queryKey: ["asset-history"], type: "all" });
+      }
     },
   });
 }

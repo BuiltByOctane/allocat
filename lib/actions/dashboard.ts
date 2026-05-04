@@ -55,16 +55,32 @@ export async function getDashboardData() {
     .order("snapshot_date", { ascending: true })
     .limit(12);
 
-  const { data: goals } = await supabase
-    .from("goals")
-    .select("*")
+  // Goals are assets with is_goal=true; surface only active ones for dashboard.
+  const { data: goalAssets } = await supabase
+    .from("assets")
+    .select("id, user_id, name, icon, value, target_amount, created_at, updated_at, achieved_at")
     .eq("user_id", user.id)
+    .eq("is_goal", true)
+    .is("achieved_at", null)
     .order("created_at");
+
+  const goals = (goalAssets || []).map((a) => ({
+    id: a.id,
+    user_id: a.user_id,
+    name: a.name,
+    icon: a.icon,
+    target_amount: Number(a.target_amount ?? 0),
+    current_amount: Number(a.value ?? 0),
+    notes: null,
+    priority: 0,
+    created_at: a.created_at,
+    updated_at: a.updated_at,
+  }));
 
   return {
     budget: formattedBudget,
     categories: summaryCategories,
-    goals: goals || [],
+    goals,
     netWorthHistory: netWorthHistory || [],
   };
 }

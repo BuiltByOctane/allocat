@@ -114,6 +114,8 @@ export type Database = {
           actual_amount: number
           is_completed: boolean
           notes: string | null
+          link_type: "asset" | "debt" | null
+          link_id: string | null
           created_at: string
           updated_at: string
         }
@@ -126,6 +128,8 @@ export type Database = {
           actual_amount?: number
           is_completed?: boolean
           notes?: string | null
+          link_type?: "asset" | "debt" | null
+          link_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -135,6 +139,8 @@ export type Database = {
           actual_amount?: number
           is_completed?: boolean
           notes?: string | null
+          link_type?: "asset" | "debt" | null
+          link_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -146,42 +152,6 @@ export type Database = {
             referencedColumns: ["id"]
           }
         ]
-      }
-      goals: {
-        Row: {
-          id: string
-          user_id: string
-          name: string
-          icon: string | null
-          target_amount: number
-          current_amount: number
-          notes: string | null
-          priority: number
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          name: string
-          icon?: string | null
-          target_amount?: number
-          current_amount?: number
-          notes?: string | null
-          priority?: number
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          name?: string
-          icon?: string | null
-          target_amount?: number
-          current_amount?: number
-          notes?: string | null
-          priority?: number
-          updated_at?: string
-        }
-        Relationships: []
       }
       asset_categories: {
         Row: {
@@ -247,6 +217,9 @@ export type Database = {
           category_id: string | null
           value: number
           invested_amount: number
+          is_goal: boolean
+          target_amount: number | null
+          achieved_at: string | null
           created_at: string
           updated_at: string
         }
@@ -259,6 +232,9 @@ export type Database = {
           category_id?: string | null
           value?: number
           invested_amount?: number
+          is_goal?: boolean
+          target_amount?: number | null
+          achieved_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -269,6 +245,9 @@ export type Database = {
           category_id?: string | null
           value?: number
           invested_amount?: number
+          is_goal?: boolean
+          target_amount?: number | null
+          achieved_at?: string | null
           updated_at?: string
         }
         Relationships: [

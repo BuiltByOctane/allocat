@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { InlineEditableText } from "@/components/ui/InlineEditableText";
@@ -16,6 +16,12 @@ import { DASHBOARD_KEY } from "@/lib/hooks/useDashboard";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { getDB } from "@/lib/db";
 import { computeAutoCompletion } from "@/lib/utils/budget-completion";
+import { applyLinkedSpendCascadeIDB } from "@/lib/utils/budget-cascade";
+import { NET_WORTH_KEY } from "@/lib/hooks/useNetWorth";
+import { GOALS_KEY } from "@/lib/hooks/useGoals";
+import { DEBT_KEY } from "@/lib/hooks/useDebt";
+
+type LinkType = "asset" | "debt";
 
 interface BudgetItem {
   id: string;
@@ -24,6 +30,14 @@ interface BudgetItem {
   actual: number;
   is_completed: boolean;
   notes: string | null;
+  link_type?: LinkType | null;
+  link_id?: string | null;
+}
+
+interface LinkTargetEntry {
+  id: string;
+  name: string;
+  icon?: string | null;
 }
 
 function fmt(value: number) {
@@ -79,6 +93,7 @@ interface CategoryData {
   id: string;
   name: string;
   icon?: string | null;
+  type?: "needs" | "wants" | "investments" | "misc" | null;
   categoryAllocation: number;
   totalBudget: number;
   otherAllocated: number;
@@ -105,6 +120,38 @@ function CategoryDetailContent({
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
   const [validationError, setValidationError] = useState("");
+  const [linkTargets, setLinkTargets] = useState<{
+    assets: LinkTargetEntry[];
+    debts: LinkTargetEntry[];
+  }>({ assets: [], debts: [] });
+  const [allAssets, setAllAssets] = useState<LinkTargetEntry[]>([]);
+
+  useEffect(() => {
+    const db = getDB();
+    let cancelled = false;
+    (async () => {
+      const [assets, debts] = await Promise.all([
+        db.assets.toArray(),
+        db.debts.toArray(),
+      ]);
+      if (cancelled) return;
+      // Achieved goal-assets aren't valid link targets
+      const activeAssets = assets.filter((a) => !a.achieved_at);
+      const allAssetEntries = activeAssets.map((a) => ({
+        id: a.id,
+        name: a.is_goal ? `🎯 ${a.name}` : a.name,
+        icon: a.icon,
+      }));
+      setAllAssets(allAssetEntries);
+      setLinkTargets({
+        assets: allAssetEntries,
+        debts: debts.map((d) => ({ id: d.id, name: d.name, icon: d.icon })),
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedItem]);
 
   const totalPlanned = items.reduce((s, i) => s + i.planned, 0);
   const totalActual = items.reduce((s, i) => s + i.actual, 0);
@@ -149,11 +196,15 @@ function CategoryDetailContent({
     actual_amount: number;
     is_completed: boolean;
     notes: string | null;
+    link_type?: LinkType | null;
+    link_id?: string | null;
   }) {
     const trimmedName = data.name.trim();
     if (!trimmedName) return;
     haptic.success();
     const tempId = `temp_${crypto.randomUUID()}`;
+    const linkType = data.link_type ?? null;
+    const linkId = data.link_id ?? null;
     const newItem: BudgetItem = {
       id: tempId,
       name: trimmedName,
@@ -161,6 +212,8 @@ function CategoryDetailContent({
       actual: data.actual_amount,
       is_completed: data.is_completed,
       notes: data.notes,
+      link_type: linkType,
+      link_id: linkId,
     };
     setItems((prev) => [...prev, newItem]);
     setValidationError("");
@@ -176,6 +229,8 @@ function CategoryDetailContent({
         actual_amount: data.actual_amount,
         is_completed: data.is_completed,
         notes: data.notes,
+        link_type: linkType,
+        link_id: linkId,
         created_at: now,
         updated_at: now,
       });
@@ -191,6 +246,7 @@ function CategoryDetailContent({
           actual: data.actual_amount,
           is_completed: data.is_completed,
           notes: data.notes,
+          link: linkType && linkId ? { link_type: linkType, link_id: linkId } : null,
         },
       });
       invalidateBudgetCaches();
@@ -209,6 +265,8 @@ function CategoryDetailContent({
       actual_amount?: number;
       is_completed?: boolean;
       notes?: string | null;
+      link_type?: LinkType | null;
+      link_id?: string | null;
     }
   ) {
     const previousItems = items;
@@ -239,6 +297,8 @@ function CategoryDetailContent({
             ...(finalUpdates.actual_amount !== undefined ? { actual: finalUpdates.actual_amount } : {}),
             ...(finalUpdates.is_completed !== undefined ? { is_completed: finalUpdates.is_completed } : {}),
             ...(finalUpdates.notes !== undefined ? { notes: finalUpdates.notes } : {}),
+            ...(finalUpdates.link_type !== undefined ? { link_type: finalUpdates.link_type } : {}),
+            ...(finalUpdates.link_id !== undefined ? { link_id: finalUpdates.link_id } : {}),
           }
         : item
     );
@@ -262,10 +322,25 @@ function CategoryDetailContent({
     if (finalUpdates.actual_amount !== undefined) idbUpdates.actual_amount = finalUpdates.actual_amount;
     if (finalUpdates.is_completed !== undefined) idbUpdates.is_completed = finalUpdates.is_completed;
     if (finalUpdates.notes !== undefined) idbUpdates.notes = finalUpdates.notes;
+    if ((finalUpdates as { link_type?: unknown }).link_type !== undefined) {
+      idbUpdates.link_type = (finalUpdates as { link_type: string | null }).link_type;
+    }
+    if ((finalUpdates as { link_id?: unknown }).link_id !== undefined) {
+      idbUpdates.link_id = (finalUpdates as { link_id: string | null }).link_id;
+    }
     idbUpdates.updated_at = new Date().toISOString();
 
     try {
       const db = getDB();
+      const existing = await db.budget_items.get(id);
+      let cascade = { touchedNetWorth: false, touchedGoals: false, touchedDebt: false };
+      if (existing) {
+        cascade = await applyLinkedSpendCascadeIDB(existing, {
+          actual_amount: finalUpdates.actual_amount,
+          link_type: (finalUpdates as { link_type?: "asset" | "debt" | null }).link_type,
+          link_id: (finalUpdates as { link_id?: string | null }).link_id,
+        });
+      }
       await db.budget_items.update(id, idbUpdates);
       await enqueue({
         table: "budget_items",
@@ -274,6 +349,17 @@ function CategoryDetailContent({
         payload: { itemId: id, updates: finalUpdates },
       });
       invalidateBudgetCaches();
+      // Force refetch on every actual_amount change. Even if the cascade
+      // helper returned no flags (e.g. legacy 'goal' link_type that the IDB
+      // upgrade hasn't rewritten yet), the server-side cascade may have run
+      // — so we need to make sure cross-section views pick up fresh state
+      // on next mount without a hard page refresh.
+      if (finalUpdates.actual_amount !== undefined) {
+        await qc.refetchQueries({ queryKey: NET_WORTH_KEY, type: "all" });
+        await qc.refetchQueries({ queryKey: GOALS_KEY, type: "all" });
+        await qc.refetchQueries({ queryKey: DEBT_KEY, type: "all" });
+        await qc.refetchQueries({ queryKey: ["asset-history"], type: "all" });
+      }
     } catch {
       haptic.error();
       setItems(previousItems);
@@ -577,6 +663,18 @@ function CategoryDetailContent({
                           </span>
                         )}
                       </div>
+                      {item.link_type && item.link_id && (
+                        <div className="font-mono text-[9px] text-foreground/70 mt-0.5 inline-flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[12px]">link</span>
+                          {(() => {
+                            const target =
+                              item.link_type === "asset"
+                                ? allAssets.find((t) => t.id === item.link_id)
+                                : linkTargets.debts.find((t) => t.id === item.link_id);
+                            return target ? `${target.icon ?? ""} ${target.name}`.trim() : item.link_type;
+                          })()}
+                        </div>
+                      )}
                       {item.planned > 0 && (
                         <SegBar pct={itemPct} segments={16} />
                       )}
@@ -642,10 +740,28 @@ function CategoryDetailContent({
 
       <ItemDetailSheet
         item={selectedItem}
-        category={{ name, icon, allocation: categoryAllocation, otherItemsPlanned }}
+        category={{ name, icon, type: data.type ?? null, allocation: categoryAllocation, otherItemsPlanned }}
+        linkTargets={(() => {
+          // If currently selected item already references a now-mirrored asset,
+          // re-include that asset in the picker so the user can see/keep it.
+          if (
+            selectedItem?.link_type === "asset" &&
+            selectedItem.link_id &&
+            !linkTargets.assets.some((a) => a.id === selectedItem.link_id)
+          ) {
+            const legacy = allAssets.find((a) => a.id === selectedItem.link_id);
+            if (legacy) {
+              return {
+                ...linkTargets,
+                assets: [...linkTargets.assets, legacy],
+              };
+            }
+          }
+          return linkTargets;
+        })()}
         onClose={() => setSelectedItem(null)}
         onSave={async (itemId, updates) => { await handleUpdateItem(itemId, updates); }}
-        onCreate={async (data) => { await handleAddItem(data); }}
+        onCreate={async (formData) => { await handleAddItem(formData); }}
         onDelete={handleDeleteItem}
       />
     </div>

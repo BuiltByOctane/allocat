@@ -6,6 +6,7 @@ import { CurrencyText } from "@/components/ui/CurrencyText";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { useAssetHistory, useAddAssetEntry } from "@/lib/hooks/useAssetHistory";
 import { useUpdateAsset, useDeleteAsset } from "@/lib/hooks/useNetWorth";
+import { useAchieveGoalAsset } from "@/lib/hooks/useGoals";
 import { useAssetCategories } from "@/lib/hooks/useAssetCategories";
 import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
@@ -22,6 +23,9 @@ export interface AssetDetail {
   category_icon: string;
   value: number;
   invested_amount: number;
+  is_goal?: boolean;
+  target_amount?: number | null;
+  achieved_at?: string | null;
 }
 
 interface AssetDetailSheetProps {
@@ -54,12 +58,16 @@ export function AssetDetailSheet({ asset, onClose }: AssetDetailSheetProps) {
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState("");
   const [editingCategory, setEditingCategory] = useState(false);
+  const [editingTarget, setEditingTarget] = useState(false);
+  const [targetValue, setTargetValue] = useState("");
+  const [confirmAchieve, setConfirmAchieve] = useState(false);
 
   const { data: history } = useAssetHistory(asset?.id ?? null, 5);
   const { data: categories } = useAssetCategories();
   const addEntryMutation = useAddAssetEntry();
   const updateAssetMutation = useUpdateAsset();
   const deleteAssetMutation = useDeleteAsset();
+  const achieveMutation = useAchieveGoalAsset();
 
   const categoryOptions = (categories ?? []).map((c) => ({
     value: c.id,
@@ -202,6 +210,93 @@ export function AssetDetailSheet({ asset, onClose }: AssetDetailSheetProps) {
                     )}
                   </div>
 
+                  {/* Goal section */}
+                  {asset.is_goal && (
+                    <div className="rounded-xl border border-border bg-background px-4 py-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                          🎯 Goal Target
+                        </span>
+                        {asset.achieved_at ? (
+                          <span className="text-[10px] font-mono uppercase tracking-widest text-foreground">
+                            Achieved {new Date(asset.achieved_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setTargetValue(String(asset.target_amount ?? 0));
+                              setEditingTarget(true);
+                            }}
+                            className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground hover:text-foreground"
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </div>
+                      {editingTarget ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            autoFocus
+                            type="number"
+                            min="0"
+                            value={targetValue}
+                            onChange={(e) => setTargetValue(e.target.value)}
+                            className="flex-1 bg-card border border-border rounded-lg px-3 py-1.5 text-sm font-mono tabular-nums text-foreground focus:outline-none focus:ring-1 focus:ring-foreground"
+                          />
+                          <button
+                            onClick={() => {
+                              const t = parseFloat(targetValue);
+                              if (!isNaN(t) && t >= 0) {
+                                updateAssetMutation.mutate({
+                                  id: asset.id,
+                                  updates: { target_amount: t },
+                                });
+                              }
+                              setEditingTarget(false);
+                            }}
+                            className="text-xs font-bold text-foreground px-3 py-1.5 bg-foreground/10 rounded-lg"
+                          >
+                            Save
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-baseline justify-between">
+                            <CurrencyText
+                              value={Number(asset.target_amount ?? 0)}
+                              className="text-lg font-bold tabular-nums text-foreground"
+                            />
+                            <span className="text-xs font-mono tabular-nums text-muted-foreground">
+                              {asset.target_amount && asset.target_amount > 0
+                                ? `${Math.round(Math.min(100, (asset.value / Number(asset.target_amount)) * 100))}%`
+                                : "—"}
+                            </span>
+                          </div>
+                          <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-foreground rounded-full transition-all"
+                              style={{
+                                width: `${
+                                  asset.target_amount && asset.target_amount > 0
+                                    ? Math.min(100, (asset.value / Number(asset.target_amount)) * 100)
+                                    : 0
+                                }%`,
+                              }}
+                            />
+                          </div>
+                          {!asset.achieved_at && (
+                            <button
+                              onClick={() => { haptic.heavy(); setConfirmAchieve(true); }}
+                              className="w-full mt-2 py-2 text-xs font-mono uppercase tracking-widest text-foreground border border-border bg-card rounded-lg hover:bg-muted transition-colors"
+                            >
+                              Mark Achieved · Withdraw
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+
                   {/* Action buttons */}
                   <div className="grid grid-cols-3 gap-2.5">
                     <button
@@ -305,6 +400,26 @@ export function AssetDetailSheet({ asset, onClose }: AssetDetailSheetProps) {
         title="Delete Asset"
         description="This will permanently delete this asset and all its history. This cannot be undone."
         confirmText="Delete"
+      />
+
+      <ConfirmDrawer
+        isOpen={confirmAchieve}
+        onClose={() => setConfirmAchieve(false)}
+        onConfirm={() => {
+          if (asset) {
+            achieveMutation.mutate(asset.id);
+            setConfirmAchieve(false);
+            onClose();
+          }
+        }}
+        title={asset ? `Mark "${asset.name}" achieved?` : "Mark achieved?"}
+        description={
+          asset
+            ? `This withdraws ₹${Number(asset.value).toLocaleString("en-IN")} from net worth and archives the goal. Linked budget items lose their link.`
+            : ""
+        }
+        confirmText="Mark Achieved"
+        cancelText="Cancel"
       />
     </>
   );

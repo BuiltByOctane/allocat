@@ -22,12 +22,11 @@ type BulkSetupCategoryInput = {
   items: Array<{ tempId: string; name: string; planned: number }>;
 };
 import {
-  addGoal,
-  updateGoal,
-  deleteGoal,
-  updateGoalIcon,
-} from "@/lib/actions/goals";
-import { addAsset, updateAsset, deleteAsset } from "@/lib/actions/net-worth";
+  addAsset,
+  updateAsset,
+  deleteAsset,
+  achieveGoalAsset,
+} from "@/lib/actions/net-worth";
 import {
   addAssetCategory,
   updateAssetCategory,
@@ -67,7 +66,7 @@ type Dispatcher = Record<
 interface SyncCallbacks {
   onPendingChange?: (count: number) => void;
   onRollback?: (item: SyncQueueItem, error: string) => void;
-  onSynced?: (item: SyncQueueItem) => void;
+  onSynced?: (item: SyncQueueItem) => void | Promise<void>;
 }
 
 export class SyncEngine {
@@ -115,7 +114,8 @@ export class SyncEngine {
         addBudgetItem(
           p.categoryId as string,
           p.name as string,
-          (p.planned as number) ?? 0
+          (p.planned as number) ?? 0,
+          (p.link as { link_type: "asset" | "debt"; link_id: string } | null) ?? null
         ),
       UPDATE: (p) =>
         updateBudgetItem(
@@ -125,26 +125,17 @@ export class SyncEngine {
       DELETE: (p) => deleteBudgetItem(p.itemId as string),
       PAYMENT: (p) => quickLogSpend(p.itemId as string, p.amount as number),
     },
-    goals: {
-      INSERT: (p) => addGoal(p.name as string, p.targetAmount as number),
-      UPDATE: (p) => {
-        const u = p.updates as Record<string, unknown>;
-        if (u.icon !== undefined)
-          return updateGoalIcon(p.id as string, u.icon as string);
-        return updateGoal(
-          p.id as string,
-          u as Parameters<typeof updateGoal>[1]
-        );
-      },
-      DELETE: (p) => deleteGoal(p.id as string),
-    },
     assets: {
       INSERT: (p) =>
         addAsset(
           p.name as string,
           (p.categoryId as string | null) ?? null,
           p.value as number,
-          (p.icon as string | null) ?? null
+          (p.icon as string | null) ?? null,
+          {
+            isGoal: Boolean(p.isGoal),
+            targetAmount: (p.targetAmount as number | null | undefined) ?? null,
+          }
         ),
       UPDATE: (p) =>
         updateAsset(
@@ -152,6 +143,7 @@ export class SyncEngine {
           p.updates as Parameters<typeof updateAsset>[1]
         ),
       DELETE: (p) => deleteAsset(p.id as string),
+      ACHIEVE: (p) => achieveGoalAsset(p.id as string),
     },
     asset_categories: {
       INSERT: (p) =>

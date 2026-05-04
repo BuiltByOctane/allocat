@@ -246,21 +246,23 @@ export function BudgetSetupSheet({
       const db = getDB();
       const now = new Date().toISOString();
 
-      // 1. Update total budget if set
+      // 1. Optimistic IDB write for total + cats + items
       if (totalBudgetNum > 0) {
         await db.budgets.update(budgetId, {
           total_budget: totalBudgetNum,
           updated_at: now,
         });
-        await enqueue({
-          table: "budgets",
-          operation: "UPDATE",
-          recordId: budgetId,
-          payload: { budgetId, totalAmount: totalBudgetNum },
-        });
       }
 
-      // 2. Create categories + items
+      const bulkCategories: Array<{
+        tempId: string;
+        name: string;
+        icon: string | null;
+        type: "misc";
+        allocated_amount: number;
+        items: Array<{ tempId: string; name: string; planned: number }>;
+      }> = [];
+
       for (const cat of categories) {
         const catName = cat.name.trim();
         if (!catName) continue;
@@ -277,18 +279,12 @@ export function BudgetSetupSheet({
           created_at: now,
           updated_at: now,
         });
-        await enqueue({
-          table: "categories",
-          operation: "INSERT",
-          recordId: catTempId,
-          tempId: catTempId,
-          payload: {
-            budgetId,
-            name: catName,
-            type: "misc",
-            allocated_amount: cat.allocation,
-          },
-        });
+
+        const itemPayloads: Array<{
+          tempId: string;
+          name: string;
+          planned: number;
+        }> = [];
 
         for (const item of cat.items) {
           const itemName = item.name.trim();
@@ -307,18 +303,31 @@ export function BudgetSetupSheet({
             created_at: now,
             updated_at: now,
           });
-          await enqueue({
-            table: "budget_items",
-            operation: "INSERT",
-            recordId: itemTempId,
-            tempId: itemTempId,
-            payload: {
-              categoryId: catTempId,
-              name: itemName,
-              planned: 0,
-            },
-          });
+          itemPayloads.push({ tempId: itemTempId, name: itemName, planned: 0 });
         }
+
+        bulkCategories.push({
+          tempId: catTempId,
+          name: catName,
+          icon: cat.icon,
+          type: "misc",
+          allocated_amount: cat.allocation,
+          items: itemPayloads,
+        });
+      }
+
+      // 2. Single bulk enqueue — server does 3 round trips total
+      if (bulkCategories.length > 0 || totalBudgetNum > 0) {
+        await enqueue({
+          table: "budgets",
+          operation: "BULK_SETUP",
+          recordId: budgetId,
+          payload: {
+            budgetId,
+            totalBudget: totalBudgetNum,
+            categories: bulkCategories,
+          },
+        });
       }
 
       // 3. Save as template if requested

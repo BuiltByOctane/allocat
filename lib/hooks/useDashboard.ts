@@ -4,6 +4,7 @@ import { updateBudgetTotal, getCategoryItems, quickLogSpend } from "@/lib/action
 import { getDB } from "@/lib/db";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { computeMonthlyHistory } from "@/lib/utils/netWorthHistory";
+import { computeAutoCompletion } from "@/lib/utils/budget-completion";
 
 export const DASHBOARD_KEY = ["dashboard"] as const;
 
@@ -271,8 +272,15 @@ export function useQuickLogSpend() {
       const item = await db.budget_items.get(itemId);
       if (item) {
         const newActual = Number(item.actual_amount) + amount;
+        const planned = Number(item.planned_amount);
+        const nextCompleted = computeAutoCompletion(
+          planned,
+          newActual,
+          Boolean(item.is_completed)
+        );
         await db.budget_items.update(itemId, {
           actual_amount: newActual,
+          is_completed: nextCompleted,
           updated_at: new Date().toISOString(),
         });
         await enqueue({
@@ -283,8 +291,8 @@ export function useQuickLogSpend() {
         });
         return {
           itemName: item.name,
-          remaining: Number(item.planned_amount) - newActual,
-          planned: Number(item.planned_amount),
+          remaining: planned - newActual,
+          planned,
           actual: newActual,
         };
       }

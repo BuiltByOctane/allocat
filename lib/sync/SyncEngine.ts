@@ -10,7 +10,17 @@ import {
   updateBudgetItem,
   deleteBudgetItem,
   quickLogSpend,
+  setupBudgetFromTemplate,
 } from "@/lib/actions/budget";
+
+type BulkSetupCategoryInput = {
+  tempId: string;
+  name: string;
+  icon: string | null;
+  type: "needs" | "wants" | "investments" | "misc";
+  allocated_amount: number;
+  items: Array<{ tempId: string; name: string; planned: number }>;
+};
 import {
   addGoal,
   updateGoal,
@@ -57,6 +67,7 @@ type Dispatcher = Record<
 interface SyncCallbacks {
   onPendingChange?: (count: number) => void;
   onRollback?: (item: SyncQueueItem, error: string) => void;
+  onSynced?: (item: SyncQueueItem) => void;
 }
 
 export class SyncEngine {
@@ -69,6 +80,12 @@ export class SyncEngine {
     budgets: {
       UPDATE: (p) =>
         updateBudgetTotal(p.budgetId as string, p.totalAmount as number),
+      BULK_SETUP: (p) =>
+        setupBudgetFromTemplate(
+          p.budgetId as string,
+          p.totalBudget as number,
+          p.categories as BulkSetupCategoryInput[]
+        ),
     },
     categories: {
       INSERT: (p) =>
@@ -231,8 +248,12 @@ export class SyncEngine {
         const item = items[0];
         if (!item || item.id === undefined) break;
 
-        const blocked = await this.hasUnresolvedDependencies(item);
-        if (blocked) break;
+        // BULK_SETUP creates its own tempIds — they won't be in id_map yet,
+        // so dep check would always block. Skip it.
+        if (item.operation !== "BULK_SETUP") {
+          const blocked = await this.hasUnresolvedDependencies(item);
+          if (blocked) break;
+        }
 
         await db.sync_queue.update(item.id, { status: "processing" });
         await this.notifyPendingChange();
@@ -259,9 +280,25 @@ export class SyncEngine {
                 result as Record<string, unknown>
               );
             }
+          } else if (item.operation === "BULK_SETUP") {
+            await this.applyBulkSetupResult(
+              result as {
+                categoryIdMap: Array<{
+                  tempId: string;
+                  realId: string;
+                  record: Record<string, unknown>;
+                }>;
+                itemIdMap: Array<{
+                  tempId: string;
+                  realId: string;
+                  record: Record<string, unknown>;
+                }>;
+              }
+            );
           }
 
           await db.sync_queue.update(item.id, { status: "done" });
+          this.callbacks.onSynced?.(item);
           await this.notifyPendingChange();
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : "Sync failed";
@@ -341,6 +378,51 @@ export class SyncEngine {
     return opDispatch(resolvedPayload);
   }
 
+  private async applyBulkSetupResult(result: {
+    categoryIdMap: Array<{
+      tempId: string;
+      realId: string;
+      record: Record<string, unknown>;
+    }>;
+    itemIdMap: Array<{
+      tempId: string;
+      realId: string;
+      record: Record<string, unknown>;
+    }>;
+  }): Promise<void> {
+    const db = getDB();
+
+    for (const m of result.categoryIdMap || []) {
+      if (m.realId === m.tempId) continue;
+      await db.id_map.put({
+        tempId: m.tempId,
+        realId: m.realId,
+        table: "categories",
+      });
+      await this.replaceIDBRecord(
+        "categories",
+        m.tempId,
+        m.realId,
+        m.record
+      );
+    }
+
+    for (const m of result.itemIdMap || []) {
+      if (m.realId === m.tempId) continue;
+      await db.id_map.put({
+        tempId: m.tempId,
+        realId: m.realId,
+        table: "budget_items",
+      });
+      await this.replaceIDBRecord(
+        "budget_items",
+        m.tempId,
+        m.realId,
+        m.record
+      );
+    }
+  }
+
   private async replaceIDBRecord(
     table: SyncTable,
     tempId: string,
@@ -354,9 +436,22 @@ export class SyncEngine {
   }
 
   private async rollback(item: SyncQueueItem): Promise<void> {
-    if (item.operation !== "INSERT") return;
     const db = getDB();
-    await db.table(item.table).delete(item.recordId);
+    if (item.operation === "INSERT") {
+      await db.table(item.table).delete(item.recordId);
+      return;
+    }
+    if (item.operation === "BULK_SETUP") {
+      const cats =
+        (item.payload as { categories?: Array<{ tempId: string; items?: Array<{ tempId: string }> }> })
+          .categories ?? [];
+      for (const c of cats) {
+        for (const i of c.items ?? []) {
+          await db.budget_items.delete(i.tempId);
+        }
+        await db.categories.delete(c.tempId);
+      }
+    }
   }
 
   private async notifyPendingChange(): Promise<void> {

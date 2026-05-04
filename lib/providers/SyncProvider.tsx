@@ -38,6 +38,39 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   // Engine is created once — no callbacks yet (registered in the effect below)
   const [engine] = useState(() => new SyncEngine());
 
+  const handleSynced = useCallback(
+    (item: SyncQueueItem) => {
+      // After a successful sync, real IDs replace temp ones in IDB. Invalidate
+      // the queries that read affected tables so UI links pick up real IDs.
+      if (
+        item.table === "budgets" ||
+        item.table === "categories" ||
+        item.table === "budget_items"
+      ) {
+        qc.invalidateQueries({ queryKey: ["budget"] });
+        qc.invalidateQueries({ queryKey: ["categoryData"] });
+        qc.invalidateQueries({ queryKey: ["dashboard"] });
+      }
+      if (item.table === "goals") {
+        qc.invalidateQueries({ queryKey: ["goals"] });
+        qc.invalidateQueries({ queryKey: ["dashboard"] });
+      }
+      if (
+        item.table === "assets" ||
+        item.table === "asset_categories" ||
+        item.table === "asset_value_history"
+      ) {
+        qc.invalidateQueries({ queryKey: ["net-worth"] });
+        qc.invalidateQueries({ queryKey: ["dashboard"] });
+      }
+      if (item.table === "debts") {
+        qc.invalidateQueries({ queryKey: ["debt"] });
+        qc.invalidateQueries({ queryKey: ["dashboard"] });
+      }
+    },
+    [qc]
+  );
+
   const handleRollback = useCallback(
     (item: SyncQueueItem, error: string) => {
       if (
@@ -73,9 +106,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     engine.setCallbacks({
       onPendingChange: setPendingCount,
       onRollback: handleRollback,
+      onSynced: handleSynced,
     });
     return () => engine.setCallbacks({});
-  }, [engine, setPendingCount, handleRollback]);
+  }, [engine, setPendingCount, handleRollback, handleSynced]);
 
   useEffect(() => {
     let mounted = true;

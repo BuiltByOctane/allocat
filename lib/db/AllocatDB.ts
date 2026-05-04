@@ -30,7 +30,12 @@ export type SyncTable =
   | "reports"
   | "net_worth_snapshots";
 
-export type SyncOperation = "INSERT" | "UPDATE" | "DELETE" | "PAYMENT";
+export type SyncOperation =
+  | "INSERT"
+  | "UPDATE"
+  | "DELETE"
+  | "PAYMENT"
+  | "BULK_SETUP";
 
 export type SyncStatus = "pending" | "processing" | "done" | "failed";
 

@@ -328,13 +328,22 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
                 {data.categories.map((cat, i) => {
                   const pct = cat.allocated > 0 ? cat.spent / cat.allocated : 0;
                   const isOver = cat.spent > cat.allocated && cat.allocated > 0;
+                  const isPending = cat.id.startsWith("temp_");
                   return (
                     <Link
                       key={cat.id}
                       id={i === 0 ? "budget-category-row-0" : undefined}
-                      href={`/budget/${cat.id}`}
-                      onClick={() => haptic.selection()}
-                      className="block"
+                      href={isPending ? "#" : `/budget/${cat.id}`}
+                      onClick={(e) => {
+                        if (isPending) {
+                          e.preventDefault();
+                          haptic.error();
+                          return;
+                        }
+                        haptic.selection();
+                      }}
+                      aria-disabled={isPending}
+                      className={`block ${isPending ? "opacity-60 cursor-progress" : ""}`}
                     >
                       <div
                         style={{

@@ -15,6 +15,7 @@ import { budgetKey } from "@/lib/hooks/useBudget";
 import { DASHBOARD_KEY } from "@/lib/hooks/useDashboard";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { getDB } from "@/lib/db";
+import { computeAutoCompletion } from "@/lib/utils/budget-completion";
 
 interface BudgetItem {
   id: string;
@@ -211,20 +212,38 @@ function CategoryDetailContent({
     }
   ) {
     const previousItems = items;
+    const targetItem = items.find((i) => i.id === id);
+    const finalUpdates = { ...updates };
+    if (
+      targetItem &&
+      updates.actual_amount !== undefined &&
+      updates.is_completed === undefined
+    ) {
+      const planned =
+        updates.planned_amount !== undefined
+          ? updates.planned_amount
+          : targetItem.planned;
+      finalUpdates.is_completed = computeAutoCompletion(
+        planned,
+        updates.actual_amount,
+        targetItem.is_completed
+      );
+    }
+
     const nextItems = items.map((item) =>
       item.id === id
         ? {
             ...item,
-            ...(updates.name !== undefined ? { name: updates.name } : {}),
-            ...(updates.planned_amount !== undefined ? { planned: updates.planned_amount } : {}),
-            ...(updates.actual_amount !== undefined ? { actual: updates.actual_amount } : {}),
-            ...(updates.is_completed !== undefined ? { is_completed: updates.is_completed } : {}),
-            ...(updates.notes !== undefined ? { notes: updates.notes } : {}),
+            ...(finalUpdates.name !== undefined ? { name: finalUpdates.name } : {}),
+            ...(finalUpdates.planned_amount !== undefined ? { planned: finalUpdates.planned_amount } : {}),
+            ...(finalUpdates.actual_amount !== undefined ? { actual: finalUpdates.actual_amount } : {}),
+            ...(finalUpdates.is_completed !== undefined ? { is_completed: finalUpdates.is_completed } : {}),
+            ...(finalUpdates.notes !== undefined ? { notes: finalUpdates.notes } : {}),
           }
         : item
     );
 
-    if (updates.planned_amount !== undefined) {
+    if (finalUpdates.planned_amount !== undefined) {
       const nextTotal = nextItems.reduce((s, i) => s + i.planned, 0);
       const errMsg = getItemAllocationError(nextTotal);
       if (errMsg) {
@@ -238,11 +257,11 @@ function CategoryDetailContent({
     setItems(nextItems);
 
     const idbUpdates: Record<string, string | number | boolean | null> = {};
-    if (updates.name !== undefined) idbUpdates.name = updates.name;
-    if (updates.planned_amount !== undefined) idbUpdates.planned_amount = updates.planned_amount;
-    if (updates.actual_amount !== undefined) idbUpdates.actual_amount = updates.actual_amount;
-    if (updates.is_completed !== undefined) idbUpdates.is_completed = updates.is_completed;
-    if (updates.notes !== undefined) idbUpdates.notes = updates.notes;
+    if (finalUpdates.name !== undefined) idbUpdates.name = finalUpdates.name;
+    if (finalUpdates.planned_amount !== undefined) idbUpdates.planned_amount = finalUpdates.planned_amount;
+    if (finalUpdates.actual_amount !== undefined) idbUpdates.actual_amount = finalUpdates.actual_amount;
+    if (finalUpdates.is_completed !== undefined) idbUpdates.is_completed = finalUpdates.is_completed;
+    if (finalUpdates.notes !== undefined) idbUpdates.notes = finalUpdates.notes;
     idbUpdates.updated_at = new Date().toISOString();
 
     try {
@@ -252,7 +271,7 @@ function CategoryDetailContent({
         table: "budget_items",
         operation: "UPDATE",
         recordId: id,
-        payload: { itemId: id, updates },
+        payload: { itemId: id, updates: finalUpdates },
       });
       invalidateBudgetCaches();
     } catch {

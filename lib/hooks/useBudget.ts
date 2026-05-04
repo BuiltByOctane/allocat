@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getBudgetForPeriod } from "@/lib/actions/budget";
 import { getDB } from "@/lib/db";
 import { useEnqueue } from "@/lib/hooks/useSync";
+import { computeAutoCompletion } from "@/lib/utils/budget-completion";
 import { DASHBOARD_KEY } from "./useDashboard";
 
 export function budgetKey(month: number, year: number) {
@@ -292,15 +293,33 @@ export function useUpdateBudgetItem() {
       year: number;
     }) => {
       const db = getDB();
+      const finalUpdates = { ...updates };
+      if (
+        updates.actual_amount !== undefined &&
+        updates.is_completed === undefined
+      ) {
+        const existing = await db.budget_items.get(itemId);
+        if (existing) {
+          const planned =
+            updates.planned_amount !== undefined
+              ? Number(updates.planned_amount)
+              : Number(existing.planned_amount);
+          finalUpdates.is_completed = computeAutoCompletion(
+            planned,
+            Number(updates.actual_amount),
+            Boolean(existing.is_completed)
+          );
+        }
+      }
       await db.budget_items.update(itemId, {
-        ...updates,
+        ...finalUpdates,
         updated_at: new Date().toISOString(),
       });
       await enqueue({
         table: "budget_items",
         operation: "UPDATE",
         recordId: itemId,
-        payload: { itemId, updates },
+        payload: { itemId, updates: finalUpdates },
       });
     },
     onSuccess: (_data, { month, year }) => {

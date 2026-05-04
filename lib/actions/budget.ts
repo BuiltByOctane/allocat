@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/types/database";
 import { logActivity, fmt } from "@/lib/server/activity-logger";
+import { computeAutoCompletion } from "@/lib/utils/budget-completion";
 
 type BudgetItemRow = Database["public"]["Tables"]["budget_items"]["Row"];
 type CategoryRow = Database["public"]["Tables"]["categories"]["Row"];
@@ -441,7 +442,7 @@ export async function updateBudgetItem(
 
   const { data: existingItem, error: existingItemError } = await supabase
     .from("budget_items")
-    .select("id, category_id, planned_amount")
+    .select("id, category_id, planned_amount, actual_amount, is_completed")
     .eq("id", itemId)
     .eq("user_id", user.id)
     .single();
@@ -469,11 +470,34 @@ export async function updateBudgetItem(
     );
   }
 
+  const finalUpdates: typeof updates = { ...updates };
+  if (
+    (updates.actual_amount !== undefined || updates.planned_amount !== undefined) &&
+    updates.is_completed === undefined
+  ) {
+    const planned =
+      updates.planned_amount !== undefined
+        ? Number(updates.planned_amount)
+        : Number(existingItem.planned_amount);
+    const actual =
+      updates.actual_amount !== undefined
+        ? Number(updates.actual_amount)
+        : Number(existingItem.actual_amount);
+    const auto = computeAutoCompletion(
+      planned,
+      actual,
+      Boolean(existingItem.is_completed)
+    );
+    if (auto !== Boolean(existingItem.is_completed)) {
+      finalUpdates.is_completed = auto;
+    }
+  }
+
   const { data, error } = await supabase
     .from("budget_items")
     .update({
-      ...updates,
-      ...(updates.name !== undefined ? { name: updates.name.trim() } : {}),
+      ...finalUpdates,
+      ...(finalUpdates.name !== undefined ? { name: finalUpdates.name.trim() } : {}),
     })
     .eq("id", itemId)
     .eq("user_id", user.id)
@@ -589,10 +613,16 @@ export async function quickLogSpend(itemId: string, amount: number) {
   if (!item) throw new Error("Item not found");
 
   const newActual = Number(item.actual_amount) + Number(amount);
+  const planned = Number(item.planned_amount);
+  const nextCompleted = computeAutoCompletion(
+    planned,
+    newActual,
+    Boolean(item.is_completed)
+  );
 
   const { data: updatedItem, error } = await supabase
     .from("budget_items")
-    .update({ actual_amount: newActual })
+    .update({ actual_amount: newActual, is_completed: nextCompleted })
     .eq("id", itemId)
     .eq("user_id", user.id)
     .select()
@@ -618,6 +648,157 @@ export async function quickLogSpend(itemId: string, amount: number) {
     remaining: updatedItem.planned_amount - updatedItem.actual_amount,
     planned: updatedItem.planned_amount,
     actual: updatedItem.actual_amount,
+  };
+}
+
+// ─── Bulk template setup ─────────────────────────────────────────────────────
+
+type TemplateSetupCategoryInput = {
+  tempId: string;
+  name: string;
+  icon: string | null;
+  type: Database["public"]["Tables"]["categories"]["Insert"]["type"];
+  allocated_amount: number;
+  items: Array<{ tempId: string; name: string; planned: number }>;
+};
+
+export async function setupBudgetFromTemplate(
+  budgetId: string,
+  totalBudget: number,
+  categories: TemplateSetupCategoryInput[]
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  if (totalBudget < 0) throw new Error("Total budget must be 0 or more.");
+
+  const totalAllocated = categories.reduce(
+    (s, c) => s + Number(c.allocated_amount || 0),
+    0
+  );
+  if (totalBudget > 0 && totalAllocated > totalBudget) {
+    throw new Error(
+      `Category allocations exceed total budget by ${formatCurrency(totalAllocated - totalBudget)}.`
+    );
+  }
+
+  // 1. Update budget total (only if non-zero)
+  if (totalBudget > 0) {
+    const { error: budgetErr } = await supabase
+      .from("budgets")
+      .update({ total_budget: totalBudget })
+      .eq("id", budgetId)
+      .eq("user_id", user.id);
+    if (budgetErr) throw new Error(budgetErr.message);
+  }
+
+  // 2. Bulk insert categories
+  const categoryRows = categories
+    .filter((c) => c.name.trim())
+    .map((c) => ({
+      budget_id: budgetId,
+      user_id: user.id,
+      name: c.name.trim(),
+      icon: c.icon,
+      type: c.type,
+      allocated_amount: Number(c.allocated_amount || 0),
+    }));
+
+  let insertedCategories: CategoryRow[] = [];
+  if (categoryRows.length > 0) {
+    const { data, error } = await supabase
+      .from("categories")
+      .insert(categoryRows)
+      .select();
+    if (error) throw new Error(error.message);
+    insertedCategories = (data ?? []) as CategoryRow[];
+  }
+
+  // Map tempId → realId by index (insert preserves order)
+  const filteredCats = categories.filter((c) => c.name.trim());
+  const categoryIdMap = filteredCats.map((c, i) => ({
+    tempId: c.tempId,
+    realId: insertedCategories[i]!.id,
+    record: insertedCategories[i]!,
+  }));
+  const tempToRealCat = new Map(
+    categoryIdMap.map((m) => [m.tempId, m.realId])
+  );
+
+  // 3. Bulk insert items
+  const itemInputs: Array<{
+    tempId: string;
+    realCatId: string;
+    name: string;
+    planned: number;
+  }> = [];
+  for (const c of filteredCats) {
+    const realCatId = tempToRealCat.get(c.tempId)!;
+    for (const item of c.items) {
+      const trimmed = item.name.trim();
+      if (!trimmed) continue;
+      itemInputs.push({
+        tempId: item.tempId,
+        realCatId,
+        name: trimmed,
+        planned: Number(item.planned || 0),
+      });
+    }
+  }
+
+  let insertedItems: BudgetItemRow[] = [];
+  if (itemInputs.length > 0) {
+    const itemRows = itemInputs.map((i) => ({
+      category_id: i.realCatId,
+      user_id: user.id,
+      name: i.name,
+      planned_amount: i.planned,
+      actual_amount: 0,
+      is_completed: false,
+      notes: null,
+    }));
+    const { data, error } = await supabase
+      .from("budget_items")
+      .insert(itemRows)
+      .select();
+    if (error) throw new Error(error.message);
+    insertedItems = (data ?? []) as BudgetItemRow[];
+  }
+
+  const itemIdMap = itemInputs.map((i, idx) => ({
+    tempId: i.tempId,
+    realId: insertedItems[idx]!.id,
+    record: insertedItems[idx]!,
+  }));
+
+  // 4. One summary activity log
+  await logActivity(supabase, user.id, {
+    action_type: "budget_template_applied",
+    category: "budget",
+    title: `Set up budget with ${categoryIdMap.length} categories`,
+    description: `Created ${categoryIdMap.length} categories and ${itemIdMap.length} items${totalBudget > 0 ? ` with total budget ${fmt(totalBudget)}` : ""}`,
+    metadata: {
+      budgetId,
+      totalBudget,
+      categoryCount: categoryIdMap.length,
+      itemCount: itemIdMap.length,
+    },
+  });
+
+  return {
+    budgetId,
+    totalBudget,
+    categoryIdMap: categoryIdMap.map(({ tempId, realId, record }) => ({
+      tempId,
+      realId,
+      record,
+    })),
+    itemIdMap: itemIdMap.map(({ tempId, realId, record }) => ({
+      tempId,
+      realId,
+      record,
+    })),
   };
 }
 

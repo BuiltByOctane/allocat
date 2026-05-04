@@ -1,5 +1,7 @@
 export interface TemplateItem {
   name: string;
+  /** Absolute planned amount (INR). Optional — predefined templates omit. */
+  plannedAmount?: number;
 }
 
 export interface TemplateCategory {

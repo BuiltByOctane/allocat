@@ -95,7 +95,7 @@ export async function POST(req: Request) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "ling-2.6-flash:free", // update your model here
+        model: "openai/gpt-oss-120b:free", // update your model here
         stream: true,
         messages: [
           { role: "system", content: systemPrompt },

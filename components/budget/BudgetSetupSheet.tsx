@@ -17,6 +17,7 @@ import {
 interface SetupItem {
   id: string;
   name: string;
+  allocation: number;
 }
 
 interface SetupCategory {
@@ -61,6 +62,7 @@ function templateToCategories(
     items: cat.items.map((item) => ({
       id: crypto.randomUUID(),
       name: item.name,
+      allocation: item.plannedAmount ?? 0,
     })),
   }));
 }
@@ -192,7 +194,7 @@ export function BudgetSetupSheet({
     setNewCatName("");
   }
 
-  function addItem(catId: string, name: string) {
+  function addItem(catId: string, name: string, allocation: number) {
     if (!name.trim()) return;
     setCategories((prev) =>
       prev.map((c) =>
@@ -201,7 +203,7 @@ export function BudgetSetupSheet({
               ...c,
               items: [
                 ...c.items,
-                { id: crypto.randomUUID(), name: name.trim() },
+                { id: crypto.randomUUID(), name: name.trim(), allocation },
               ],
             }
           : c
@@ -214,6 +216,37 @@ export function BudgetSetupSheet({
       prev.map((c) =>
         c.id === catId
           ? { ...c, items: c.items.filter((i) => i.id !== itemId) }
+          : c
+      )
+    );
+  }
+
+  function updateItemAllocation(catId: string, itemId: string, val: string) {
+    const num = parseFloat(val) || 0;
+    setCategories((prev) =>
+      prev.map((c) =>
+        c.id === catId
+          ? {
+              ...c,
+              items: c.items.map((i) =>
+                i.id === itemId ? { ...i, allocation: num } : i
+              ),
+            }
+          : c
+      )
+    );
+  }
+
+  function updateItemName(catId: string, itemId: string, name: string) {
+    setCategories((prev) =>
+      prev.map((c) =>
+        c.id === catId
+          ? {
+              ...c,
+              items: c.items.map((i) =>
+                i.id === itemId ? { ...i, name } : i
+              ),
+            }
           : c
       )
     );
@@ -291,19 +324,20 @@ export function BudgetSetupSheet({
           if (!itemName) continue;
 
           const itemTempId = `temp_${crypto.randomUUID()}`;
+          const itemPlanned = item.allocation > 0 ? item.allocation : 0;
           await db.budget_items.add({
             id: itemTempId,
             category_id: catTempId,
             user_id: "__pending__",
             name: itemName,
-            planned_amount: 0,
+            planned_amount: itemPlanned,
             actual_amount: 0,
             is_completed: false,
             notes: null,
             created_at: now,
             updated_at: now,
           });
-          itemPayloads.push({ tempId: itemTempId, name: itemName, planned: 0 });
+          itemPayloads.push({ tempId: itemTempId, name: itemName, planned: itemPlanned });
         }
 
         bulkCategories.push({
@@ -343,7 +377,10 @@ export function BudgetSetupSheet({
               totalBudgetNum > 0 && c.allocation > 0
                 ? Math.round((c.allocation / totalBudgetNum) * 100)
                 : null,
-            items: c.items.map((i) => ({ name: i.name })),
+            items: c.items.map((i) => ({
+              name: i.name,
+              plannedAmount: i.allocation > 0 ? i.allocation : undefined,
+            })),
           })),
         });
       }
@@ -574,8 +611,16 @@ export function BudgetSetupSheet({
                         updateCategoryAllocation(cat.id, v)
                       }
                       onRemove={() => removeCategory(cat.id)}
-                      onAddItem={(name) => addItem(cat.id, name)}
+                      onAddItem={(name, allocation) =>
+                        addItem(cat.id, name, allocation)
+                      }
                       onRemoveItem={(itemId) => removeItem(cat.id, itemId)}
+                      onUpdateItemName={(itemId, name) =>
+                        updateItemName(cat.id, itemId, name)
+                      }
+                      onUpdateItemAllocation={(itemId, val) =>
+                        updateItemAllocation(cat.id, itemId, val)
+                      }
                     />
                   ))}
 
@@ -679,8 +724,10 @@ interface CategoryCardProps {
   onNameChange: (v: string) => void;
   onAllocationChange: (v: string) => void;
   onRemove: () => void;
-  onAddItem: (name: string) => void;
+  onAddItem: (name: string, allocation: number) => void;
   onRemoveItem: (itemId: string) => void;
+  onUpdateItemName: (itemId: string, name: string) => void;
+  onUpdateItemAllocation: (itemId: string, val: string) => void;
 }
 
 function CategoryCard({
@@ -690,14 +737,24 @@ function CategoryCard({
   onRemove,
   onAddItem,
   onRemoveItem,
+  onUpdateItemName,
+  onUpdateItemAllocation,
 }: CategoryCardProps) {
   const [newItemName, setNewItemName] = useState("");
+  const [newItemAlloc, setNewItemAlloc] = useState("");
 
   function submitItem() {
-    if (!newItemName.trim()) return;
-    onAddItem(newItemName.trim());
+    const trimmed = newItemName.trim();
+    if (!trimmed) return;
+    const num = parseFloat(newItemAlloc) || 0;
+    onAddItem(trimmed, num);
     setNewItemName("");
+    setNewItemAlloc("");
   }
+
+  const itemsTotal = category.items.reduce((s, i) => s + (i.allocation || 0), 0);
+  const itemsExceed =
+    category.allocation > 0 && itemsTotal > category.allocation;
 
   return (
     <div className="rounded-xl border border-border bg-background p-4 space-y-3">
@@ -734,30 +791,62 @@ function CategoryCard({
         </button>
       </div>
 
-      {/* Items as chips */}
+      {/* Items as editable rows */}
       {category.items.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="space-y-1.5">
           {category.items.map((item) => (
-            <span
+            <div
               key={item.id}
-              className="inline-flex items-center gap-1 text-[11px] bg-muted rounded-full pl-3 pr-1.5 py-1 text-foreground"
+              className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-1.5"
             >
-              {item.name}
+              <input
+                type="text"
+                value={item.name}
+                onChange={(e) => onUpdateItemName(item.id, e.target.value)}
+                placeholder="Item name"
+                className="flex-1 min-w-0 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
+              />
+              <div className="flex items-center gap-1 shrink-0">
+                <span className="currency-symbol text-[11px] text-muted-foreground">₹</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={item.allocation > 0 ? String(item.allocation) : ""}
+                  onChange={(e) =>
+                    onUpdateItemAllocation(item.id, e.target.value)
+                  }
+                  placeholder="0"
+                  className="w-16 bg-transparent text-xs font-medium text-foreground text-right outline-none placeholder:text-muted-foreground"
+                  min="0"
+                />
+              </div>
               <button
                 type="button"
                 onClick={() => onRemoveItem(item.id)}
-                className="text-muted-foreground hover:text-red-400 transition-colors"
+                className="text-muted-foreground hover:text-red-400 transition-colors shrink-0"
               >
-                <span className="material-symbols-outlined text-[12px]">
+                <span className="material-symbols-outlined text-[14px]">
                   close
                 </span>
               </button>
-            </span>
+            </div>
           ))}
+          {/* Items sum vs category allocation */}
+          {category.allocation > 0 && (
+            <p
+              className={`text-[10px] tabular-nums px-1 ${
+                itemsExceed ? "text-red-400 font-medium" : "text-muted-foreground"
+              }`}
+            >
+              items: <CurrencyText value={itemsTotal} /> /{" "}
+              <CurrencyText value={category.allocation} />
+              {itemsExceed ? " · over" : null}
+            </p>
+          )}
         </div>
       )}
 
-      {/* Add item inline */}
+      {/* Add item inline (name + amount) */}
       <div className="flex items-center gap-2 border-t border-border/60 pt-2">
         <input
           type="text"
@@ -767,13 +856,28 @@ function CategoryCard({
             if (e.key === "Enter") submitItem();
           }}
           placeholder="Add item…"
-          className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none"
+          className="flex-1 min-w-0 bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none"
         />
+        <div className="flex items-center gap-1 shrink-0">
+          <span className="currency-symbol text-[11px] text-muted-foreground">₹</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={newItemAlloc}
+            onChange={(e) => setNewItemAlloc(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submitItem();
+            }}
+            placeholder="0"
+            className="w-16 bg-transparent text-xs font-medium text-foreground text-right outline-none placeholder:text-muted-foreground"
+            min="0"
+          />
+        </div>
         <button
           type="button"
           onClick={submitItem}
           disabled={!newItemName.trim()}
-          className="text-muted-foreground hover:text-primary disabled:opacity-30 transition-colors"
+          className="text-muted-foreground hover:text-primary disabled:opacity-30 transition-colors shrink-0"
         >
           <span className="material-symbols-outlined text-base">add</span>
         </button>

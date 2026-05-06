@@ -263,7 +263,7 @@ export function ItemDetailSheet({
             <div className="px-5 pt-3 pb-5 border-b border-border">
               <div className="flex items-center gap-2 mb-4">
                 {category.icon ? (
-                  <span className="text-base grayscale leading-none">
+                  <span className="text-base leading-none">
                     {category.icon}
                   </span>
                 ) : null}

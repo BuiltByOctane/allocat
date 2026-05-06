@@ -362,7 +362,7 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
                               {String(i + 1).padStart(2, "0")}
                             </span>
                             {cat.icon && (
-                              <span className="text-base leading-none grayscale shrink-0">
+                              <span className="text-base leading-none shrink-0">
                                 {cat.icon}
                               </span>
                             )}

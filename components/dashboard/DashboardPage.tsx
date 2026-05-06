@@ -122,7 +122,7 @@ export default function DashboardPage({ data }: DashboardProps) {
             {data.budget ? (
               <>
                 <div
-                  className="text-[48px] leading-[0.95] tracking-[-0.025em] tabular-nums"
+                  className="text-[48px] leading-[0.95] tabular-nums"
                   style={{ color: data.budget.remaining < 0 ? "#ef4444" : "var(--foreground)" }}
                 >
                   <CurrencyText value={data.budget.remaining} />
@@ -260,7 +260,7 @@ export default function DashboardPage({ data }: DashboardProps) {
                     >
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-base grayscale shrink-0">{goal.icon || "🎯"}</span>
+                          <span className="text-base shrink-0">{goal.icon || "🎯"}</span>
                           <span className="text-sm font-medium text-foreground truncate">{goal.name}</span>
                         </div>
                         <span className="font-mono text-[11px] tabular-nums text-foreground shrink-0">{pctDisplay}%</span>

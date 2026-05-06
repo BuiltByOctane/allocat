@@ -479,7 +479,7 @@ function CategoryDetailContent({
         <div className="flex items-center gap-2 flex-1 min-w-0 mx-4">
           <button
             onClick={() => { haptic.light(); setIsPickerOpen(true); }}
-            className="shrink-0 text-xl grayscale"
+            className="shrink-0 text-xl"
             title="Choose Icon"
           >
             {icon || (

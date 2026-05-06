@@ -444,7 +444,7 @@ const trendPct = trendData?.trendPct ?? 0;
                           {String(i + 1).padStart(2, "0")}
                         </span>
                         {debt.icon && (
-                          <span className="grayscale text-sm leading-none">{debt.icon}</span>
+                          <span className="text-sm leading-none">{debt.icon}</span>
                         )}
                         <span className="text-[17px] font-semibold tracking-tight text-foreground leading-none">
                           {debt.name}
@@ -511,7 +511,7 @@ const trendPct = trendData?.trendPct ?? 0;
                         {String(i + 1).padStart(2, "0")}
                       </span>
                       {debt.icon && (
-                        <span className="grayscale text-sm leading-none">{debt.icon}</span>
+                        <span className="text-sm leading-none">{debt.icon}</span>
                       )}
                       <span className="text-[15px] font-semibold tracking-tight text-foreground">
                         {debt.name}

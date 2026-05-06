@@ -763,7 +763,7 @@ function CategoryCard({
       {/* Name + allocation + delete */}
       <div className="flex items-center gap-2">
         {category.icon ? (
-          <span className="text-base grayscale shrink-0">{category.icon}</span>
+          <span className="text-base shrink-0">{category.icon}</span>
         ) : null}
         <input
           type="text"

@@ -157,7 +157,7 @@ export function GoalDetailSheet({
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => setShowEmojiPicker(true)}
-                      className="text-2xl grayscale hover:grayscale-0 transition-all"
+                      className="text-2xl transition-all"
                       title="Change icon"
                     >
                       {icon || "🎯"}

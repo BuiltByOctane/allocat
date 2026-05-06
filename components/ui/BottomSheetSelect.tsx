@@ -119,7 +119,7 @@ export function BottomSheetSelect<T extends string = string>({
                     >
                       <div className="flex items-center gap-3">
                         {opt.icon && (
-                          <span className="text-lg leading-none grayscale shrink-0">
+                          <span className="text-lg leading-none shrink-0">
                             {opt.icon}
                           </span>
                         )}

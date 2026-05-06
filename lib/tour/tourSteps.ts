@@ -26,7 +26,7 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
     {
       element: "#dashboard-quick-spend",
       popover: {
-        title: "Quick Log",
+        title: "Quick Logger",
         description:
           "Log a spend instantly from here — pick a category, pick an item, enter the amount. No need to navigate to Budget.",
         side: "bottom",

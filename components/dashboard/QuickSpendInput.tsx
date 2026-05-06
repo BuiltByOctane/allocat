@@ -170,7 +170,7 @@ export default function QuickSpendInput({ categories }: QuickSpendInputProps) {
     <section>
       <div className="border border-border bg-card p-6">
         <p className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mb-5">
-          Quick Log Spend
+          Quick Logger
         </p>
 
         <div className="space-y-4">

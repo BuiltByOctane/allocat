@@ -332,7 +332,7 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
                             <span className="font-mono text-[10px] text-muted-foreground shrink-0 tabular-nums">{num}</span>
-                            <span className="text-lg grayscale shrink-0">{goal.icon || "🎯"}</span>
+                            <span className="text-lg shrink-0">{goal.icon || "🎯"}</span>
                             <div className="min-w-0">
                               <div className="text-sm font-medium text-foreground truncate">{goal.name}</div>
                               {isAchieved && goal.achieved_at && (

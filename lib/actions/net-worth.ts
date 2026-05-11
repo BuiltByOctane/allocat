@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { upsertTodaySnapshot } from "./asset-history";
 import { computeMonthlyHistory } from "@/lib/utils/netWorthHistory";
 import { logActivity, fmt } from "@/lib/server/activity-logger";
+import { notifyUser } from "@/lib/server/push-notify";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function normalizeAsset(raw: any) {
@@ -286,6 +287,13 @@ export async function achieveGoalAsset(assetId: string) {
     description: `Goal "${asset.name}" marked as achieved (${fmt(previousValue)} withdrawn)`,
     metadata: { assetId, name: asset.name, withdrawnAmount: previousValue },
   });
+
+  notifyUser(user.id, {
+    title: "Goal achieved",
+    body: `${asset.name} — ${fmt(previousValue)} unlocked.`,
+    tag: `goal-${assetId}`,
+    url: "/goals",
+  }).catch(() => {});
 
   return updated;
 }

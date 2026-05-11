@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/types/database";
 import { logActivity, fmt } from "@/lib/server/activity-logger";
+import { notifyUser } from "@/lib/server/push-notify";
 import { computeAutoCompletion } from "@/lib/utils/budget-completion";
 import { addAssetEntry } from "@/lib/actions/asset-history";
 import { makePayment } from "@/lib/actions/debt";
@@ -780,6 +781,17 @@ export async function quickLogSpend(itemId: string, amount: number) {
         newTotal: updatedItem.actual_amount,
       },
     });
+  }
+
+  // Push: budget overrun alert (fire on transition only).
+  if (planned > 0 && previousActual <= planned && newActual > planned) {
+    const over = newActual - planned;
+    notifyUser(user.id, {
+      title: "Budget overrun",
+      body: `${updatedItem.name} is ${fmt(over)} over plan.`,
+      tag: `overrun-${itemId}`,
+      url: "/budget",
+    }).catch(() => {});
   }
 
   return {

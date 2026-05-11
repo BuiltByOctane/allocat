@@ -3,6 +3,8 @@ import SidebarNav from "@/components/SidebarNav";
 import { SyncProvider } from "@/lib/providers/SyncProvider";
 import { SyncStatusBadge } from "@/components/ui/SyncStatusBadge";
 import { InstallPrompt } from "@/components/ui/InstallPrompt";
+import { BadgeUpdater } from "@/components/pwa/BadgeUpdater";
+import { PushPermissionPrompt } from "@/components/pwa/PushPermissionPrompt";
 import { TourProvider } from "@/lib/tour/TourContext";
 
 export default async function AppLayout({
@@ -25,6 +27,8 @@ export default async function AppLayout({
           </div>
         </main>
         <InstallPrompt />
+        <PushPermissionPrompt />
+        <BadgeUpdater />
         <BottomNav />
       </div>
     </SyncProvider>

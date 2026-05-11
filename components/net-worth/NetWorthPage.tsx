@@ -333,8 +333,8 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
           Total net worth
         </div>
         <div
-          className="font-display leading-[0.95] tracking-[-0.025em] mt-2.5 text-foreground"
-          style={{ fontSize: 72 }}
+          className="font-display max-w-full leading-[0.95] tracking-[-0.025em] mt-2.5 text-foreground"
+          style={{ fontSize: 60 }}
         >
           <CurrencyText value={netWorth} />
         </div>

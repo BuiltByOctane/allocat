@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { useCategoryItems, useQuickLogSpend } from "@/lib/hooks/useDashboard";
 import { useHaptic } from "@/lib/hooks/useHaptic";
+import { parseSpend } from "@/lib/ai/parseSpend";
 
 interface Category {
   id: string;
@@ -95,10 +97,38 @@ export default function QuickSpendInput({ categories }: QuickSpendInputProps) {
   const [amount, setAmount] = useState<string>("");
   const [validationError, setValidationError] = useState<string>("");
   const [lastResult, setLastResult] = useState<SpendResult | null>(null);
+  const [sharedNote, setSharedNote] = useState<string>("");
 
   const haptic = useHaptic();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const sectionRef = useRef<HTMLDivElement | null>(null);
   const { data: items = [], isFetching: itemsLoading } = useCategoryItems(selectedCategoryId || null);
   const spendMutation = useQuickLogSpend();
+
+  useEffect(() => {
+    const shared = searchParams.get("shared");
+    const focusFlag = searchParams.get("focus") === "quick-spend";
+    if (!shared && !focusFlag) return;
+
+    queueMicrotask(() => {
+      if (shared) {
+        const parsed = parseSpend(shared);
+        if (parsed.amount !== null) {
+          setAmount(String(parsed.amount));
+          haptic.selection();
+        }
+        setSharedNote(parsed.note || parsed.raw);
+      }
+
+      const url = new URL(window.location.href);
+      url.searchParams.delete("shared");
+      url.searchParams.delete("focus");
+      router.replace(url.pathname + (url.search ? url.search : ""), { scroll: false });
+
+      sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, [searchParams, router, haptic]);
 
   function handleCategoryChange(catId: string) {
     setSelectedCategoryId(catId);
@@ -167,11 +197,39 @@ export default function QuickSpendInput({ categories }: QuickSpendInputProps) {
   const selectedItem = mappedItems.find((i) => i.id === selectedItemId);
 
   return (
-    <section>
+    <section ref={sectionRef}>
       <div className="border border-border bg-card p-6">
         <p className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mb-5">
           Quick Logger
         </p>
+
+        {sharedNote && (
+          <div className="mb-4 border border-border bg-background/60 px-3 py-2 flex items-start gap-2">
+            <span
+              className="material-symbols-outlined text-muted-foreground"
+              style={{ fontSize: "14px", marginTop: "1px" }}
+            >
+              ios_share
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="font-mono text-[9px] tracking-[0.14em] uppercase text-muted-foreground">
+                Shared
+              </p>
+              <p className="font-mono text-[11px] text-foreground truncate">
+                {sharedNote}
+              </p>
+            </div>
+            <button
+              onClick={() => setSharedNote("")}
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="Dismiss"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>
+                close
+              </span>
+            </button>
+          </div>
+        )}
 
         <div className="space-y-4">
           {/* Category + Item row */}

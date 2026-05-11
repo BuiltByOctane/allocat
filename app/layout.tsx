@@ -3,6 +3,7 @@ import { Inter_Tight, Bricolage_Grotesque, JetBrains_Mono } from "next/font/goog
 import "./globals.css";
 import QueryProvider from "@/lib/providers/QueryProvider";
 import { ThemeProvider } from "@/lib/providers/ThemeProvider";
+import RegisterPWA from "@/components/ui/RegisterPWA";
 
 const interTight = Inter_Tight({
   subsets: ["latin"],
@@ -78,6 +79,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <QueryProvider>{children}</QueryProvider>
+          <RegisterPWA />
         </ThemeProvider>
       </body>
     </html>

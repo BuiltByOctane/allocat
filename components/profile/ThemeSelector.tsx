@@ -5,8 +5,9 @@ import { useCustomTheme, AestheticColor, CustomTheme } from "@/lib/providers/The
 import { MaterialSymbol } from "@/components/ui/MaterialSymbol";
 
 export default function ThemeSelector() {
-  const { theme, setTheme } = useTheme();
+  const { theme, resolvedTheme, setTheme } = useTheme();
   const { customTheme, setThemeElement, resetTheme } = useCustomTheme();
+  const activeTheme = theme === "system" ? resolvedTheme : theme;
 
   const curatedColors: { name: AestheticColor; class: string }[] = [
     { name: "zinc", class: "bg-zinc-500" },
@@ -45,7 +46,7 @@ export default function ThemeSelector() {
       {/* Header & Mode Toggle */}
       <div className="flex justify-between items-start">
         <div className="flex items-center gap-3">
-          <MaterialSymbol icon={theme === "light" ? "light_mode" : "dark_mode"} className="text-foreground" />
+          <MaterialSymbol icon={activeTheme === "light" ? "light_mode" : "dark_mode"} className="text-foreground" />
           <div>
             <p className="font-bold text-foreground leading-none">Aesthetic Canvas</p>
             <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1">
@@ -55,12 +56,13 @@ export default function ThemeSelector() {
         </div>
         
         {/* Toggle Light/Dark */}
-        <button 
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+        <button
+          onClick={() => setTheme(activeTheme === "dark" ? "light" : "dark")}
           className="w-12 h-6 bg-primary relative rounded-full flex items-center px-1 transition-colors group focus:outline-none"
           aria-label="Toggle structural mode"
+          suppressHydrationWarning
         >
-          <div className={`w-4 h-4 bg-primary-foreground rounded-full transition-transform duration-300 ${theme === "dark" ? "translate-x-6" : "translate-x-0"}`}></div>
+          <div className={`w-4 h-4 bg-primary-foreground rounded-full transition-transform duration-300 ${activeTheme === "dark" ? "translate-x-6" : "translate-x-0"}`}></div>
         </button>
       </div>
       

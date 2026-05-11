@@ -32,9 +32,9 @@ export function useCustomTheme() {
 }
 
 const colorPalettes = {
-  zinc: { light: { bg: "#ffffff", card: "#ffffff", primary: "#18181b", border: "rgba(0,0,0,0.05)" }, dark: { bg: "#000000", card: "#18181b", primary: "#fafafa", border: "rgba(255,255,255,0.05)" } },
-  slate: { light: { bg: "#f8fafc", card: "#ffffff", primary: "#0f172a", border: "rgba(0,0,0,0.05)" }, dark: { bg: "#020617", card: "#0f172a", primary: "#f8fafc", border: "rgba(255,255,255,0.05)" } },
-  stone: { light: { bg: "#fafaf9", card: "#ffffff", primary: "#1c1917", border: "rgba(0,0,0,0.05)" }, dark: { bg: "#0c0a09", card: "#1c1917", primary: "#fafaf9", border: "rgba(255,255,255,0.05)" } },
+  zinc: { light: { bg: "#f5f3ed", card: "#eeece6", primary: "#18181b", border: "rgba(10,10,10,0.1)" }, dark: { bg: "#000000", card: "#18181b", primary: "#fafafa", border: "rgba(255,255,255,0.05)" } },
+  slate: { light: { bg: "#f1ede2", card: "#e8e3d5", primary: "#0f172a", border: "rgba(10,10,10,0.1)" }, dark: { bg: "#020617", card: "#0f172a", primary: "#f8fafc", border: "rgba(255,255,255,0.05)" } },
+  stone: { light: { bg: "#f5f0e3", card: "#ede6d4", primary: "#1c1917", border: "rgba(28,25,23,0.1)" }, dark: { bg: "#0c0a09", card: "#1c1917", primary: "#fafaf9", border: "rgba(255,255,255,0.05)" } },
   blue: { light: { bg: "#eff6ff", card: "#ffffff", primary: "#2563eb", border: "rgba(37,99,235,0.1)" }, dark: { bg: "#020817", card: "#0f172a", primary: "#3b82f6", border: "rgba(59,130,246,0.1)" } },
   emerald: { light: { bg: "#ecfdf5", card: "#ffffff", primary: "#10b981", border: "rgba(16,185,129,0.1)" }, dark: { bg: "#022c22", card: "#064e3b", primary: "#34d399", border: "rgba(52,211,153,0.1)" } },
   rose: { light: { bg: "#fff1f2", card: "#ffffff", primary: "#e11d48", border: "rgba(225,29,72,0.1)" }, dark: { bg: "#4c0519", card: "#881337", primary: "#fb7185", border: "rgba(251,113,133,0.1)" } },

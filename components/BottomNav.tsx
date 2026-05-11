@@ -35,7 +35,7 @@ export default function BottomNav() {
               href={item.href}
               onClick={() => haptic.light()}
               className={`flex flex-1 flex-col items-center gap-1 transition-opacity ${
-                isActive ? "opacity-100" : "opacity-40"
+                isActive ? "opacity-100" : "opacity-65"
               }`}
             >
               <span

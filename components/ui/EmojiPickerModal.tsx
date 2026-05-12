@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
 import { useTheme } from 'next-themes';
 import { EmojiStyle, Theme, type EmojiClickData } from 'emoji-picker-react';
@@ -17,9 +18,12 @@ interface EmojiPickerModalProps {
 export default function EmojiPickerModal({ isOpen, onClose, onSelect }: EmojiPickerModalProps) {
   const haptic = useHaptic();
   const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = React.useState(false);
   const pickerTheme = resolvedTheme === 'light' ? Theme.LIGHT : Theme.DARK;
 
-  if (!isOpen) return null;
+  React.useEffect(() => { setMounted(true); }, []);
+
+  if (!isOpen || !mounted) return null;
 
   const handlePick = (data: EmojiClickData) => {
     haptic.selection();
@@ -27,10 +31,17 @@ export default function EmojiPickerModal({ isOpen, onClose, onSelect }: EmojiPic
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4 pb-20 animate-in fade-in duration-200">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4 pb-20 animate-in fade-in duration-200"
+      style={{ pointerEvents: 'auto' }}
+      onPointerDown={(e) => e.stopPropagation()}
+      onPointerDownCapture={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+    >
       <div
-        className="bg-card w-full max-w-md rounded-t-2xl sm:rounded-2xl p-4 shadow-xl animate-in slide-in-from-bottom flex flex-col max-h-[80vh] border border-border"
+        className="bg-card w-full max-w-md rounded-t-2xl sm:rounded-2xl p-4 shadow-xl animate-in slide-in-from-bottom flex flex-col max-h-[80vh] border border-border relative z-[101]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-3 px-2">
@@ -57,7 +68,8 @@ export default function EmojiPickerModal({ isOpen, onClose, onSelect }: EmojiPic
         </div>
       </div>
 
-      <div className="absolute inset-0 -z-10" onClick={onClose} />
-    </div>
+      <div className="absolute inset-0" onClick={onClose} />
+    </div>,
+    document.body
   );
 }

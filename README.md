@@ -42,7 +42,7 @@
 
 AlloCat is a minimalist, personal-finance PWA. Track budgets, debts, savings goals, assets, and net worth in one place. The app reads from a local IndexedDB cache first and reconciles with Supabase in the background, so it stays fast and usable even on flaky networks or fully offline.
 
-Hosted at **[grow.allocat.xyz](https://grow.allocat.xyz)**. Works on mobile, desktop, and installs as a PWA.
+Hosted at **[allocat.xyz](https://allocat.xyz)**. Works on mobile, desktop, and installs as a PWA.
 
 ## Features
 
@@ -67,7 +67,7 @@ Hosted at **[grow.allocat.xyz](https://grow.allocat.xyz)**. Works on mobile, des
 | Backend | Supabase (Postgres + Auth + RLS) |
 | Auth | `@supabase/ssr` (cookie sessions) |
 | AI | OpenRouter streaming chat |
-| PWA | `@ducanh2912/next-pwa` |
+| PWA | Serwist (`@serwist/next`) |
 | Tour | Driver.js |
 | Icons | Lucide + Material Symbols Outlined |
 | Fonts | Inter Tight, Bricolage Grotesque, JetBrains Mono |
@@ -105,9 +105,9 @@ pnpm install
 
 # 3. Configure env
 cp .env.example .env.local
-# fill in NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY, OPENROUTER_API_KEY
+# fill in Supabase URL + keys (see Environment Variables below)
 
-# 4. Run migrations on your Supabase project (see Supabase Setup below)
+# 4. Run the SQL init migration on your Supabase project (see Supabase Setup)
 
 # 5. Start dev server
 pnpm dev
@@ -127,7 +127,7 @@ Go to [supabase.com](https://supabase.com), create a new project, and grab:
 
 ### 2. Run migrations
 
-SQL migrations live in `supabase/migrations/`. Apply them in order using either:
+SQL migrations live in `supabase/migrations/`. The init migration creates every table, index, foreign key, RLS policy, and the `handle_new_user` trigger that auto-provisions a `profiles` row on signup.
 
 **Option A — Supabase CLI (recommended)**
 
@@ -139,13 +139,13 @@ supabase db push
 
 **Option B — SQL Editor (manual)**
 
-Open the Supabase dashboard → SQL Editor → paste each file from `supabase/migrations/` in chronological order and run.
+Open the Supabase dashboard → SQL Editor → paste each file from `supabase/migrations/` in chronological order and run. Start with `20260101000000_init.sql`.
 
 ### 3. Required tables
 
-After migrations, your Postgres should have: `profiles`, `budgets`, `categories`, `budget_items`, `goals`, `assets`, `asset_categories`, `asset_value_history`, `debts`, `reports`, `net_worth_snapshots`, `activity_logs`.
+After migrations, your Postgres should have: `profiles`, `budgets`, `categories`, `budget_items`, `assets`, `asset_categories`, `asset_value_history`, `debts`, `reports`, `net_worth_snapshots`, `activity_logs`, `push_subscriptions`.
 
-> **Note:** if `activity_logs` is missing, the activity feed will silently no-op. Confirm migrations ran.
+> **Note:** if any table is missing the app will fail on first write. Confirm the migration completed cleanly in the SQL Editor output (no `ERROR:` rows).
 
 ### 4. Auth providers
 
@@ -157,7 +157,17 @@ Set the redirect URL to `http://localhost:3000/auth/oauth-callback` for dev and 
 
 ### 5. RLS
 
-Row Level Security policies are included in the migration files. Verify they are enabled on every table after applying — without RLS, every user sees every row.
+Row Level Security is enabled by the init migration and policies restrict every table to `auth.uid() = user_id` (or `id` for `profiles`). Verify in dashboard → Authentication → Policies that each table shows policies enabled — without RLS, every user sees every row.
+
+### 6. Push notifications (optional)
+
+To enable browser push notifications, generate VAPID keys and add them to `.env.local`:
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (e.g. `mailto:you@example.com`), and `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (same value as the public key). Omit all four to disable push silently.
 
 ## Environment Variables
 
@@ -167,7 +177,14 @@ Copy `.env.example` to `.env.local` and fill in:
 |----------|----------|-------------|
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` | Yes | Supabase publishable (anon) key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes\* | Service-role key. Required for sending push notifications. App boots without it but push will throw at runtime. |
 | `OPENROUTER_API_KEY` | No | OpenRouter API key for AI chat. Omit to disable `/api/ai/chat`. |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | No | Public VAPID key exposed to the browser for push subscriptions. |
+| `VAPID_PUBLIC_KEY` | No | Same as above, server-side. |
+| `VAPID_PRIVATE_KEY` | No | Private VAPID key. Keep secret. |
+| `VAPID_SUBJECT` | No | Contact URI (`mailto:...` or `https://...`) required by web-push. |
+
+\* If you don't need push notifications you can omit the service role key — every other feature works on the publishable key alone.
 
 Never commit `.env.local`. It is gitignored.
 
@@ -214,17 +231,6 @@ allocat/
 
 Path alias: `@/*` → repo root.
 
-## Roadmap
-
-- [ ] Test suite (Vitest + Playwright)
-- [ ] Multi-currency support (currently hardcoded `en-IN` / INR)
-- [ ] Recurring transactions
-- [ ] CSV import / export
-- [ ] Bank statement parsing
-- [ ] Self-host guide (Docker compose with Supabase local)
-- [ ] i18n
-- [ ] Public API + webhook integrations
-- [ ] Shared / household budgets
 
 Have an idea? [Open an issue](https://github.com/devoctane/allocat/issues/new).
 

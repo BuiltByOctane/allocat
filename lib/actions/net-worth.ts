@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { upsertTodaySnapshot } from "./asset-history";
 import { computeMonthlyHistory } from "@/lib/utils/netWorthHistory";
-import { logActivity, fmt } from "@/lib/server/activity-logger";
+import { logActivity, fmt, getUserCurrency } from "@/lib/server/activity-logger";
 import { notifyUser } from "@/lib/server/push-notify";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -132,14 +132,15 @@ export async function addAsset(
 
   await upsertTodaySnapshot();
 
+  const cur = await getUserCurrency(supabase, user.id);
   await logActivity(supabase, user.id, {
     action_type: isGoal ? "goal_asset_added" : "asset_added",
     category: "net_worth",
     title: isGoal ? `Added goal "${name}"` : `Added asset "${name}"`,
     description: isGoal
-      ? `New goal "${name}" added${targetAmount != null ? ` with target ${fmt(targetAmount)}` : ""}`
-      : `New asset "${name}" added with initial value ${fmt(value)}`,
-    metadata: { assetId: data.id, name, value, categoryId: resolvedCategoryId, isGoal, targetAmount },
+      ? `New goal "${name}" added${targetAmount != null ? ` with target ${fmt(targetAmount, cur)}` : ""}`
+      : `New asset "${name}" added with initial value ${fmt(value, cur)}`,
+    metadata: { assetId: data.id, name, value, currency: cur, categoryId: resolvedCategoryId, isGoal, targetAmount },
   });
 
   return data;
@@ -181,6 +182,7 @@ export async function updateAsset(
   if (error) throw new Error(error.message);
 
   const assetName = data.name;
+  const cur = await getUserCurrency(supabase, user.id);
   let title: string;
   let action_type = "asset_updated";
   if (updates.is_goal === true) {
@@ -190,12 +192,12 @@ export async function updateAsset(
     title = `Removed goal target from "${assetName}"`;
     action_type = "goal_asset_toggled_off";
   } else if (updates.target_amount !== undefined) {
-    title = `Set target for "${assetName}" to ${fmt(Number(updates.target_amount ?? 0))}`;
+    title = `Set target for "${assetName}" to ${fmt(Number(updates.target_amount ?? 0), cur)}`;
     action_type = "goal_target_updated";
   } else if (updates.name !== undefined) {
     title = `Renamed asset to "${updates.name}"`;
   } else if (updates.value !== undefined) {
-    title = `Updated "${assetName}" value to ${fmt(updates.value)}`;
+    title = `Updated "${assetName}" value to ${fmt(updates.value, cur)}`;
   } else {
     title = `Updated asset "${assetName}"`;
   }
@@ -208,6 +210,7 @@ export async function updateAsset(
     metadata: {
       assetId: id,
       name: assetName,
+      currency: cur,
       ...(updates.value !== undefined ? { amount: updates.value } : {}),
       ...(updates.target_amount !== undefined ? { target_amount: updates.target_amount } : {}),
       ...(updates.is_goal !== undefined ? { is_goal: updates.is_goal } : {}),
@@ -280,17 +283,18 @@ export async function achieveGoalAsset(assetId: string) {
 
   await upsertTodaySnapshot();
 
+  const cur = await getUserCurrency(supabase, user.id);
   await logActivity(supabase, user.id, {
     action_type: "goal_asset_achieved",
     category: "net_worth",
     title: `Achieved goal "${asset.name}"`,
-    description: `Goal "${asset.name}" marked as achieved (${fmt(previousValue)} withdrawn)`,
-    metadata: { assetId, name: asset.name, withdrawnAmount: previousValue },
+    description: `Goal "${asset.name}" marked as achieved (${fmt(previousValue, cur)} withdrawn)`,
+    metadata: { assetId, name: asset.name, withdrawnAmount: previousValue, currency: cur },
   });
 
   notifyUser(user.id, {
     title: "Goal achieved",
-    body: `${asset.name} — ${fmt(previousValue)} unlocked.`,
+    body: `${asset.name} — ${fmt(previousValue, cur)} unlocked.`,
     tag: `goal-${assetId}`,
     url: "/goals",
   }).catch(() => {});

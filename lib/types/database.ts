@@ -15,6 +15,7 @@ export type Database = {
           full_name: string
           email: string
           is_onboarded: boolean
+          currency: string
           created_at: string
           updated_at: string
         }
@@ -23,6 +24,7 @@ export type Database = {
           full_name: string
           email: string
           is_onboarded?: boolean
+          currency?: string
           created_at?: string
           updated_at?: string
         }
@@ -30,6 +32,7 @@ export type Database = {
           full_name?: string
           email?: string
           is_onboarded?: boolean
+          currency?: string
           updated_at?: string
         }
         Relationships: []

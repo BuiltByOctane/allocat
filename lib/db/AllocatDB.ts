@@ -153,5 +153,13 @@ export class AllocatDB extends Dexie {
         await meta.delete("budget_items");
         await meta.delete("assets");
       });
+
+    // v7: profiles.currency added (display preference). Column is non-indexed
+    // so the profiles schema string is unchanged; the version bump exists to
+    // force a re-hydration so the new column is present on cached rows.
+    this.version(7).upgrade(async (tx) => {
+      const meta = tx.table("sync_meta");
+      await meta.delete("profiles");
+    });
   }
 }

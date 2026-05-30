@@ -3,6 +3,8 @@
 import { Drawer } from "vaul";
 import { useEffect, useRef, useState } from "react";
 import { CurrencyText } from "@/components/ui/CurrencyText";
+import { CurrencySymbol } from "@/components/ui/CurrencySymbol";
+import { useFormatCurrency } from "@/lib/hooks/useFormatCurrency";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { getDB } from "@/lib/db";
@@ -35,15 +37,6 @@ interface BudgetSetupSheetProps {
   budgetId: string;
   existingTotalBudget: number;
   onDone: () => void;
-}
-
-function fmt(v: number) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(v);
 }
 
 function templateToCategories(
@@ -92,6 +85,7 @@ export function BudgetSetupSheet({
   onDone,
 }: BudgetSetupSheetProps) {
   const haptic = useHaptic();
+  const fmt = useFormatCurrency();
   const enqueue = useEnqueue();
 
   const [step, setStep] = useState<1 | 2>(1);
@@ -545,7 +539,7 @@ export function BudgetSetupSheet({
                 {/* Total Budget */}
                 <div>
                   <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                    Total Budget <span className="currency-symbol">₹</span>
+                    Total Budget <CurrencySymbol className="currency-symbol" />
                   </label>
                   <input
                     ref={totalBudgetRef}
@@ -773,7 +767,7 @@ function CategoryCard({
           placeholder="Category name"
         />
         <div className="flex items-center gap-1 shrink-0">
-          <span className="currency-symbol text-muted-foreground">₹</span>
+          <CurrencySymbol className="currency-symbol text-muted-foreground" />
           <input
             type="number"
             inputMode="decimal"
@@ -809,7 +803,7 @@ function CategoryCard({
                 className="flex-1 min-w-0 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
               />
               <div className="flex items-center gap-1 shrink-0">
-                <span className="currency-symbol text-[11px] text-muted-foreground">₹</span>
+                <CurrencySymbol className="currency-symbol text-[11px] text-muted-foreground" />
                 <input
                   type="number"
                   inputMode="decimal"
@@ -861,7 +855,7 @@ function CategoryCard({
           className="flex-1 min-w-0 bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none"
         />
         <div className="flex items-center gap-1 shrink-0">
-          <span className="currency-symbol text-[11px] text-muted-foreground">₹</span>
+          <CurrencySymbol className="currency-symbol text-[11px] text-muted-foreground" />
           <input
             type="number"
             inputMode="decimal"

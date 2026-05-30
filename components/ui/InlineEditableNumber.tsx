@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, KeyboardEvent } from "react";
 import { Pencil } from "lucide-react";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { CurrencyText } from "@/components/ui/CurrencyText";
+import { useCurrency } from "@/lib/providers/CurrencyProvider";
 
 interface InlineEditableNumberProps {
   value: number;
@@ -17,6 +18,7 @@ export function InlineEditableNumber({ value, onSave, className = "", formatAsCu
   const [currentVal, setCurrentVal] = useState(value.toString());
   const inputRef = useRef<HTMLInputElement>(null);
   const haptic = useHaptic();
+  const { def } = useCurrency();
 
   useEffect(() => {
     setCurrentVal(value.toString());
@@ -68,7 +70,7 @@ export function InlineEditableNumber({ value, onSave, className = "", formatAsCu
     );
   }
 
-  const displayVal = value.toLocaleString("en-IN");
+  const displayVal = value.toLocaleString(def.locale);
 
   return (
     <span

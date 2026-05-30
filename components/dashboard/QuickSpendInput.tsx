@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 import { CurrencyText } from "@/components/ui/CurrencyText";
+import { CurrencySymbol } from "@/components/ui/CurrencySymbol";
+import { useFormatCurrency } from "@/lib/hooks/useFormatCurrency";
 import { useCategoryItems, useQuickLogSpend } from "@/lib/hooks/useDashboard";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { parseSpend } from "@/lib/ai/parseSpend";
@@ -23,15 +25,6 @@ interface SpendResult {
   remaining: number;
   planned: number;
   actual: number;
-}
-
-function fmt(value: number) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
 }
 
 function AllocationStatus({ result }: { result: SpendResult }) {
@@ -92,6 +85,7 @@ function AllocationStatus({ result }: { result: SpendResult }) {
 }
 
 export default function QuickSpendInput({ categories }: QuickSpendInputProps) {
+  const fmt = useFormatCurrency();
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
   const [selectedItemId, setSelectedItemId] = useState<string>("");
   const [amount, setAmount] = useState<string>("");
@@ -289,7 +283,7 @@ export default function QuickSpendInput({ categories }: QuickSpendInputProps) {
           {/* Amount */}
           <div>
             <label className="font-mono text-[9px] tracking-[0.14em] uppercase text-muted-foreground mb-1.5 block">
-              Amount (<span className="currency-symbol">₹</span>)
+              Amount (<CurrencySymbol className="currency-symbol" />)
             </label>
             <input
               type="number"

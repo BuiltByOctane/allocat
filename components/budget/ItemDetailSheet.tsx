@@ -3,6 +3,8 @@
 import { Drawer } from "vaul";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CurrencyText } from "@/components/ui/CurrencyText";
+import { CurrencySymbol } from "@/components/ui/CurrencySymbol";
+import { useFormatCurrency } from "@/lib/hooks/useFormatCurrency";
 import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { suggestLink } from "@/lib/utils/link-suggest";
@@ -66,15 +68,6 @@ interface ItemDetailSheetProps {
   onDelete: (itemId: string) => void;
 }
 
-function fmt(value: number) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
 export function ItemDetailSheet({
   item,
   category,
@@ -85,6 +78,7 @@ export function ItemDetailSheet({
   onDelete,
 }: ItemDetailSheetProps) {
   const haptic = useHaptic();
+  const fmt = useFormatCurrency();
   const nameRef = useRef<HTMLInputElement>(null);
   const isNew = item?.id === NEW_ITEM_ID;
 
@@ -383,7 +377,7 @@ export function ItemDetailSheet({
                         : "text-muted-foreground/40"
                     }`}
                   >
-                    Planned <span className="currency-symbol">₹</span>
+                    Planned <CurrencySymbol className="currency-symbol" />
                   </label>
                   <div className="relative">
                     <input
@@ -422,7 +416,7 @@ export function ItemDetailSheet({
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                    Spent <span className="currency-symbol">₹</span>
+                    Spent <CurrencySymbol className="currency-symbol" />
                   </label>
                   <input
                     type="number"

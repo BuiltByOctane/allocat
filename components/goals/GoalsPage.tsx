@@ -7,6 +7,8 @@ import type { GoalFormData } from "./GoalDetailSheet";
 import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { CurrencyText } from "@/components/ui/CurrencyText";
+import { CurrencySymbol } from "@/components/ui/CurrencySymbol";
+import { useFormatCurrency } from "@/lib/hooks/useFormatCurrency";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import {
   useGoalsData,
@@ -71,6 +73,7 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
   const [sheetMode, setSheetMode] = useState<"add" | "edit">("add");
   const [sheetGoal, setSheetGoal] = useState<GoalRow | undefined>(undefined);
   const [confirmAchieveId, setConfirmAchieveId] = useState<string | null>(null);
+  const fmt = useFormatCurrency();
 
   const activeGoals = useMemo(() => goals.filter((g) => !g.achieved_at), [goals]);
   const achievedGoals = useMemo(
@@ -241,7 +244,7 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
 
               <div className="flex items-baseline justify-between py-4 border-t border-border border-b border-b-border">
                 <div className="flex items-baseline gap-1.5">
-                  <span className="currency-symbol font-sans text-foreground/30" style={{ fontSize: "calc(0.62 * 28px)" }}>₹</span>
+                  <span className="currency-symbol font-sans text-foreground/30" style={{ fontSize: "calc(0.62 * 28px)" }}><CurrencySymbol /></span>
                   <input
                     type="number"
                     min="0"
@@ -390,7 +393,7 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
         title={confirmingGoal ? `Mark "${confirmingGoal.name}" achieved?` : "Mark achieved?"}
         description={
           confirmingGoal
-            ? `This will withdraw ₹${Number(confirmingGoal.current_amount).toLocaleString("en-IN")} from net worth and archive the goal. Linked budget items lose their link.`
+            ? `This will withdraw ${fmt(Number(confirmingGoal.current_amount))} from net worth and archive the goal. Linked budget items lose their link.`
             : ""
         }
         confirmText="Mark Achieved"

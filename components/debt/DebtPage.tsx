@@ -13,6 +13,8 @@ import {
   useDebtPaymentTrend,
 } from "@/lib/hooks/useDebt";
 import LentListView from "./LentListView";
+import { CurrencySymbol } from "@/components/ui/CurrencySymbol";
+import { useFormatCurrency } from "@/lib/hooks/useFormatCurrency";
 import DebtEmptyState from "./DebtEmptyState";
 import EmojiPickerModal from "@/components/ui/EmojiPickerModal";
 import { CurrencyText } from "@/components/ui/CurrencyText";
@@ -94,6 +96,7 @@ function SegBar({ pct }: { pct: number }) {
 }
 
 export default function DebtPage({ data }: { data: Debt[] }) {
+  const fmtCurrency = useFormatCurrency();
   const [activeTab, setActiveTab] = useState<"internal" | "external" | "closed">("external");
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentDebtId, setPaymentDebtId] = useState("");
@@ -331,7 +334,7 @@ const trendPct = trendData?.trendPct ?? 0;
                     return {
                       value: d.id,
                       label: d.name,
-                      description: new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 0 }).format(remaining) + " remaining",
+                      description: fmtCurrency(remaining) + " remaining",
                       icon: d.icon ?? undefined,
                     };
                   })}
@@ -360,7 +363,7 @@ const trendPct = trendData?.trendPct ?? 0;
               {/* Amount + action */}
               <div className="flex items-baseline justify-between py-4 border-t border-border border-b border-b-border">
                 <div className="flex items-baseline gap-1.5">
-                  <span className="currency-symbol font-sans text-foreground/30" style={{ fontSize: "calc(0.62 * 28px)" }}>₹</span>
+                  <span className="currency-symbol font-sans text-foreground/30" style={{ fontSize: "calc(0.62 * 28px)" }}><CurrencySymbol /></span>
                   <input
                     type="number"
                     min="0"

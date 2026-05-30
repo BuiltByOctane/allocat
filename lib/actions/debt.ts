@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { logActivity, fmt } from "@/lib/server/activity-logger";
+import { logActivity, fmt, getUserCurrency } from "@/lib/server/activity-logger";
 import { calcTotalRepayable } from "@/lib/utils/debt-calc";
 
 export async function getDebtData() {
@@ -71,12 +71,13 @@ export async function addDebt(
 
   if (error) throw new Error(error.message);
 
+  const cur = await getUserCurrency(supabase, user.id);
   await logActivity(supabase, user.id, {
     action_type: "debt_added",
     category: "debts",
     title: `Added debt "${name}"`,
-    description: `New ${type} debt "${name}" with principal ${fmt(principal)}`,
-    metadata: { debtId: data.id, name, type, principal },
+    description: `New ${type} debt "${name}" with principal ${fmt(principal, cur)}`,
+    metadata: { debtId: data.id, name, type, principal, currency: cur },
   });
 
   return data;
@@ -137,6 +138,7 @@ export async function updateDebt(id: string, updates: DebtUpdate) {
   if (error) throw new Error(error.message);
 
   const debtName = data.name;
+  const cur = await getUserCurrency(supabase, user.id);
   let title: string;
   let action_type: string;
   if (updates.is_closed !== undefined) {
@@ -144,7 +146,7 @@ export async function updateDebt(id: string, updates: DebtUpdate) {
     title = updates.is_closed ? `Closed debt "${debtName}"` : `Reopened debt "${debtName}"`;
   } else if (updates.principal !== undefined) {
     action_type = "debt_principal_updated";
-    title = `Updated "${debtName}" principal to ${fmt(updates.principal)}`;
+    title = `Updated "${debtName}" principal to ${fmt(updates.principal, cur)}`;
   } else if (updates.name !== undefined) {
     action_type = "debt_renamed";
     title = `Renamed debt to "${updates.name}"`;
@@ -161,6 +163,7 @@ export async function updateDebt(id: string, updates: DebtUpdate) {
     metadata: {
       debtId: id,
       name: debtName,
+      currency: cur,
       ...(updates.principal !== undefined ? { principal: updates.principal } : {}),
     },
   });
@@ -250,12 +253,13 @@ export async function makePayment(id: string, amount: number, options?: { suppre
   if (error) throw new Error(error.message);
 
   if (!options?.suppressLog) {
+    const cur = await getUserCurrency(supabase, user.id);
     await logActivity(supabase, user.id, {
       action_type: "debt_payment_made",
       category: "debts",
-      title: `Paid ${fmt(amount)} toward "${debt.name}"`,
-      description: `Payment of ${fmt(amount)} made on "${debt.name}"`,
-      metadata: { debtId: id, debtName: debt.name, amount, totalPaid: newTotalPaid },
+      title: `Paid ${fmt(amount, cur)} toward "${debt.name}"`,
+      description: `Payment of ${fmt(amount, cur)} made on "${debt.name}"`,
+      metadata: { debtId: id, debtName: debt.name, amount, totalPaid: newTotalPaid, currency: cur },
     });
   }
 

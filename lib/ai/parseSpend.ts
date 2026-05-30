@@ -9,7 +9,8 @@ export interface ParsedSpend {
   raw: string;
 }
 
-const CURRENCY_TOKENS = /(?:₹|rs\.?|inr|\$|usd|eur|€|£|gbp)/gi;
+const CURRENCY_TOKENS =
+  /(?:₹|\bRs\.?\b|\bINR\b|\$|\bUSD\b|\bCAD\b|\bAUD\b|\bSGD\b|\bHKD\b|\bNZD\b|\bEUR\b|€|£|\bGBP\b|¥|\bJPY\b|\bCNY\b|\bCHF\b|\bAED\b|\bSAR\b|\bZAR\b)/gi;
 
 export function parseSpend(input: string): ParsedSpend {
   const raw = input.trim();

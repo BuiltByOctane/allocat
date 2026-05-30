@@ -6,6 +6,7 @@ import { InstallPrompt } from "@/components/ui/InstallPrompt";
 import { BadgeUpdater } from "@/components/pwa/BadgeUpdater";
 import { PushPermissionPrompt } from "@/components/pwa/PushPermissionPrompt";
 import { TourProvider } from "@/lib/tour/TourContext";
+import { CurrencyProvider } from "@/lib/providers/CurrencyProvider";
 
 export default async function AppLayout({
   children,
@@ -15,6 +16,7 @@ export default async function AppLayout({
   return (
     <TourProvider>
     <SyncProvider>
+    <CurrencyProvider>
       <div className="relative flex flex-col min-h-[100dvh] w-full max-w-[480px] mx-auto md:max-w-full md:flex-row bg-background overflow-x-hidden md:overflow-x-visible">
         {/* Sync status indicator — top-right, only visible when offline or syncing */}
         <div className="fixed top-3 right-4 z-50">
@@ -31,6 +33,7 @@ export default async function AppLayout({
         <BadgeUpdater />
         <BottomNav />
       </div>
+    </CurrencyProvider>
     </SyncProvider>
     </TourProvider>
   );

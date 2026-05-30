@@ -1,4 +1,6 @@
 import type { createClient } from "@/lib/supabase/server";
+import { formatCurrency } from "@/lib/number-format";
+import { DEFAULT_CURRENCY } from "@/lib/currency/catalog";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 type ActivityCategory = "budget" | "net_worth" | "goals" | "debts";
@@ -24,11 +26,27 @@ export async function logActivity(
   });
 }
 
-export function fmt(value: number) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
+/**
+ * Format a money value using the user's currency. Pass the code resolved
+ * upstream via `getUserCurrency` so this stays synchronous.
+ */
+export function fmt(value: number, code: string = DEFAULT_CURRENCY) {
+  return formatCurrency(value, {
+    code,
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(value);
+  });
+}
+
+/** Fetch the user's display currency from the profiles table. */
+export async function getUserCurrency(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<string> {
+  const { data } = await supabase
+    .from("profiles")
+    .select("currency")
+    .eq("id", userId)
+    .maybeSingle();
+  return data?.currency ?? DEFAULT_CURRENCY;
 }

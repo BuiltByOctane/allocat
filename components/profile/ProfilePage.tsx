@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { MaterialSymbol } from "@/components/ui/MaterialSymbol";
 import ThemeSelector from "@/components/profile/ThemeSelector";
+import CurrencySelector from "@/components/profile/CurrencySelector";
 import { signOut } from "@/lib/actions/auth";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { useTour } from "@/lib/tour/useTour";
@@ -80,6 +81,7 @@ export default function ProfilePage() {
         </div>
 
         <ThemeSelector />
+        <CurrencySelector />
       </section>
 
       {/* Helper / Tour Section */}

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Drawer } from "vaul";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { CurrencyText } from "@/components/ui/CurrencyText";
+import { CurrencySymbol } from "@/components/ui/CurrencySymbol";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import {
   useAddDebt,
@@ -148,7 +149,7 @@ export function LentDetailSheet({
                 />
               </div>
               <div>
-                <label className="text-[10px] font-mono uppercase tracking-[0.14em] text-muted-foreground block mb-1.5">Amount Lent (₹)</label>
+                <label className="text-[10px] font-mono uppercase tracking-[0.14em] text-muted-foreground block mb-1.5">Amount Lent</label>
                 <input
                   type="number"
                   min="0"
@@ -290,7 +291,7 @@ export function PaymentSheet({
           <div className="px-5 py-4">
             <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mb-2">Step 01</div>
             <div className="flex items-baseline gap-1.5 py-3 border-t border-border border-b border-b-border">
-              <span className="currency-symbol font-sans text-foreground/30" style={{ fontSize: "calc(0.62 * 28px)" }}>₹</span>
+              <span className="currency-symbol font-sans text-foreground/30" style={{ fontSize: "calc(0.62 * 28px)" }}><CurrencySymbol /></span>
               <input
                 type="number"
                 min="0"

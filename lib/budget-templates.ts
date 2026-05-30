@@ -1,6 +1,6 @@
 export interface TemplateItem {
   name: string;
-  /** Absolute planned amount (INR). Optional — predefined templates omit. */
+  /** Absolute planned amount in the user's display currency. Optional — predefined templates omit. */
   plannedAmount?: number;
 }
 

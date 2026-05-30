@@ -2,31 +2,47 @@
 
 import { createClient } from "@/lib/supabase/server";
 import type { FinanceTopic } from "@/lib/ai-utils";
+import { fmt as fmtCurrency, getUserCurrency } from "@/lib/server/activity-logger";
 
-const fmt = (n: number) =>
-  new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(n);
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+interface Ctx {
+  supabase: SupabaseClient;
+  userId: string;
+  cur: string;
+  fmt: (n: number) => string;
+}
+
+async function makeCtx(): Promise<Ctx> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+  const cur = await getUserCurrency(supabase, user.id);
+  return {
+    supabase,
+    userId: user.id,
+    cur,
+    fmt: (n: number) => fmtCurrency(n, cur),
+  };
+}
 
 // ── Budget: categories + every item inside each category ─────────────────────
 
 export async function getBudgetContext(): Promise<string> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
+  const ctx = await makeCtx();
+  return getBudgetContextWith(ctx);
+}
 
+async function getBudgetContextWith({ supabase, userId, fmt }: Ctx): Promise<string> {
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
-  const monthName = now.toLocaleString("en-IN", { month: "long" });
+  const monthName = now.toLocaleString("en-US", { month: "long" });
 
   const { data: budget } = await supabase
     .from("budgets")
     .select("*, categories(*, budget_items(*))")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .eq("month", month)
     .eq("year", year)
     .maybeSingle();
@@ -79,15 +95,15 @@ export async function getBudgetContext(): Promise<string> {
 // ── Goals ─────────────────────────────────────────────────────────────────────
 
 export async function getGoalsContext(): Promise<string> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
+  const ctx = await makeCtx();
+  return getGoalsContextWith(ctx);
+}
 
-  // Goals are now assets with is_goal=true; only surface active ones
+async function getGoalsContextWith({ supabase, userId, fmt }: Ctx): Promise<string> {
   const { data: goals } = await supabase
     .from("assets")
     .select("name, value, target_amount")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .eq("is_goal", true)
     .is("achieved_at", null)
     .order("created_at");
@@ -108,29 +124,28 @@ export async function getGoalsContext(): Promise<string> {
 // ── Net Worth: assets + receivables (lent) + liabilities (external/internal) ──
 
 export async function getNetWorthContext(): Promise<string> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
+  const ctx = await makeCtx();
+  return getNetWorthContextWith(ctx);
+}
 
+async function getNetWorthContextWith({ supabase, userId, fmt }: Ctx): Promise<string> {
   const [{ data: assets }, { data: debts }, { data: snapshots }] = await Promise.all([
-    supabase.from("assets").select("*, asset_categories(name)").eq("user_id", user.id).order("created_at"),
-    supabase.from("debts").select("*").eq("user_id", user.id).eq("is_closed", false),
+    supabase.from("assets").select("*, asset_categories(name)").eq("user_id", userId).order("created_at"),
+    supabase.from("debts").select("*").eq("user_id", userId).eq("is_closed", false),
     supabase
       .from("net_worth_snapshots")
       .select("net_worth, total_assets, total_liabilities, snapshot_date")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .order("snapshot_date", { ascending: false })
       .limit(6),
   ]);
 
   const totalPhysicalAssets = (assets ?? []).reduce((s, a) => s + Number(a.value || 0), 0);
-  
-  // Receivables (Money lent to others - technically an asset)
+
   const totalReceivables = (debts ?? [])
     .filter(d => d.type === "lent")
     .reduce((s, d) => s + (Number(d.principal) - Number(d.total_paid)), 0);
 
-  // Liabilities (Money user owes to others)
   const totalLiabilities = (debts ?? [])
     .filter(d => d.type !== "lent")
     .reduce((s, d) => s + (Number(d.principal) - Number(d.total_paid)), 0);
@@ -176,22 +191,21 @@ export async function getNetWorthContext(): Promise<string> {
 // ── Debts: Distinguish between Liabilities and Receivables ───────────────────
 
 export async function getDebtsContext(): Promise<string> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
+  const ctx = await makeCtx();
+  return getDebtsContextWith(ctx);
+}
 
+async function getDebtsContextWith({ supabase, userId, fmt }: Ctx): Promise<string> {
   const { data: debts } = await supabase
     .from("debts")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .order("is_closed")
     .order("created_at");
 
-  // Liabilities: external or internal type
   const activeLiabilities = (debts ?? []).filter((d) => !d.is_closed && d.type !== "lent");
-  // Receivables: lent type
   const activeReceivables = (debts ?? []).filter((d) => !d.is_closed && d.type === "lent");
-  
+
   const closed = (debts ?? []).filter((d) => d.is_closed);
 
   const fmtDebt = (d: {
@@ -226,14 +240,15 @@ export async function getDebtsContext(): Promise<string> {
 // ── Reports: locked monthly summaries ────────────────────────────────────────
 
 export async function getReportsContext(): Promise<string> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
+  const ctx = await makeCtx();
+  return getReportsContextWith(ctx);
+}
 
+async function getReportsContextWith({ supabase, userId }: Ctx): Promise<string> {
   const { data: reports } = await supabase
     .from("reports")
     .select("month, year, notes, summary_data")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .order("year", { ascending: false })
     .order("month", { ascending: false })
     .limit(3);
@@ -254,15 +269,19 @@ export async function buildFinancialContext(topics: FinanceTopic[]): Promise<str
   const all = topics.includes("all");
   const inc = (t: FinanceTopic) => all || topics.includes(t);
 
+  // Single context fetch shared across all parallel context builders.
+  const ctx = await makeCtx();
+  const header = `User currency: ${ctx.cur}`;
+
   const [budget, goals, networth, debts, reports] = await Promise.all([
-    inc("budget")   ? getBudgetContext()   : Promise.resolve(null),
-    inc("goals")    ? getGoalsContext()    : Promise.resolve(null),
-    inc("networth") ? getNetWorthContext() : Promise.resolve(null),
-    inc("debts")    ? getDebtsContext()    : Promise.resolve(null),
-    all             ? getReportsContext()  : Promise.resolve(null),
+    inc("budget")   ? getBudgetContextWith(ctx)   : Promise.resolve(null),
+    inc("goals")    ? getGoalsContextWith(ctx)    : Promise.resolve(null),
+    inc("networth") ? getNetWorthContextWith(ctx) : Promise.resolve(null),
+    inc("debts")    ? getDebtsContextWith(ctx)    : Promise.resolve(null),
+    all             ? getReportsContextWith(ctx)  : Promise.resolve(null),
   ]);
 
-  return [budget, goals, networth, debts, reports]
+  return [header, budget, goals, networth, debts, reports]
     .filter(Boolean)
     .join("\n\n");
 }

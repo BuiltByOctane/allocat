@@ -216,7 +216,7 @@ export function DebtDetailSheet({
               {/* Principal + Interest Rate */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[10px] font-mono uppercase tracking-[0.14em] text-muted-foreground block mb-1.5">Principal (₹)</label>
+                  <label className="text-[10px] font-mono uppercase tracking-[0.14em] text-muted-foreground block mb-1.5">Principal</label>
                   <input
                     type="number"
                     min="0"
@@ -282,7 +282,7 @@ export function DebtDetailSheet({
                 </div>
                 <div>
                   <label className="text-[10px] font-mono uppercase tracking-[0.14em] text-muted-foreground block mb-1.5">
-                    Monthly Min (₹)
+                    Monthly Min
                     {emi > 0 && <span className="ml-1 text-[9px] text-muted-foreground normal-case inline-flex items-baseline gap-0.5">(EMI: <CurrencyText value={emi} />)</span>}
                   </label>
                   <input

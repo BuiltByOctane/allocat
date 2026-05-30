@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/types/database";
-import { logActivity, fmt } from "@/lib/server/activity-logger";
+import { logActivity, fmt, getUserCurrency } from "@/lib/server/activity-logger";
 import { notifyUser } from "@/lib/server/push-notify";
 import { computeAutoCompletion } from "@/lib/utils/budget-completion";
 import { addAssetEntry } from "@/lib/actions/asset-history";
@@ -296,12 +296,13 @@ export async function updateBudgetTotal(budgetId: string, totalAmount: number) {
 
   if (error) throw new Error(error.message);
 
+  const cur = await getUserCurrency(supabase, user.id);
   await logActivity(supabase, user.id, {
     action_type: "budget_total_updated",
     category: "budget",
-    title: `Set total budget to ${fmt(totalAmount)}`,
-    description: `Total budget updated to ${fmt(totalAmount)}`,
-    metadata: { budgetId, totalAmount },
+    title: `Set total budget to ${fmt(totalAmount, cur)}`,
+    description: `Total budget updated to ${fmt(totalAmount, cur)}`,
+    metadata: { budgetId, totalAmount, currency: cur },
   });
 
   return data;
@@ -327,12 +328,13 @@ export async function updateCategoryAllocation(categoryId: string, allocatedAmou
 
   if (error) throw new Error(error.message);
 
+  const cur = await getUserCurrency(supabase, user.id);
   await logActivity(supabase, user.id, {
     action_type: "category_allocation_updated",
     category: "budget",
-    title: `Set "${data.name}" allocation to ${fmt(allocatedAmount)}`,
-    description: `Budget allocation for "${data.name}" updated to ${fmt(allocatedAmount)}`,
-    metadata: { categoryId, name: data.name, allocated_amount: allocatedAmount },
+    title: `Set "${data.name}" allocation to ${fmt(allocatedAmount, cur)}`,
+    description: `Budget allocation for "${data.name}" updated to ${fmt(allocatedAmount, cur)}`,
+    metadata: { categoryId, name: data.name, allocated_amount: allocatedAmount, currency: cur },
   });
 
   return data;
@@ -451,16 +453,18 @@ export async function addBudgetItem(
 
   if (error) throw new Error(error.message);
 
+  const cur = await getUserCurrency(supabase, user.id);
   await logActivity(supabase, user.id, {
     action_type: "budget_item_added",
     category: "budget",
     title: `Added "${trimmedName}" to budget`,
-    description: `New budget item "${trimmedName}" created with planned amount ${fmt(planned)}`,
+    description: `New budget item "${trimmedName}" created with planned amount ${fmt(planned, cur)}`,
     metadata: {
       itemId: data.id,
       name: trimmedName,
       categoryId,
       planned_amount: planned,
+      currency: cur,
       ...(link ? { link_type: link.link_type, link_id: link.link_id } : {}),
     },
   });
@@ -592,6 +596,7 @@ export async function updateBudgetItem(
   }
 
   const itemName = data.name;
+  const cur = await getUserCurrency(supabase, user.id);
   let title: string;
   let action_type: string;
 
@@ -602,10 +607,10 @@ export async function updateBudgetItem(
       : `Marked "${itemName}" as incomplete`;
   } else if (updates.actual_amount !== undefined) {
     action_type = "budget_item_spend_updated";
-    title = `Updated spend for "${itemName}" to ${fmt(updates.actual_amount)}`;
+    title = `Updated spend for "${itemName}" to ${fmt(updates.actual_amount, cur)}`;
   } else if (updates.planned_amount !== undefined) {
     action_type = "budget_item_allocation_updated";
-    title = `Set "${itemName}" planned amount to ${fmt(updates.planned_amount)}`;
+    title = `Set "${itemName}" planned amount to ${fmt(updates.planned_amount, cur)}`;
   } else if (updates.name !== undefined) {
     action_type = "budget_item_renamed";
     title = `Renamed item to "${updates.name.trim()}"`;
@@ -622,6 +627,7 @@ export async function updateBudgetItem(
     metadata: {
       itemId,
       name: itemName,
+      currency: cur,
       ...(updates.actual_amount !== undefined ? { actual_amount: updates.actual_amount } : {}),
       ...(updates.planned_amount !== undefined ? { planned_amount: updates.planned_amount } : {}),
       ...(updates.notes !== undefined && updates.notes !== null ? { note: updates.notes } : {}),
@@ -752,16 +758,18 @@ export async function quickLogSpend(itemId: string, amount: number) {
     }
   }
 
+  const cur = await getUserCurrency(supabase, user.id);
   if (cascadeSummary) {
     await logActivity(supabase, user.id, {
       action_type: "budget_linked_spend",
       category: "budget",
-      title: `Logged ${fmt(amount)} on "${updatedItem.name}" → ${cascadeSummary.targetName}`,
-      description: `${fmt(amount)} from "${updatedItem.name}" applied to ${cascadeSummary.kind} "${cascadeSummary.targetName}"`,
+      title: `Logged ${fmt(amount, cur)} on "${updatedItem.name}" → ${cascadeSummary.targetName}`,
+      description: `${fmt(amount, cur)} from "${updatedItem.name}" applied to ${cascadeSummary.kind} "${cascadeSummary.targetName}"`,
       metadata: {
         itemId,
         itemName: updatedItem.name,
         amount,
+        currency: cur,
         newTotal: updatedItem.actual_amount,
         link_type: cascadeSummary.kind,
         link_id: linkId,
@@ -772,12 +780,13 @@ export async function quickLogSpend(itemId: string, amount: number) {
     await logActivity(supabase, user.id, {
       action_type: "spend_logged",
       category: "budget",
-      title: `Logged ${fmt(amount)} spend on "${updatedItem.name}"`,
-      description: `${fmt(amount)} spent on "${updatedItem.name}"`,
+      title: `Logged ${fmt(amount, cur)} spend on "${updatedItem.name}"`,
+      description: `${fmt(amount, cur)} spent on "${updatedItem.name}"`,
       metadata: {
         itemId,
         itemName: updatedItem.name,
         amount,
+        currency: cur,
         newTotal: updatedItem.actual_amount,
       },
     });
@@ -788,7 +797,7 @@ export async function quickLogSpend(itemId: string, amount: number) {
     const over = newActual - planned;
     notifyUser(user.id, {
       title: "Budget overrun",
-      body: `${updatedItem.name} is ${fmt(over)} over plan.`,
+      body: `${updatedItem.name} is ${fmt(over, cur)} over plan.`,
       tag: `overrun-${itemId}`,
       url: "/budget",
     }).catch(() => {});
@@ -925,14 +934,16 @@ export async function setupBudgetFromTemplate(
   }));
 
   // 4. One summary activity log
+  const cur = await getUserCurrency(supabase, user.id);
   await logActivity(supabase, user.id, {
     action_type: "budget_template_applied",
     category: "budget",
     title: `Set up budget with ${categoryIdMap.length} categories`,
-    description: `Created ${categoryIdMap.length} categories and ${itemIdMap.length} items${totalBudget > 0 ? ` with total budget ${fmt(totalBudget)}` : ""}`,
+    description: `Created ${categoryIdMap.length} categories and ${itemIdMap.length} items${totalBudget > 0 ? ` with total budget ${fmt(totalBudget, cur)}` : ""}`,
     metadata: {
       budgetId,
       totalBudget,
+      currency: cur,
       categoryCount: categoryIdMap.length,
       itemCount: itemIdMap.length,
     },

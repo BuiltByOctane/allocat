@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { logActivity, fmt } from "@/lib/server/activity-logger";
+import { logActivity, fmt, getUserCurrency } from "@/lib/server/activity-logger";
 
 type EntryType = "initial" | "add_funds" | "withdraw" | "update_value";
 
@@ -82,15 +82,16 @@ export async function addAssetEntry(
 
   // Log activity for user-initiated entries (not initial, not suppressed by cascade caller)
   if (entryType !== "initial" && !options?.suppressLog) {
+    const cur = await getUserCurrency(supabase, user.id);
     const actionMap: Record<string, string> = {
       add_funds: "asset_funds_added",
       withdraw: "asset_funds_withdrawn",
       update_value: "asset_value_updated",
     };
     const titleMap: Record<string, string> = {
-      add_funds: `Added ${fmt(amount)} to "${asset.name}"`,
-      withdraw: `Withdrew ${fmt(amount)} from "${asset.name}"`,
-      update_value: `Updated "${asset.name}" value to ${fmt(runningTotal)}`,
+      add_funds: `Added ${fmt(amount, cur)} to "${asset.name}"`,
+      withdraw: `Withdrew ${fmt(amount, cur)} from "${asset.name}"`,
+      update_value: `Updated "${asset.name}" value to ${fmt(runningTotal, cur)}`,
     };
     await logActivity(supabase, user.id, {
       action_type: actionMap[entryType],
@@ -101,6 +102,7 @@ export async function addAssetEntry(
         assetId,
         assetName: asset.name,
         amount,
+        currency: cur,
         newBalance: runningTotal,
         ...(note ? { note } : {}),
       },

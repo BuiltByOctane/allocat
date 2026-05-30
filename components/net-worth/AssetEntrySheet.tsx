@@ -4,6 +4,7 @@ import { Drawer } from "vaul";
 import { useEffect, useRef, useState } from "react";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { useHaptic } from "@/lib/hooks/useHaptic";
+import { useFormatCurrency } from "@/lib/hooks/useFormatCurrency";
 
 type EntryType = "add_funds" | "withdraw" | "update_value";
 
@@ -15,18 +16,21 @@ interface AssetEntrySheetProps {
   onSave: (params: { entryType: EntryType; amount: number; note: string | null; entryDate: string }) => Promise<void>;
 }
 
-const ENTRY_CONFIG: Record<EntryType, { title: string; label: string; placeholder: string; hint: (v: number) => string }> = {
+const ENTRY_CONFIG: Record<
+  EntryType,
+  { title: string; label: string; placeholder: string; hint: (v: number, fmt: (n: number) => string) => string }
+> = {
   add_funds: {
     title: "Add Funds",
     label: "Amount to Add",
     placeholder: "e.g. 5000",
-    hint: (v) => `New total will be ${fmt(v)}`,
+    hint: (v, fmt) => `New total will be ${fmt(v)}`,
   },
   withdraw: {
     title: "Withdraw",
     label: "Amount to Withdraw",
     placeholder: "e.g. 2000",
-    hint: (v) => `New total will be ${fmt(Math.max(0, v))}`,
+    hint: (v, fmt) => `New total will be ${fmt(Math.max(0, v))}`,
   },
   update_value: {
     title: "Update Market Value",
@@ -36,17 +40,9 @@ const ENTRY_CONFIG: Record<EntryType, { title: string; label: string; placeholde
   },
 };
 
-function fmt(value: number) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
 export function AssetEntrySheet({ open, entryType, currentValue, onClose, onSave }: AssetEntrySheetProps) {
   const haptic = useHaptic();
+  const fmt = useFormatCurrency();
   const inputRef = useRef<HTMLInputElement>(null);
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
@@ -141,7 +137,7 @@ export function AssetEntrySheet({ open, entryType, currentValue, onClose, onSave
               />
               {numAmount > 0 && (
                 <p className="text-xs text-muted-foreground px-1 font-mono tabular-nums">
-                  {config.hint(previewValue)}
+                  {config.hint(previewValue, fmt)}
                 </p>
               )}
             </div>

@@ -1,9 +1,9 @@
-import {
-  formatCurrencyParts,
-  type CurrencyFormatOptions,
-} from "@/lib/number-format";
+"use client";
 
-interface CurrencyTextProps extends CurrencyFormatOptions {
+import { useFormatCurrencyParts } from "@/lib/hooks/useFormatCurrency";
+import { type CurrencyFormatOptions } from "@/lib/number-format";
+
+interface CurrencyTextProps extends Omit<CurrencyFormatOptions, "code" | "locale"> {
   value: number;
   className?: string;
   symbolClassName?: string;
@@ -13,10 +13,11 @@ export function CurrencyText({
   value,
   className = "",
   symbolClassName = "",
-  minimumFractionDigits = 0,
+  minimumFractionDigits,
   maximumFractionDigits,
 }: CurrencyTextProps) {
-  const parts = formatCurrencyParts(value, {
+  const toParts = useFormatCurrencyParts();
+  const parts = toParts(value, {
     minimumFractionDigits,
     maximumFractionDigits,
   });

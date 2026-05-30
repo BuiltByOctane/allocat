@@ -6,6 +6,7 @@ import { useHaptic } from "@/lib/hooks/useHaptic";
 import { useAddAsset } from "@/lib/hooks/useNetWorth";
 import { useAssetCategories, useAddAssetCategory } from "@/lib/hooks/useAssetCategories";
 import EmojiPickerModal from "@/components/ui/EmojiPickerModal";
+import { CurrencySymbol } from "@/components/ui/CurrencySymbol";
 
 const DEFAULT_CATEGORY_ICONS = ["💵", "📈", "🏠", "🥇", "🚗", "📦", "💳", "🏦", "💎", "🪙"];
 
@@ -228,9 +229,7 @@ export function AddAssetSheet({ open, defaultCategoryId, onClose }: AddAssetShee
                   Current Value
                 </label>
                 <div className="relative">
-                  <span className="currency-symbol absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
-                    ₹
-                  </span>
+                  <CurrencySymbol className="currency-symbol absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <input
                     type="number"
                     inputMode="decimal"
@@ -274,9 +273,7 @@ export function AddAssetSheet({ open, defaultCategoryId, onClose }: AddAssetShee
                       Target Amount
                     </label>
                     <div className="relative">
-                      <span className="currency-symbol absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
-                        ₹
-                      </span>
+                      <CurrencySymbol className="currency-symbol absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
                       <input
                         type="number"
                         inputMode="decimal"

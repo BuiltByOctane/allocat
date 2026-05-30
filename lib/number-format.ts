@@ -1,31 +1,37 @@
+import { getCurrencyDef, DEFAULT_CURRENCY } from "@/lib/currency/catalog";
+
 export interface CurrencyFormatOptions {
   minimumFractionDigits?: number;
   maximumFractionDigits?: number;
+  /** ISO 4217 code. Defaults to INR for backwards compatibility with legacy callers. */
+  code?: string;
+  /** BCP 47 locale. When omitted, derived from the currency code. */
+  locale?: string;
 }
-
-const CURRENCY_LOCALE = "en-IN";
-const CURRENCY_CODE = "INR";
 
 const currencyFormatterCache = new Map<string, Intl.NumberFormat>();
 
 function getCurrencyFormatter(options: CurrencyFormatOptions = {}) {
-  const minimumFractionDigits = options.minimumFractionDigits ?? 0;
+  const def = getCurrencyDef(options.code ?? DEFAULT_CURRENCY);
+  const locale = options.locale ?? def.locale;
+  const code = def.code;
+
+  const minimumFractionDigits =
+    options.minimumFractionDigits ?? def.defaultFractionDigits;
   const maximumFractionDigits =
     options.maximumFractionDigits ?? minimumFractionDigits;
-  const cacheKey = `${minimumFractionDigits}:${maximumFractionDigits}`;
+  const cacheKey = `${locale}:${code}:${minimumFractionDigits}:${maximumFractionDigits}`;
 
   let formatter = currencyFormatterCache.get(cacheKey);
-
   if (!formatter) {
-    formatter = new Intl.NumberFormat(CURRENCY_LOCALE, {
+    formatter = new Intl.NumberFormat(locale, {
       style: "currency",
-      currency: CURRENCY_CODE,
+      currency: code,
       minimumFractionDigits,
       maximumFractionDigits,
     });
     currencyFormatterCache.set(cacheKey, formatter);
   }
-
   return formatter;
 }
 

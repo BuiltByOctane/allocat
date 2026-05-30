@@ -3,6 +3,7 @@
 import { Drawer } from "vaul";
 import { useState } from "react";
 import { CurrencyText } from "@/components/ui/CurrencyText";
+import { useFormatCurrency } from "@/lib/hooks/useFormatCurrency";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { useAssetHistory, useAddAssetEntry } from "@/lib/hooks/useAssetHistory";
 import { useUpdateAsset, useDeleteAsset } from "@/lib/hooks/useNetWorth";
@@ -61,6 +62,7 @@ export function AssetDetailSheet({ asset, onClose }: AssetDetailSheetProps) {
   const [editingTarget, setEditingTarget] = useState(false);
   const [targetValue, setTargetValue] = useState("");
   const [confirmAchieve, setConfirmAchieve] = useState(false);
+  const fmt = useFormatCurrency();
 
   const { data: history } = useAssetHistory(asset?.id ?? null, 5);
   const { data: categories } = useAssetCategories();
@@ -415,7 +417,7 @@ export function AssetDetailSheet({ asset, onClose }: AssetDetailSheetProps) {
         title={asset ? `Mark "${asset.name}" achieved?` : "Mark achieved?"}
         description={
           asset
-            ? `This withdraws ₹${Number(asset.value).toLocaleString("en-IN")} from net worth and archives the goal. Linked budget items lose their link.`
+            ? `This withdraws ${fmt(Number(asset.value))} from net worth and archives the goal. Linked budget items lose their link.`
             : ""
         }
         confirmText="Mark Achieved"

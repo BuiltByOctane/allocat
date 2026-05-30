@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CurrencyText } from "@/components/ui/CurrencyText";
+import { useFormatCurrency } from "@/lib/hooks/useFormatCurrency";
 import { InlineEditableText } from "@/components/ui/InlineEditableText";
 import { InlineEditableNumber } from "@/components/ui/InlineEditableNumber";
 import EmojiPickerModal from "@/components/ui/EmojiPickerModal";
@@ -38,15 +39,6 @@ interface LinkTargetEntry {
   id: string;
   name: string;
   icon?: string | null;
-}
-
-function fmt(value: number) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
 }
 
 function SegBar({ pct, segments = 20 }: { pct: number; segments?: number }) {
@@ -111,6 +103,7 @@ function CategoryDetailContent({
   const haptic = useHaptic();
   const qc = useQueryClient();
   const enqueue = useEnqueue();
+  const fmt = useFormatCurrency();
 
   const [items, setItems] = useState<BudgetItem[]>(data.items);
   const [icon, setIcon] = useState(data.icon || null);

@@ -72,7 +72,7 @@ export async function POST(req: Request) {
     "1. ONLY answer questions about the user's personal finances (budget, spending, goals, debts, net worth).",
     "2. Never make up numbers. Only use figures from the data below.",
     "3. Distinguish between 'Your Debts' (money you owe) and 'Money Owed to You' (receivables).",
-    "4. Use ₹ for all currency.",
+    "4. Use the currency shown in the 'User currency' header at the top of the data below. Match that symbol/code for all amounts.",
     "",
     "GOAL: Make the user feel calm, in control, and capable — like they always land on their feet.",
     "",

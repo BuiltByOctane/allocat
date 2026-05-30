@@ -7,11 +7,18 @@ import type { TourPage } from "./types";
 
 export function useTourDriver(page: TourPage) {
   const tour = useTour();
+  // Compute the boolean here so the effect can depend on its VALUE (not the
+  // identity of the function). Without this, the effect captures a stale
+  // `isPageTourActive` from the pre-hydration render, returns early, and
+  // never reschedules once TourProvider finishes loading localStorage —
+  // so pages render mock data (their JSX re-reads tourActive on re-render)
+  // while the driver overlay never starts.
+  const active = tour.isPageTourActive(page);
   // Holds the active driver instance so cleanup can destroy it if user navigates away
   const driverRef = useRef<{ destroy: () => void } | null>(null);
 
   useEffect(() => {
-    if (!tour.isPageTourActive(page)) return;
+    if (!active) return;
 
     // `cancelled` handles React Strict Mode double-invocation:
     // First run: cancelled=false → timer set
@@ -60,7 +67,8 @@ export function useTourDriver(page: TourPage) {
         d.destroy();
       }
     };
-  // Only re-run when page changes (navigating to a new section)
+  // Re-run when navigating to a new page OR when `active` flips
+  // (post-hydration of TourProvider, user toggling tour on/off, etc.).
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  }, [page, active]);
 }

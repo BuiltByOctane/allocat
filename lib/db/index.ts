@@ -30,4 +30,6 @@ export type {
   ReportRow,
   SnapshotRow,
   ActivityLogRow,
+  MerchantRuleRow,
+  SmsTransactionRow,
 } from "./AllocatDB";

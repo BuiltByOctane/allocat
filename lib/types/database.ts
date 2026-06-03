@@ -398,6 +398,104 @@ export type Database = {
         Update: Record<string, never>
         Relationships: []
       }
+      merchant_rules: {
+        Row: {
+          id: string
+          user_id: string
+          match_type: "exact" | "contains" | "regex"
+          pattern: string
+          merchant_normalized: string | null
+          budget_item_id: string
+          category_id: string
+          auto_apply: boolean
+          times_applied: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          match_type: "exact" | "contains" | "regex"
+          pattern: string
+          merchant_normalized?: string | null
+          budget_item_id: string
+          category_id: string
+          auto_apply?: boolean
+          times_applied?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          match_type?: "exact" | "contains" | "regex"
+          pattern?: string
+          merchant_normalized?: string | null
+          budget_item_id?: string
+          category_id?: string
+          auto_apply?: boolean
+          times_applied?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_rules_budget_item_id_fkey"
+            columns: ["budget_item_id"]
+            isOneToOne: false
+            referencedRelation: "budget_items"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      sms_transactions: {
+        Row: {
+          id: string
+          user_id: string
+          raw_text: string
+          sender: string | null
+          amount: number | null
+          currency: string | null
+          merchant_raw: string | null
+          merchant_normalized: string | null
+          direction: "debit" | "credit" | null
+          occurred_at: string | null
+          dedupe_key: string
+          status: "pending" | "categorized" | "ignored" | "duplicate"
+          matched_rule_id: string | null
+          budget_item_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          raw_text: string
+          sender?: string | null
+          amount?: number | null
+          currency?: string | null
+          merchant_raw?: string | null
+          merchant_normalized?: string | null
+          direction?: "debit" | "credit" | null
+          occurred_at?: string | null
+          dedupe_key: string
+          status?: "pending" | "categorized" | "ignored" | "duplicate"
+          matched_rule_id?: string | null
+          budget_item_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          status?: "pending" | "categorized" | "ignored" | "duplicate"
+          matched_rule_id?: string | null
+          budget_item_id?: string | null
+          merchant_normalized?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_transactions_matched_rule_id_fkey"
+            columns: ["matched_rule_id"]
+            isOneToOne: false
+            referencedRelation: "merchant_rules"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never

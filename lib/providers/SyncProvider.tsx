@@ -11,7 +11,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { SyncEngine } from "@/lib/sync/SyncEngine";
 import { hydrateAllTables, forceRefreshTable } from "@/lib/db/hydrate";
 import { prefetchAllQueries } from "@/lib/db/prefetch";
+import { installRandomUUIDPolyfill } from "@/lib/utils/uuid";
 import type { SyncQueueItem } from "@/lib/db";
+
+// Insecure-origin WebView (http LAN URL) lacks crypto.randomUUID — patch it
+// before any mutation hook runs.
+installRandomUUIDPolyfill();
 
 interface SyncContextValue {
   pendingCount: number;
@@ -84,6 +89,25 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           qc.refetchQueries({ queryKey: ["dashboard"], type: "all" });
         } catch (err) {
           console.warn("[SyncEngine] Post-sync refresh failed:", err);
+        }
+      }
+      // SMS ingest / categorize logs a spend server-side (quickLogSpend cascade)
+      // → pull fresh budget state so IDB matches the server.
+      if (item.table === "sms_transactions") {
+        qc.invalidateQueries({ queryKey: ["sms-transactions"] });
+        if (item.operation === "INSERT" || item.operation === "CATEGORIZE") {
+          try {
+            await Promise.all([
+              forceRefreshTable("budget_items"),
+              forceRefreshTable("assets"),
+              forceRefreshTable("debts"),
+            ]);
+            qc.refetchQueries({ queryKey: ["budget"], type: "all" });
+            qc.refetchQueries({ queryKey: ["dashboard"], type: "all" });
+            qc.refetchQueries({ queryKey: ["sms-transactions"], type: "all" });
+          } catch (err) {
+            console.warn("[SyncEngine] Post-SMS refresh failed:", err);
+          }
         }
       }
       if (item.table === "assets" && item.operation === "ACHIEVE") {

@@ -14,6 +14,9 @@ export type ReportRow = Database["public"]["Tables"]["reports"]["Row"];
 export type SnapshotRow =
   Database["public"]["Tables"]["net_worth_snapshots"]["Row"];
 export type ActivityLogRow = Database["public"]["Tables"]["activity_logs"]["Row"];
+export type MerchantRuleRow = Database["public"]["Tables"]["merchant_rules"]["Row"];
+export type SmsTransactionRow =
+  Database["public"]["Tables"]["sms_transactions"]["Row"];
 
 // ─── Sync infrastructure types ────────────────────────────────────────────────
 export type SyncTable =
@@ -26,7 +29,9 @@ export type SyncTable =
   | "asset_value_history"
   | "debts"
   | "reports"
-  | "net_worth_snapshots";
+  | "net_worth_snapshots"
+  | "merchant_rules"
+  | "sms_transactions";
 
 export type SyncOperation =
   | "INSERT"
@@ -34,7 +39,9 @@ export type SyncOperation =
   | "DELETE"
   | "PAYMENT"
   | "BULK_SETUP"
-  | "ACHIEVE";
+  | "ACHIEVE"
+  | "CATEGORIZE"
+  | "IGNORE";
 
 export type SyncStatus = "pending" | "processing" | "done" | "failed";
 
@@ -81,6 +88,8 @@ export class AllocatDB extends Dexie {
   net_worth_snapshots!: Table<SnapshotRow, string>;
 
   activity_logs!: Table<ActivityLogRow, string>;
+  merchant_rules!: Table<MerchantRuleRow, string>;
+  sms_transactions!: Table<SmsTransactionRow, string>;
 
   sync_queue!: Table<SyncQueueItem, number>;
   id_map!: Table<IdMapEntry, string>;
@@ -160,6 +169,13 @@ export class AllocatDB extends Dexie {
     this.version(7).upgrade(async (tx) => {
       const meta = tx.table("sync_meta");
       await meta.delete("profiles");
+    });
+
+    // v8: SMS transaction ingestion + merchant→budget learning rules.
+    this.version(8).stores({
+      merchant_rules: "id, user_id, match_type, [user_id+match_type], created_at",
+      sms_transactions:
+        "id, user_id, status, dedupe_key, [user_id+status], occurred_at, created_at",
     });
   }
 }

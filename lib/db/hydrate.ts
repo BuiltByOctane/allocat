@@ -52,6 +52,8 @@ export async function hydrateAllTables(): Promise<void> {
     { data: reports },
     { data: snapshots },
     { data: activityLogs },
+    { data: merchantRules },
+    { data: smsTransactions },
   ] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", userId),
     supabase.from("budgets").select("*").eq("user_id", userId),
@@ -75,6 +77,13 @@ export async function hydrateAllTables(): Promise<void> {
       .limit(24),
     supabase
       .from("activity_logs")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(200),
+    supabase.from("merchant_rules").select("*").eq("user_id", userId),
+    supabase
+      .from("sms_transactions")
       .select("*")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
@@ -107,6 +116,12 @@ export async function hydrateAllTables(): Promise<void> {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ? db.activity_logs.bulkPut(activityLogs as any)
       : Promise.resolve(),
+    merchantRules?.length
+      ? db.merchant_rules.bulkPut(merchantRules)
+      : Promise.resolve(),
+    smsTransactions?.length
+      ? db.sms_transactions.bulkPut(smsTransactions)
+      : Promise.resolve(),
   ]);
 
   // Stamp sync_meta for all tables
@@ -122,6 +137,8 @@ export async function hydrateAllTables(): Promise<void> {
     "reports",
     "net_worth_snapshots",
     "activity_logs",
+    "merchant_rules",
+    "sms_transactions",
   ] as const;
 
   await db.sync_meta.bulkPut(
@@ -211,6 +228,8 @@ export async function clearDB(): Promise<void> {
     db.reports.clear(),
     db.net_worth_snapshots.clear(),
     db.activity_logs.clear(),
+    db.merchant_rules.clear(),
+    db.sms_transactions.clear(),
     db.id_map.clear(),
     db.sync_meta.clear(),
     db.sync_queue.clear(),

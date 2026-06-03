@@ -39,6 +39,13 @@ import {
   deleteDebt,
   makePayment,
 } from "@/lib/actions/debt";
+import {
+  ingestSmsTransaction,
+  categorizeSmsTransaction,
+  ignoreSmsTransaction,
+  type IngestSmsInput,
+  type CategorizeSmsInput,
+} from "@/lib/actions/sms";
 
 const MAX_RETRIES = 3;
 
@@ -180,6 +187,12 @@ export class SyncEngine {
       DELETE: (p) => deleteDebt(p.id as string),
       PAYMENT: (p) => makePayment(p.id as string, p.amount as number),
     },
+    sms_transactions: {
+      INSERT: (p) => ingestSmsTransaction(p as unknown as IngestSmsInput),
+      CATEGORIZE: (p) =>
+        categorizeSmsTransaction(p as unknown as CategorizeSmsInput),
+      IGNORE: (p) => ignoreSmsTransaction(p.txnId as string),
+    },
   };
 
   /**
@@ -231,21 +244,47 @@ export class SyncEngine {
     try {
       const db = getDB();
 
+      // Recover items orphaned in "processing" by a previous session that was
+      // killed mid-flush. Without this they never retry and block dependents.
+      await db.sync_queue
+        .where("status")
+        .equals("processing")
+        .modify({ status: "pending" });
+
       while (true) {
         const items = await db.sync_queue
           .where("status")
           .equals("pending")
           .sortBy("createdAt");
 
-        const item = items[0];
-        if (!item || item.id === undefined) break;
-
-        // BULK_SETUP creates its own tempIds — they won't be in id_map yet,
-        // so dep check would always block. Skip it.
-        if (item.operation !== "BULK_SETUP") {
-          const blocked = await this.hasUnresolvedDependencies(item);
-          if (blocked) break;
+        // Pick the oldest item whose dependencies are resolved. Skipping (rather
+        // than halting on) a blocked item keeps one stuck op — e.g. a CATEGORIZE
+        // whose INSERT failed — from freezing the entire queue behind it.
+        // BULK_SETUP creates its own tempIds (not in id_map yet), so never block it.
+        let item: SyncQueueItem | undefined;
+        for (const candidate of items) {
+          if (candidate.id === undefined) continue;
+          if (
+            candidate.operation !== "BULK_SETUP" &&
+            (await this.hasUnresolvedDependencies(candidate))
+          ) {
+            // If the dependency can never resolve (its INSERT failed and is gone),
+            // this item is doomed — fail it so it stops clogging the queue count.
+            if (await this.isDependencyDoomed(candidate)) {
+              await db.sync_queue.update(candidate.id, {
+                status: "failed",
+                lastError: "dependency never synced",
+              });
+              await this.rollback(candidate);
+              this.callbacks.onRollback?.(candidate, "dependency never synced");
+              await this.notifyPendingChange();
+            }
+            continue;
+          }
+          item = candidate;
+          break;
         }
+        if (!item || item.id === undefined) break;
 
         await db.sync_queue.update(item.id, { status: "processing" });
         await this.notifyPendingChange();
@@ -331,6 +370,29 @@ export class SyncEngine {
     for (const tempId of tempIds) {
       const mapping = await db.id_map.get(tempId);
       if (!mapping) return true;
+    }
+    return false;
+  }
+
+  /**
+   * True when at least one unresolved temp id in the payload has no live
+   * producer left — i.e. the INSERT that would map it is neither already
+   * mapped nor still pending/processing (it failed and was removed). Such an
+   * item can never sync, so it should be failed rather than blocked forever.
+   */
+  private async isDependencyDoomed(item: SyncQueueItem): Promise<boolean> {
+    const tempIds = extractTempIds(item.payload);
+    if (tempIds.length === 0) return false;
+    const db = getDB();
+    for (const tempId of tempIds) {
+      if (await db.id_map.get(tempId)) continue; // already resolved
+      const producer = await db.sync_queue
+        .filter((q) => q.tempId === tempId)
+        .first();
+      const live =
+        producer &&
+        (producer.status === "pending" || producer.status === "processing");
+      if (!live) return true; // this dependency will never resolve
     }
     return false;
   }

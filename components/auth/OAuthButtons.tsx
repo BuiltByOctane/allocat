@@ -1,8 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { Capacitor } from "@capacitor/core";
 import { createClient } from "@/lib/supabase/client";
 import { useHaptic } from "@/lib/hooks/useHaptic";
+
+// Custom-scheme deep link the native shell intercepts (see NativeShell + AndroidManifest).
+const NATIVE_OAUTH_REDIRECT = "app.allocat.mobile://auth/callback";
 
 export function OAuthButtons() {
   const [isPending, setIsPending] = useState(false);
@@ -14,10 +18,19 @@ export function OAuthButtons() {
     setIsPending(true);
     setErrorMsg(null);
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
+    const isNative = Capacitor.isNativePlatform();
+
+    // Native: Google blocks OAuth inside Android WebViews, so we open the
+    // provider URL in a Custom Tab and bounce back via a custom-scheme deep
+    // link. signInWithOAuth still sets the PKCE code_verifier cookie in the
+    // WebView, so the /auth/callback route can exchange the code on return.
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: isNative
+          ? NATIVE_OAUTH_REDIRECT
+          : `${window.location.origin}/auth/callback`,
+        skipBrowserRedirect: isNative,
       },
     });
 
@@ -25,6 +38,12 @@ export function OAuthButtons() {
       haptic.error();
       setErrorMsg(error.message);
       setIsPending(false);
+      return;
+    }
+
+    if (isNative && data?.url) {
+      const { Browser } = await import("@capacitor/browser");
+      await Browser.open({ url: data.url });
     }
   };
 

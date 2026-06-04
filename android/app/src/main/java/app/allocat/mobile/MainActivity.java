@@ -1,8 +1,14 @@
 package app.allocat.mobile;
 
+import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
+
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.BridgeActivity;
 
@@ -13,6 +19,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(SmsReaderPlugin.class);
         super.onCreate(savedInstanceState);
         stashDeepLink(getIntent());
+        requestNotificationPermission();
     }
 
     @Override
@@ -20,6 +27,20 @@ public class MainActivity extends BridgeActivity {
         super.onNewIntent(intent);
         setIntent(intent);
         stashDeepLink(intent);
+    }
+
+    /**
+     * Ask for POST_NOTIFICATIONS at launch (Android 13+). Done natively so the
+     * prompt appears regardless of what the remote web layer does, alongside the
+     * SMS permission. No-op once granted.
+     */
+    private void requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+            && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(
+                this, new String[] { Manifest.permission.POST_NOTIFICATIONS }, 9001);
+        }
     }
 
     /** A tapped transaction notification carries a deep-link; the web layer

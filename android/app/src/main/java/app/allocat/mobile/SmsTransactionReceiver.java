@@ -65,42 +65,41 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
         } else if (parsed.amount != null) {
             // App closed → notify natively right now.
             SmsRules.Match mr = SmsRules.match(context, parsed.merchantNormalized);
-            String merch = parsed.merchant != null ? parsed.merchant : "Unknown";
+            String merch = parsed.merchant != null ? parsed.merchant : "someone";
             String amt = "₹" + Math.round(parsed.amount);
             String notifTitle;
             String notifBody;
             String url = "/sms";
 
             if (mr != null) {
-                // Known merchant → auto-categorized. Warn if this spend trips the
-                // budget — item-level first (actual vs planned), then category.
+                // Known merchant → auto-categorized. Warn (item-level first, then
+                // category) if this spend pushes the budget to the edge.
                 double newActual = mr.itemActual + parsed.amount;
                 double newSpent = mr.spent + parsed.amount;
-                if (mr.itemPlanned > 0 && newActual / mr.itemPlanned >= 0.9) {
-                    boolean over = newActual >= mr.itemPlanned;
-                    long remaining = Math.round(Math.max(0, mr.itemPlanned - newActual));
-                    notifTitle = over ? "Budget exceeded" : "Budget almost gone";
-                    notifBody = over
-                        ? mr.itemName + " is over budget"
-                        : mr.itemName + " at " + Math.round(newActual / mr.itemPlanned * 100)
-                            + "% — ₹" + remaining + " left";
+                boolean itemNear = mr.itemPlanned > 0 && newActual / mr.itemPlanned >= 0.9;
+                boolean catNear = mr.allocated > 0 && newSpent / mr.allocated >= 0.9;
+                if (itemNear || catNear) {
+                    String name = itemNear ? mr.itemName : mr.category;
+                    double used = itemNear ? newActual : newSpent;
+                    double total = itemNear ? mr.itemPlanned : mr.allocated;
                     url = "/budget";
-                } else if (mr.allocated > 0 && newSpent / mr.allocated >= 0.9) {
-                    boolean over = newSpent >= mr.allocated;
-                    long remaining = Math.round(Math.max(0, mr.allocated - newSpent));
-                    notifTitle = over ? "Budget exceeded" : "Budget almost gone";
-                    notifBody = over
-                        ? mr.category + " is over budget"
-                        : mr.category + " at " + Math.round(newSpent / mr.allocated * 100)
-                            + "% — ₹" + remaining + " left";
-                    url = "/budget";
+                    if (used >= total) {
+                        notifTitle = "🙀 Budget blown!";
+                        notifBody = name + " is over by ₹" + Math.round(used - total)
+                            + ". The cat's out of the bag.";
+                    } else {
+                        notifTitle = "😼 Budget's getting thin";
+                        notifBody = name + " at " + Math.round(used / total * 100)
+                            + "% — only ₹" + Math.round(total - used) + " left. Tread softly.";
+                    }
                 } else {
-                    notifTitle = "Transaction detected";
-                    notifBody = amt + " at " + merch + (mr.category.isEmpty() ? "" : " → " + mr.category);
+                    notifTitle = "🐾 Sorted it for you";
+                    notifBody = amt + " at " + merch
+                        + (mr.category.isEmpty() ? " is logged. Relax." : " → " + mr.category + ". Relax.");
                 }
             } else {
-                notifTitle = "New transaction — allocate it";
-                notifBody = amt + " at " + merch;
+                notifTitle = "🐾 A wild spend appeared!";
+                notifBody = amt + " at " + merch + " — tap to give it a home.";
             }
             SmsNotifier.notify(context, notifTitle, notifBody, url);
             Log.e("AllocatSMS", "queued + native notification (app closed)");

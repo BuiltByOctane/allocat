@@ -15,6 +15,12 @@ export interface SmsReaderPlugin {
   setRules(options: { rules: string }): Promise<void>;
   /** Returns + clears a deep-link stashed when a notification was tapped. */
   consumeDeepLink(): Promise<{ url: string | null }>;
+  /** Opens the OEM autostart manager (or the app settings page as fallback). */
+  openAutostartSettings(): Promise<void>;
+  /** Prompts to exempt the app from battery optimization. */
+  openBatterySettings(): Promise<void>;
+  /** Opens the app's system settings page. */
+  openAppSettings(): Promise<void>;
   addListener(
     eventName: "smsReceived",
     listenerFunc: (msg: CapturedSms) => void,

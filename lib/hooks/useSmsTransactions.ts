@@ -98,11 +98,15 @@ export function useCategorizeSms() {
       // Device-visible near-limit alert (native; no-op on web).
       const nl = await nearLimitFromIDB(input.budgetItemId);
       if (nl) {
+        const left = formatCurrency(nl.remaining, {
+          code: txn.currency ?? "INR",
+          maximumFractionDigits: 0,
+        });
         await notifyLocal({
-          title: nl.over ? "Budget exceeded" : "Budget almost gone",
+          title: nl.over ? "🙀 Budget blown!" : "😼 Budget's getting thin",
           body: nl.over
-            ? `${nl.name} is over budget`
-            : `${nl.name} at ${Math.round(nl.ratio * 100)}% — ${formatCurrency(nl.remaining, { code: txn.currency ?? "INR", maximumFractionDigits: 0 })} left`,
+            ? `${nl.name} is over budget. The cat's out of the bag.`
+            : `${nl.name} at ${Math.round(nl.ratio * 100)}% — only ${left} left. Tread softly.`,
           url: "/budget",
         });
       }

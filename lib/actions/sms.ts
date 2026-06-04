@@ -134,8 +134,8 @@ export async function ingestSmsTransaction(input: IngestSmsInput) {
   // 4b. Unknown debit → ask the user to allocate it.
   if (actionable) {
     await notifyUser(user.id, {
-      title: "New transaction — allocate it",
-      body: `${fmt(input.amount as number, cur)} at ${merchantLabel}`,
+      title: "🐾 A wild spend appeared!",
+      body: `${fmt(input.amount as number, cur)} at ${merchantLabel} — tap to give it a home.`,
       tag: `sms-txn-${txn.id}`,
       url: `/sms?txn=${txn.id}`,
     });
@@ -286,10 +286,10 @@ async function sendNearLimitPush(
   const over = used >= total;
   const remaining = Math.max(0, total - used);
   await notifyUser(userId, {
-    title: over ? "Budget exceeded" : "Budget almost gone",
+    title: over ? "🙀 Budget blown!" : "😼 Budget's getting thin",
     body: over
-      ? `${name} is over budget by ${fmt(used - total, currency)}`
-      : `${name} at ${Math.round((used / total) * 100)}% — ${fmt(remaining, currency)} left`,
+      ? `${name} is over by ${fmt(used - total, currency)}. The cat's out of the bag.`
+      : `${name} at ${Math.round((used / total) * 100)}% — only ${fmt(remaining, currency)} left. Tread softly.`,
     tag: `budget-warn-${name}`,
     url: "/budget",
   });

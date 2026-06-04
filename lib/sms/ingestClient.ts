@@ -153,17 +153,17 @@ export async function ingestSmsClient(
     const nl = await nearLimitFromIDB(rule.budget_item_id);
     if (nl) {
       await notifyLocal({
-        title: nl.over ? "Budget exceeded" : "Budget almost gone",
+        title: nl.over ? "🙀 Budget blown!" : "😼 Budget's getting thin",
         body: nl.over
-          ? `${nl.name} is over budget`
-          : `${nl.name} at ${Math.round(nl.ratio * 100)}% — ${money(nl.remaining)} left`,
+          ? `${nl.name} is over budget. The cat's out of the bag.`
+          : `${nl.name} at ${Math.round(nl.ratio * 100)}% — only ${money(nl.remaining)} left. Tread softly.`,
         url: "/budget",
       });
     }
   } else if (isDebit) {
     await notifyLocal({
-      title: "New transaction — allocate it",
-      body: `${money(amount)} at ${merchant ?? "Unknown"}`,
+      title: "🐾 A wild spend appeared!",
+      body: `${money(amount)} at ${merchant ?? "someone"} — tap to give it a home.`,
       url: `/sms?txn=${tempId}`,
     });
   }

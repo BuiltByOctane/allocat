@@ -4,6 +4,7 @@ import "./globals.css";
 import QueryProvider from "@/lib/providers/QueryProvider";
 import { ThemeProvider } from "@/lib/providers/ThemeProvider";
 import RegisterPWA from "@/components/ui/RegisterPWA";
+import { NativeShell } from "@/components/pwa/NativeShell";
 
 const interTight = Inter_Tight({
   subsets: ["latin"],
@@ -177,6 +178,7 @@ export default function RootLayout({
         >
           <QueryProvider>{children}</QueryProvider>
           <RegisterPWA />
+          <NativeShell />
         </ThemeProvider>
       </body>
     </html>

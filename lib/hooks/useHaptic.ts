@@ -1,55 +1,77 @@
 "use client";
 
 /**
- * useHaptic — Haptic feedback via the Web Vibration API.
+ * useHaptic — haptic feedback.
  *
- * Gracefully degrades on browsers / devices that do not support vibration.
- * All durations are intentionally short to feel native and non-intrusive.
+ * On native (Capacitor) uses @capacitor/haptics (the WebView lacks VIBRATE so
+ * navigator.vibrate is a no-op there). On the web falls back to the Vibration
+ * API. Durations are short to feel native and non-intrusive.
  */
+import { Capacitor } from "@capacitor/core";
+import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
 
-export type HapticStyle = "light" | "medium" | "heavy" | "success" | "error" | "selection";
+export type HapticStyle =
+  | "light"
+  | "medium"
+  | "heavy"
+  | "success"
+  | "error"
+  | "selection";
 
 const PATTERNS: Record<HapticStyle, number | number[]> = {
-  /** 10ms — subtle tap, used for navigation & selection */
   light: 10,
-  /** 20ms — standard interaction feedback */
   medium: 20,
-  /** 35ms — destructive actions, confirmations */
   heavy: 35,
-  /** [15, 60, 15] — double-tap pattern for success / save */
   success: [15, 60, 15],
-  /** [20, 40, 20, 40, 20] — error / warning pattern */
   error: [20, 40, 20, 40, 20],
-  /** 8ms — bare minimum, for list item selection */
   selection: 8,
 };
 
-function vibrate(pattern: number | number[]) {
-  if (typeof navigator === "undefined") return;
-  if (!("vibrate" in navigator)) return;
+function nativeHaptic(style: HapticStyle) {
+  switch (style) {
+    case "light":
+    case "selection":
+      void Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
+      break;
+    case "medium":
+      void Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {});
+      break;
+    case "heavy":
+      void Haptics.impact({ style: ImpactStyle.Heavy }).catch(() => {});
+      break;
+    case "success":
+      void Haptics.notification({ type: NotificationType.Success }).catch(() => {});
+      break;
+    case "error":
+      void Haptics.notification({ type: NotificationType.Error }).catch(() => {});
+      break;
+  }
+}
+
+function play(style: HapticStyle) {
+  if (Capacitor.isNativePlatform()) {
+    nativeHaptic(style);
+    return;
+  }
+  if (typeof navigator === "undefined" || !("vibrate" in navigator)) return;
   try {
-    navigator.vibrate(pattern);
+    navigator.vibrate(PATTERNS[style]);
   } catch {
-    // Silently ignore — some browsers throw on vibrate call
+    // some browsers throw on vibrate
   }
 }
 
 export function useHaptic() {
   return {
-    /**
-     * Trigger haptic feedback.
-     * @param style — the haptic pattern to play (default: "light")
-     */
+    /** Trigger haptic feedback (default: "light"). */
     trigger(style: HapticStyle = "light") {
-      vibrate(PATTERNS[style]);
+      play(style);
     },
-
-    /** Convenience aliases */
-    light: () => vibrate(PATTERNS.light),
-    medium: () => vibrate(PATTERNS.medium),
-    heavy: () => vibrate(PATTERNS.heavy),
-    success: () => vibrate(PATTERNS.success),
-    error: () => vibrate(PATTERNS.error),
-    selection: () => vibrate(PATTERNS.selection),
+    light: () => play("light"),
+    medium: () => play("medium"),
+    heavy: () => play("heavy"),
+    success: () => play("success"),
+    error: () => play("error"),
+    selection: () => play("selection"),
   };
 }

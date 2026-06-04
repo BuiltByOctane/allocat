@@ -15,7 +15,7 @@ const config: CapacitorConfig = {
   // Required by the CLI even in remote mode (no assets are bundled).
   webDir: "public",
   server: {
-    url: process.env.CAP_SERVER_URL || "https://allocat.xyz",
+    url: process.env.CAP_SERVER_URL || "https://allocat.xyz/auth/login",
     androidScheme: "https",
     // Allow cleartext only when overriding with an http LAN dev URL.
     cleartext: (process.env.CAP_SERVER_URL ?? "").startsWith("http://"),

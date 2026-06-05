@@ -16,6 +16,7 @@ import type { MerchantRule } from "@/lib/sms/match";
 import { randomUUID } from "@/lib/utils/uuid";
 import { notifyLocal } from "@/lib/native/notify";
 import { nearLimitFromIDB, paceFromIDB, ordinal } from "@/lib/sms/nearLimit";
+import { confirmAutoAllocate } from "@/lib/sms/notifPrefs";
 import { formatCurrency } from "@/lib/number-format";
 
 type EnqueueFn = (
@@ -153,6 +154,15 @@ export async function ingestSmsClient(
         await notifyLocal({
           title: "🐾 Spending fast",
           body: `${pace.name} is on track to run out around the ${ordinal(pace.byDay)} — ease up to stay in budget.`,
+          url: "/budget",
+        });
+      } else if (confirmAutoAllocate()) {
+        // Subtle confirmation that a known merchant was auto-logged.
+        const bi = await db.budget_items.get(rule.budget_item_id);
+        const cat = bi ? await db.categories.get(bi.category_id) : null;
+        await notifyLocal({
+          title: `🐾 Sorted: ${money(amount)}${cat ? ` → ${cat.name}` : ""}`,
+          body: cat ? `Auto-logged to ${cat.name}.` : "Auto-logged to your budget.",
           url: "/budget",
         });
       }

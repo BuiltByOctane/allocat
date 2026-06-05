@@ -70,17 +70,25 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
             SmsRules.Match mr = SmsRules.match(context, parsed.merchantNormalized);
             String merch = parsed.merchant != null ? parsed.merchant : "someone";
             String amt = "₹" + Math.round(parsed.amount);
-            String notifTitle;
-            String notifBody;
+            String notifTitle = "";
+            String notifBody = "";
             String url = "/sms";
             int progressPct = -1;
             String[][] actions = null;
+            boolean suppressNotif = false;
 
             if (mr != null) {
+                // Accumulate across closed spends so consecutive closed transactions
+                // correctly trip the limit (the snapshot is only fresh as of last open).
+                double accumItem = SmsAccum.get(context, mr.itemName);
+                double accumCat = SmsAccum.get(context, mr.category);
+                double newActual = mr.itemActual + accumItem + parsed.amount;
+                double newSpent = mr.spent + accumCat + parsed.amount;
+                SmsAccum.add(context, mr.itemName, parsed.amount);
+                SmsAccum.add(context, mr.category, parsed.amount);
+
                 // Known merchant → auto-categorized. Warn (item-level first, then
                 // category) if this spend pushes the budget to the edge.
-                double newActual = mr.itemActual + parsed.amount;
-                double newSpent = mr.spent + parsed.amount;
                 boolean itemNear = mr.itemPlanned > 0 && newActual / mr.itemPlanned >= 0.9;
                 boolean catNear = mr.allocated > 0 && newSpent / mr.allocated >= 0.9;
                 if (itemNear || catNear) {
@@ -112,10 +120,16 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
                         notifBody = mr.itemName + " is on track to run out around the "
                             + ordinal(byDay) + " — ease up to stay in budget.";
                         url = "/budget";
+                    } else if (SmsConfig.confirmEnabled(context)) {
+                        // Subtle auto-allocate confirmation (user can disable in Settings).
+                        notifTitle = "🐾 Sorted: " + amt
+                            + (mr.category.isEmpty() ? "" : " → " + mr.category);
+                        notifBody = mr.category.isEmpty()
+                            ? "Auto-logged to your budget."
+                            : "Auto-logged to " + mr.category + ".";
+                        url = "/budget";
                     } else {
-                        notifTitle = "🐾 Sorted it for you";
-                        notifBody = amt + " at " + merch
-                            + (mr.category.isEmpty() ? " is logged. Relax." : " → " + mr.category + ". Relax.");
+                        suppressNotif = true;
                     }
                 }
             } else {
@@ -134,8 +148,12 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
                 acts.add(new String[] { "Allocate…", "/sms?dedupe=" + dedupe });
                 actions = acts.toArray(new String[0][]);
             }
-            SmsNotifier.notify(context, notifTitle, notifBody, url, progressPct, actions);
-            Log.e("AllocatSMS", "queued + native notification (app closed)");
+            if (!suppressNotif) {
+                SmsNotifier.notify(context, notifTitle, notifBody, url, progressPct, actions);
+                Log.e("AllocatSMS", "queued + native notification (app closed)");
+            } else {
+                Log.e("AllocatSMS", "queued + auto-allocated (confirmation off)");
+            }
         } else {
             Log.e("AllocatSMS", "queued (no amount; await app open)");
         }

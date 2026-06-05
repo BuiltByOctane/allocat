@@ -689,7 +689,11 @@ export async function getCategoryItems(categoryId: string) {
   }));
 }
 
-export async function quickLogSpend(itemId: string, amount: number) {
+export async function quickLogSpend(
+  itemId: string,
+  amount: number,
+  source?: { kind: "sms"; merchant?: string | null },
+) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
@@ -759,12 +763,21 @@ export async function quickLogSpend(itemId: string, amount: number) {
   }
 
   const cur = await getUserCurrency(supabase, user.id);
+  // SMS-sourced spends mark the existing log entry as auto-tracked from SMS so
+  // they're distinguishable from manual spends (no separate/duplicate entry).
+  const fromSms = source?.kind === "sms";
+  const smsMerchant = fromSms ? (source?.merchant ?? null) : null;
+  const smsTitleSuffix = fromSms ? " from SMS" : "";
+  const smsDescSuffix = fromSms
+    ? ` — auto-tracked from SMS${smsMerchant ? ` (${smsMerchant})` : ""}`
+    : "";
+  const smsMeta = fromSms ? { source: "sms", merchant: smsMerchant } : {};
   if (cascadeSummary) {
     await logActivity(supabase, user.id, {
       action_type: "budget_linked_spend",
       category: "budget",
-      title: `Logged ${fmt(amount, cur)} on "${updatedItem.name}" → ${cascadeSummary.targetName}`,
-      description: `${fmt(amount, cur)} from "${updatedItem.name}" applied to ${cascadeSummary.kind} "${cascadeSummary.targetName}"`,
+      title: `Logged ${fmt(amount, cur)} on "${updatedItem.name}" → ${cascadeSummary.targetName}${smsTitleSuffix}`,
+      description: `${fmt(amount, cur)} from "${updatedItem.name}" applied to ${cascadeSummary.kind} "${cascadeSummary.targetName}"${smsDescSuffix}`,
       metadata: {
         itemId,
         itemName: updatedItem.name,
@@ -774,20 +787,22 @@ export async function quickLogSpend(itemId: string, amount: number) {
         link_type: cascadeSummary.kind,
         link_id: linkId,
         targetName: cascadeSummary.targetName,
+        ...smsMeta,
       },
     });
   } else {
     await logActivity(supabase, user.id, {
       action_type: "spend_logged",
       category: "budget",
-      title: `Logged ${fmt(amount, cur)} spend on "${updatedItem.name}"`,
-      description: `${fmt(amount, cur)} spent on "${updatedItem.name}"`,
+      title: `Logged ${fmt(amount, cur)} spend on "${updatedItem.name}"${smsTitleSuffix}`,
+      description: `${fmt(amount, cur)} spent on "${updatedItem.name}"${smsDescSuffix}`,
       metadata: {
         itemId,
         itemName: updatedItem.name,
         amount,
         currency: cur,
         newTotal: updatedItem.actual_amount,
+        ...smsMeta,
       },
     });
   }

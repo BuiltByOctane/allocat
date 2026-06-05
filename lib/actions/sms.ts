@@ -106,7 +106,10 @@ export async function ingestSmsTransaction(input: IngestSmsInput) {
   // 4a. Auto-apply a known merchant rule.
   if (actionable && rule && rule.auto_apply) {
     try {
-      await quickLogSpend(rule.budget_item_id, input.amount as number);
+      await quickLogSpend(rule.budget_item_id, input.amount as number, {
+        kind: "sms",
+        merchant: merchantLabel,
+      });
       await supabase
         .from("sms_transactions")
         .update({
@@ -188,7 +191,10 @@ export async function categorizeSmsTransaction(input: CategorizeSmsInput) {
     .maybeSingle();
   if (!item) throw new Error("Budget item not found");
 
-  await quickLogSpend(input.budgetItemId, txn.amount);
+  await quickLogSpend(input.budgetItemId, txn.amount, {
+    kind: "sms",
+    merchant: txn.merchant_raw || txn.merchant_normalized || null,
+  });
 
   let ruleId: string | null = null;
   if (input.rememberRule && txn.merchant_normalized) {

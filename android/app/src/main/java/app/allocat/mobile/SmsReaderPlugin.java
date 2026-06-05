@@ -123,6 +123,16 @@ public class SmsReaderPlugin extends Plugin {
     @PluginMethod
     public void setRules(PluginCall call) {
         SmsRules.set(getContext(), call.getString("rules", "[]"));
+        // Fresh snapshot reflects all synced spends → reset the closed-session accumulator.
+        SmsAccum.clear(getContext());
+        call.resolve();
+    }
+
+    /** JS pushes notification preferences (e.g. the auto-allocate confirmation toggle). */
+    @PluginMethod
+    public void setConfig(PluginCall call) {
+        SmsConfig.setConfirmAutoAllocate(getContext(),
+            call.getBoolean("confirmAutoAllocate", true));
         call.resolve();
     }
 

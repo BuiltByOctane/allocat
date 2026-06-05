@@ -6,6 +6,7 @@ import type { PluginListenerHandle } from "@capacitor/core";
 import { SmsReader, type CapturedSms } from "@/lib/native/SmsReader";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { ingestSmsClient } from "@/lib/sms/ingestClient";
+import { scheduleWeeklyRecap } from "@/lib/sms/recap";
 import { getDB } from "@/lib/db";
 
 /**
@@ -86,6 +87,13 @@ export function SmsBridge() {
           };
         });
         await SmsReader.setRules({ rules: JSON.stringify(payload) });
+
+        // Top budget items (most-used) for the notification quick-allocate buttons.
+        const targets = [...items]
+          .sort((a, b) => Number(b.actual_amount) - Number(a.actual_amount))
+          .slice(0, 3)
+          .map((it) => ({ id: it.id, name: it.name }));
+        await SmsReader.setQuickTargets({ targets: JSON.stringify(targets) });
       } catch {
         /* ignore */
       }
@@ -134,6 +142,7 @@ export function SmsBridge() {
       }
       await drain();
       await consumeDeepLink();
+      void scheduleWeeklyRecap();
     })();
 
     const onVisible = () => {
@@ -141,6 +150,7 @@ export function SmsBridge() {
         void drain();
         void pushRules();
         void consumeDeepLink();
+        void scheduleWeeklyRecap();
       }
     };
     document.addEventListener("visibilitychange", onVisible);

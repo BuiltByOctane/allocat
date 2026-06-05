@@ -76,17 +76,43 @@ export default function SmsPage() {
 
   const items = pickerItems ?? [];
 
-  // Deep link from the notification: /sms?txn=<id> → auto-open allocate for it.
+  // Deep link from a notification:
+  //   /sms?txn=<id>                         → open allocate panel
+  //   /sms?dedupe=<key>                      → open allocate panel (find by dedupe)
+  //   /sms?dedupe=<key>&item=<id>&apply=1    → one-tap allocate (action button)
   const handledDeepLink = useRef(false);
   useEffect(() => {
     if (handledDeepLink.current) return;
-    if (!pending || items.length === 0) return;
-    const txnId = new URLSearchParams(window.location.search).get("txn");
-    if (!txnId) return;
-    if (pending.some((t) => t.id === txnId)) {
+    if (!pending) return;
+    const params = new URLSearchParams(window.location.search);
+    const txnId = params.get("txn");
+    const dedupe = params.get("dedupe");
+    const item = params.get("item");
+    const apply = params.get("apply") === "1";
+
+    const target = txnId
+      ? pending.find((t) => t.id === txnId)
+      : dedupe
+        ? pending.find((t) => t.dedupe_key === dedupe)
+        : undefined;
+    if (!target) return;
+
+    if (apply && item) {
+      // One-tap allocate straight from the notification action button.
       handledDeepLink.current = true;
-      startCategorize(txnId);
+      void categorize.mutateAsync({
+        txnId: target.id,
+        budgetItemId: item,
+        rememberRule: true,
+      });
+      return;
     }
+
+    // Otherwise open the allocate panel (needs the picker items loaded).
+    if (items.length === 0) return;
+    handledDeepLink.current = true;
+    startCategorize(target.id);
+    if (item && items.some((i) => i.id === item)) setChosenItem(item);
   }, [pending, items]);
 
   function startCategorize(txnId: string) {

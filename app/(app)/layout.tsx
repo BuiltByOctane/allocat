@@ -31,7 +31,6 @@ export default async function AppLayout({
           </div>
         </main>
         <InstallPrompt />
-        <PushPermissionPrompt />
         <SmsBridge />
         <NativeSetup />
         <BadgeUpdater />

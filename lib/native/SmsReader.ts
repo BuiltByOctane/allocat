@@ -13,6 +13,8 @@ export interface SmsReaderPlugin {
   getQueued(): Promise<{ messages: CapturedSms[] }>;
   /** Push current merchant rules so the native receiver can match when closed. */
   setRules(options: { rules: string }): Promise<void>;
+  /** Push top budget items (JSON [{id,name}]) for the quick-allocate buttons. */
+  setQuickTargets(options: { targets: string }): Promise<void>;
   /** Returns + clears a deep-link stashed when a notification was tapped. */
   consumeDeepLink(): Promise<{ url: string | null }>;
   /** Opens the OEM autostart manager (or the app settings page as fallback). */

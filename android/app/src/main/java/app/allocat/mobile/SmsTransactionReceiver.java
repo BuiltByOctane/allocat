@@ -7,6 +7,9 @@ import android.os.Bundle;
 import android.telephony.SmsMessage;
 import android.util.Log;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Fires on every incoming SMS — including when the app is closed. It assembles
  * the message, drops anything that doesn't look like a financial transaction
@@ -70,6 +73,8 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
             String notifTitle;
             String notifBody;
             String url = "/sms";
+            int progressPct = -1;
+            String[][] actions = null;
 
             if (mr != null) {
                 // Known merchant → auto-categorized. Warn (item-level first, then
@@ -83,6 +88,7 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
                     double used = itemNear ? newActual : newSpent;
                     double total = itemNear ? mr.itemPlanned : mr.allocated;
                     url = "/budget";
+                    progressPct = Math.min(100, (int) Math.round(used / total * 100));
                     if (used >= total) {
                         notifTitle = "🙀 Budget blown!";
                         notifBody = name + " is over by ₹" + Math.round(used - total)
@@ -93,18 +99,55 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
                             + "% — only ₹" + Math.round(total - used) + " left. Tread softly.";
                     }
                 } else {
-                    notifTitle = "🐾 Sorted it for you";
-                    notifBody = amt + " at " + merch
-                        + (mr.category.isEmpty() ? " is logged. Relax." : " → " + mr.category + ". Relax.");
+                    // Predictive pace nudge: on track to overspend before the
+                    // 90% threshold even trips?
+                    java.util.Calendar cal = java.util.Calendar.getInstance();
+                    int day = cal.get(java.util.Calendar.DAY_OF_MONTH);
+                    int dim = cal.getActualMaximum(java.util.Calendar.DAY_OF_MONTH);
+                    int byDay = (mr.itemPlanned > 0 && newActual > 0)
+                        ? (int) Math.ceil(mr.itemPlanned * day / newActual)
+                        : Integer.MAX_VALUE;
+                    if (mr.itemPlanned > 0 && day >= 3 && byDay <= dim) {
+                        notifTitle = "🐾 Spending fast";
+                        notifBody = mr.itemName + " is on track to run out around the "
+                            + ordinal(byDay) + " — ease up to stay in budget.";
+                        url = "/budget";
+                    } else {
+                        notifTitle = "🐾 Sorted it for you";
+                        notifBody = amt + " at " + merch
+                            + (mr.category.isEmpty() ? " is logged. Relax." : " → " + mr.category + ". Relax.");
+                    }
                 }
             } else {
                 notifTitle = "🐾 A wild spend appeared!";
                 notifBody = amt + " at " + merch + " — tap to give it a home.";
+                // Quick-allocate buttons → deep-link by dedupe key (the web layer
+                // creates the matching txn when it drains the queue on open).
+                String dedupe = SmsHash.dedupeKey(from, text);
+                url = "/sms?dedupe=" + dedupe;
+                List<String[]> acts = new ArrayList<>();
+                for (SmsTargets.Target t : SmsTargets.get(context, 2)) {
+                    acts.add(new String[] {
+                        t.name, "/sms?dedupe=" + dedupe + "&item=" + t.id + "&apply=1"
+                    });
+                }
+                acts.add(new String[] { "Allocate…", "/sms?dedupe=" + dedupe });
+                actions = acts.toArray(new String[0][]);
             }
-            SmsNotifier.notify(context, notifTitle, notifBody, url);
+            SmsNotifier.notify(context, notifTitle, notifBody, url, progressPct, actions);
             Log.e("AllocatSMS", "queued + native notification (app closed)");
         } else {
-            Log.e("AllocatSMS", "queued (no amount; await app open for LLM parse)");
+            Log.e("AllocatSMS", "queued (no amount; await app open)");
+        }
+    }
+
+    private static String ordinal(int n) {
+        if (n >= 11 && n <= 13) return n + "th";
+        switch (n % 10) {
+            case 1: return n + "st";
+            case 2: return n + "nd";
+            case 3: return n + "rd";
+            default: return n + "th";
         }
     }
 }

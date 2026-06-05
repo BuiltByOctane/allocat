@@ -126,6 +126,13 @@ public class SmsReaderPlugin extends Plugin {
         call.resolve();
     }
 
+    /** JS pushes the top budget items for the quick-allocate action buttons. */
+    @PluginMethod
+    public void setQuickTargets(PluginCall call) {
+        SmsTargets.set(getContext(), call.getString("targets", "[]"));
+        call.resolve();
+    }
+
     /** Returns + clears a pending deep-link stashed when a notification was tapped. */
     @PluginMethod
     public void consumeDeepLink(PluginCall call) {

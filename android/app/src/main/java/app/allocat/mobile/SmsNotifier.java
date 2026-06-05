@@ -13,6 +13,9 @@ import android.net.Uri;
 import android.os.Build;
 
 import androidx.core.app.NotificationCompat;
+import androidx.core.app.Person;
+import androidx.core.content.ContextCompat;
+import androidx.core.graphics.drawable.IconCompat;
 
 /**
  * Posts a heads-up transaction notification directly (no WebView needed) so
@@ -27,7 +30,12 @@ final class SmsNotifier {
 
     private SmsNotifier() {}
 
-    static void notify(Context c, String title, String body, String url) {
+    /**
+     * progressPct 0..100 shows a budget progress bar; -1 renders the cat chat style.
+     * actions: optional {label, deeplink} pairs rendered as tappable buttons.
+     */
+    static void notify(Context c, String title, String body, String url, int progressPct,
+                       String[][] actions) {
         NotificationManager nm =
             (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
@@ -67,17 +75,48 @@ final class SmsNotifier {
 
         NotificationCompat.Builder b = new NotificationCompat.Builder(c, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
+            .setColor(ContextCompat.getColor(c, R.color.notif_accent))
             .setContentTitle(title)
             .setContentText(body)
-            .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setVibrate(new long[] { 0, 120, 80, 120 })
             .setAutoCancel(true)
             .setContentIntent(pi);
-        if (large != null) b.setLargeIcon(large);
         if (sound != null) b.setSound(sound);
+
+        if (progressPct >= 0 && progressPct <= 100) {
+            // Budget warnings: standard layout + a visual progress bar.
+            b.setStyle(new NotificationCompat.BigTextStyle().bigText(body));
+            b.setProgress(100, progressPct, false);
+            if (large != null) b.setLargeIcon(large);
+        } else {
+            // Transaction alerts: render as a chat from the AlloCat mascot.
+            IconCompat avatar = large != null
+                ? IconCompat.createWithBitmap(large)
+                : IconCompat.createWithResource(c, R.mipmap.ic_launcher);
+            Person cat = new Person.Builder().setName("AlloCat").setIcon(avatar).build();
+            b.setStyle(new NotificationCompat.MessagingStyle(cat)
+                .setConversationTitle(title)
+                .addMessage(body, System.currentTimeMillis(), cat));
+        }
+
+        // Quick-allocate action buttons (each opens the app to its deep-link).
+        if (actions != null) {
+            int n = 0;
+            for (String[] a : actions) {
+                if (a == null || a.length < 2 || n >= 3) continue;
+                Intent ai = new Intent(c, MainActivity.class);
+                ai.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                ai.putExtra("deeplink", a[1]);
+                // Distinct action string so the PendingIntents don't collapse/merge extras.
+                ai.setAction("app.allocat.mobile.ACTION_" + id + "_" + n);
+                PendingIntent ap = PendingIntent.getActivity(c, id * 10 + n + 1, ai, piFlags);
+                b.addAction(0, a[0], ap);
+                n++;
+            }
+        }
 
         nm.notify(id, b.build());
     }

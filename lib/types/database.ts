@@ -449,7 +449,7 @@ export type Database = {
         Row: {
           id: string
           user_id: string
-          raw_text: string
+          raw_text: string | null
           sender: string | null
           amount: number | null
           currency: string | null
@@ -466,7 +466,7 @@ export type Database = {
         Insert: {
           id?: string
           user_id: string
-          raw_text: string
+          raw_text?: string | null
           sender?: string | null
           amount?: number | null
           currency?: string | null

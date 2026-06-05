@@ -1,7 +1,8 @@
 /**
  * Regex parser for bank / UPI transaction SMS → structured fields.
- * Tier 1 of the hybrid pipeline (on-device, no network). Unknown formats
- * fall back to the LLM parser server-side; see lib/actions/sms.ts.
+ * Runs entirely on-device (no network, no third party). SMS that don't parse to
+ * a usable amount simply become "pending" for manual allocation on /sms — there
+ * is no server/LLM fallback (removed for Play SMS-data-use compliance).
  */
 
 export type TxnDirection = "debit" | "credit";
@@ -14,7 +15,7 @@ export interface ParsedTxn {
   direction: TxnDirection | null;
   /** ISO date (yyyy-mm-dd) if a date was present in the SMS, else null. */
   occurredAt: string | null;
-  /** 0..1 — how confident the regex layer is. Low → caller should LLM-fallback. */
+  /** 0..1 — how confident the regex parse is (lower → more likely manual). */
   confidence: number;
   raw: string;
 }
@@ -23,8 +24,14 @@ const CURRENCY_MAP: Array<[RegExp, string]> = [[/₹|\bRs\.?\b|\bINR\b/i, "INR"]
 
 // "debited/spent/sent" → the user's account lost money. Checked before credit
 // because many debit SMS also say "<payee> credited".
-const DEBIT_RE = /\b(debited|debit|spent|sent|paid|withdrawn|purchase)\b/i;
-const CREDIT_RE = /\b(credited|credit|received|deposited)\b/i;
+const DEBIT_RE =
+  /\b(debited|debit|spent|sent|paid|withdrawn|w\/d|purchase|txn|transferred|auto[-\s]?debit|e-?mandate)\b/i;
+const CREDIT_RE = /\b(credited|credit|received|deposited|refund(?:ed)?)\b/i;
+
+// Balance clauses report the post-transaction balance, NOT the spend. Strip them
+// before amount extraction so "...spent Rs.200, Avl Bal Rs.5,000" reads 200.
+const BALANCE_RE =
+  /(?:avl\.?\s*bal(?:ance)?|available\s+bal(?:ance)?|a\/c\s+bal(?:ance)?|bal(?:ance)?)\s*:?\s*(?:₹|Rs\.?|INR)?\s*[\d,]+(?:\.\d{1,2})?/gi;
 
 function extractCurrency(text: string): string | null {
   for (const [re, code] of CURRENCY_MAP) if (re.test(text)) return code;
@@ -43,19 +50,24 @@ function toNumber(s: string): number | null {
   return isNaN(n) || n <= 0 ? null : n;
 }
 
-/** Pull the transaction amount — currency-adjacent first, then keyword-adjacent. */
+/** Pull the transaction amount — keyword-adjacent first, then currency-adjacent. */
 function extractAmount(text: string): number | null {
-  // 1. A number right after a currency token: "Rs.1,500.00", "₹250", "INR 99".
-  const cur = text.match(/(?:₹|\bRs\.?|\bINR)\s*([\d,]+(?:\.\d{1,2})?)/i);
-  if (cur) {
-    const n = toNumber(cur[1]);
+  // Drop balance clauses so an available-balance figure can't be mistaken for
+  // the spend (the single biggest source of wrong amounts).
+  const t = text.replace(BALANCE_RE, " ");
+
+  // 1. A number right after a transaction keyword: "debited by 199.0",
+  // "spent Rs 200", "txn of INR 99", "purchase of 1,250". Most reliable.
+  const kw = t.match(
+    /(?:debited|credited|debit|credit|spent|sent|paid|withdrawn|purchase|txn|transferred)\s+(?:of|by|for|with)?\s*(?:₹|Rs\.?|INR)?\s*([\d,]+(?:\.\d{1,2})?)/i,
+  );
+  if (kw) {
+    const n = toNumber(kw[1]);
     if (n !== null) return n;
   }
-  // 2. A number right after debit/credit: "debited by 199.0", "credited 2000".
-  const kw = text.match(
-    /(?:debited|credited|debit|credit|spent|sent|paid)\s+(?:by|for|with)?\s*(?:₹|Rs\.?|INR)?\s*([\d,]+(?:\.\d{1,2})?)/i,
-  );
-  if (kw) return toNumber(kw[1]);
+  // 2. A number right after a currency token: "Rs.1,500.00", "₹250", "INR 99".
+  const cur = t.match(/(?:₹|\bRs\.?|\bINR)\s*([\d,]+(?:\.\d{1,2})?)/i);
+  if (cur) return toNumber(cur[1]);
   return null;
 }
 
@@ -85,17 +97,23 @@ function extractDate(text: string): string | null {
   return null;
 }
 
+// Stop the greedy merchant capture at the next clause boundary keyword.
+const STOP = "(?=\\s+(?:on|ref|refno|ref no|upi|avl|a\\/c|info|not|via|dt|your|bal|txn|using|cr|dr|\\.|,)|$)";
 const MERCHANT_PATTERNS: RegExp[] = [
   // VPA / UPI handle: "to VPA amazon@ybl", "by VPA john@oksbi" → take name before @
   /(?:to|from|by)\s+VPA\s+([\w.\-]+)@[\w.\-]+/i,
   // bare UPI handle: "to amazon@ybl"
   /(?:to|from)\s+([\w.\-]+)@[\w.\-]+/i,
-  // "trf to ZOMATO", "transfer to X", "sent to X", "paid to X"
-  /(?:trf to|transfer to|sent to|paid to|to)\s+([A-Za-z0-9][A-Za-z0-9 &._\-]*?)(?=\s+(?:on|ref|refno|ref no|upi|avl|a\/c|info|not|\.|,)|$)/i,
+  // "trf to ZOMATO", "transfer to X", "sent to X", "paid to X", "towards X"
+  new RegExp(`(?:trf to|transfer to|sent to|paid to|towards|to)\\s+([A-Za-z0-9][A-Za-z0-9 &._\\-]*?)${STOP}`, "i"),
+  // card spend: "spent at AMAZON", "purchase at BIGBASKET"
+  new RegExp(`\\bat\\s+([A-Za-z0-9][A-Za-z0-9 &._\\-]*?)${STOP}`, "i"),
   // ICICI style: "& SWIGGY credited", "and X credited"
   /(?:&|and)\s+([A-Za-z0-9][A-Za-z0-9 &._\-]*?)\s+credited/i,
+  // narration field: "Info: SWIGGY", "Info-NETFLIX"
+  new RegExp(`\\binfo[:\\-]?\\s*([A-Za-z0-9][A-Za-z0-9 &._\\-]*?)${STOP}`, "i"),
   // credit: "from JOHN DOE"
-  /\bfrom\s+([A-Za-z0-9][A-Za-z0-9 &._\-]*?)(?=\s+(?:on|ref|refno|upi|avl|\.|,)|$)/i,
+  new RegExp(`\\bfrom\\s+([A-Za-z0-9][A-Za-z0-9 &._\\-]*?)${STOP}`, "i"),
 ];
 
 function extractMerchant(text: string): string | null {

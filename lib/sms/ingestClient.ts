@@ -1,24 +1,26 @@
 /**
  * Client-side SMS ingestion pipeline. Shared by the dev paste-SMS harness and
- * the native SMS bridge. Parses on-device (regex, LLM fallback), writes an
- * optimistic IDB record, and enqueues the authoritative server ingest.
+ * the native SMS bridge. Parses entirely on-device (regex), writes an optimistic
+ * IDB record, and enqueues the authoritative server ingest.
+ *
+ * Privacy / Play policy: the raw SMS body and sender never leave the device — the
+ * local IDB row keeps them for display/debug, but only the extracted fields
+ * (amount, merchant, etc.) and a hashed dedupe key are synced to the server. No
+ * SMS content is sent to any third party.
  */
 import { getDB } from "@/lib/db";
 import type { SyncQueueItem } from "@/lib/db";
 import { parseTransactionSms } from "@/lib/ai/parseSmsTransaction";
 import { normalizeMerchant, matchMerchantRule, txnDedupeKey } from "@/lib/sms/match";
 import type { MerchantRule } from "@/lib/sms/match";
-import { parseSmsWithLLM } from "@/lib/actions/sms";
 import { randomUUID } from "@/lib/utils/uuid";
 import { notifyLocal } from "@/lib/native/notify";
-import { nearLimitFromIDB } from "@/lib/sms/nearLimit";
+import { nearLimitFromIDB, paceFromIDB, ordinal } from "@/lib/sms/nearLimit";
 import { formatCurrency } from "@/lib/number-format";
 
 type EnqueueFn = (
   item: Omit<SyncQueueItem, "id" | "retries" | "status" | "createdAt">,
 ) => Promise<void>;
-
-const LLM_FALLBACK_BELOW = 0.6;
 
 export interface IngestClientResult {
   skipped?: boolean;
@@ -45,28 +47,14 @@ export async function ingestSmsClient(
     .first();
   if (dup) return { skipped: true, reason: "duplicate", txnId: dup.id };
 
-  // Tier 1: regex. Tier 2: LLM fallback when confidence is low.
+  // On-device regex parse (no network, no third party). Low-confidence SMS that
+  // yield no amount simply fall through to the user's manual /sms allocation.
   const parsed = parseTransactionSms(raw, sender ?? undefined);
-  let amount = parsed.amount;
-  let currency = parsed.currency;
-  let merchant = parsed.merchant;
-  let direction = parsed.direction;
-  let occurredAt = parsed.occurredAt;
-
-  if (parsed.confidence < LLM_FALLBACK_BELOW || amount === null) {
-    try {
-      const llm = await parseSmsWithLLM(raw);
-      if (llm) {
-        amount = amount ?? llm.amount;
-        currency = currency ?? llm.currency;
-        merchant = merchant ?? llm.merchant;
-        direction = direction ?? llm.direction;
-        occurredAt = occurredAt ?? llm.occurredAt;
-      }
-    } catch {
-      // Offline / no key — keep the regex result.
-    }
-  }
+  const amount = parsed.amount;
+  const currency = parsed.currency;
+  const merchant = parsed.merchant;
+  const direction = parsed.direction;
+  const occurredAt = parsed.occurredAt;
 
   // Nothing spendable parsed → not worth recording.
   if (amount === null || amount <= 0) {
@@ -123,14 +111,14 @@ export async function ingestSmsClient(
     }
   }
 
+  // Sync only the extracted fields + hashed dedupe key. The raw SMS body and
+  // sender stay on-device (in the IDB row above) and are deliberately omitted.
   await deps.enqueue({
     table: "sms_transactions",
     operation: "INSERT",
     recordId: tempId,
     tempId,
     payload: {
-      raw,
-      sender,
       amount,
       currency,
       merchantRaw: merchant,
@@ -159,6 +147,15 @@ export async function ingestSmsClient(
           : `${nl.name} at ${Math.round(nl.ratio * 100)}% — only ${money(nl.remaining)} left. Tread softly.`,
         url: "/budget",
       });
+    } else {
+      const pace = await paceFromIDB(rule.budget_item_id);
+      if (pace) {
+        await notifyLocal({
+          title: "🐾 Spending fast",
+          body: `${pace.name} is on track to run out around the ${ordinal(pace.byDay)} — ease up to stay in budget.`,
+          url: "/budget",
+        });
+      }
     }
   } else if (isDebit) {
     await notifyLocal({

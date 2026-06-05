@@ -101,3 +101,47 @@ describe("parseTransactionSms — date", () => {
     expect(r.occurredAt).toBe("2026-06-02");
   });
 });
+
+// Shapes that previously needed the (now-removed) LLM fallback. The on-device
+// regex must carry these on its own at confidence >= 0.6.
+describe("parseTransactionSms — on-device coverage (post-LLM-removal)", () => {
+  it("reads a card spend 'spent ... at MERCHANT'", () => {
+    const r = parseTransactionSms(
+      "Rs.499 spent on your SBI Card at AMAZON on 01-Jun-26. Avl Lmt Rs.40,000",
+    );
+    expect(r.amount).toBe(499);
+    expect(r.direction).toBe("debit");
+    expect(r.merchant?.toUpperCase()).toContain("AMAZON");
+    expect(r.confidence).toBeGreaterThanOrEqual(0.6);
+  });
+
+  it("reads an ATM withdrawal and ignores the trailing balance", () => {
+    const r = parseTransactionSms(
+      "INR 3,000 withdrawn from A/c no. XX789 on 02Jun26. Avl Bal INR 12,000.00",
+    );
+    expect(r.amount).toBe(3000);
+    expect(r.direction).toBe("debit");
+  });
+
+  it("reads 'paid to MERCHANT via UPI'", () => {
+    const r = parseTransactionSms(
+      "Rs 89 paid to BIGBASKET via UPI on 04-06-26. Ref 998877. - Axis Bank",
+    );
+    expect(r.amount).toBe(89);
+    expect(r.direction).toBe("debit");
+    expect(r.merchant?.toUpperCase()).toContain("BIGBASKET");
+    expect(r.confidence).toBeGreaterThanOrEqual(0.6);
+  });
+
+  it("never reads available balance as the amount (amount after keyword)", () => {
+    const r = parseTransactionSms(
+      "Spent Rs.200 at CAFE on 01-Jun-26. Avl Bal Rs.9,999.00",
+    );
+    expect(r.amount).toBe(200);
+  });
+
+  it("keeps low-information SMS below the manual-allocation threshold", () => {
+    const r = parseTransactionSms("Your account was updated. Avl Bal Rs.100");
+    expect(r.confidence).toBeLessThan(0.6);
+  });
+});

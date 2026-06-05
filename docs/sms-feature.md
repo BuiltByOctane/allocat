@@ -14,7 +14,7 @@ Incoming SMS ─► SmsTransactionReceiver (fires even app-killed)
         SmsQueue (SharedPreferences)  +  emit "smsReceived" if WebView alive
                  │
    SmsBridge.tsx (native-only) ─► ingestSmsClient()
-                 │  parseTransactionSms (regex)  ·  parseSmsWithLLM (fallback)
+                 │  parseTransactionSms (regex, 100% on-device — no LLM/network)
                  │  matchMerchantRule (IDB)
                  ▼
         optimistic IDB write + enqueue ─► SyncEngine ─► ingestSmsTransaction (server)
@@ -28,7 +28,7 @@ Incoming SMS ─► SmsTransactionReceiver (fires even app-killed)
 | Regex parser (TDD) | `lib/ai/parseSmsTransaction.ts` (+ `.test.ts`) |
 | Merchant match / dedupe (TDD) | `lib/sms/match.ts` (+ `.test.ts`) |
 | Client pipeline | `lib/sms/ingestClient.ts` |
-| Server actions | `lib/actions/sms.ts` (`ingestSmsTransaction`, `categorizeSmsTransaction`, `ignoreSmsTransaction`, `parseSmsWithLLM`) |
+| Server actions | `lib/actions/sms.ts` (`ingestSmsTransaction`, `categorizeSmsTransaction`, `ignoreSmsTransaction`) |
 | Hooks | `lib/hooks/useSmsTransactions.ts` |
 | UI + dev harness | `components/sms/SmsPage.tsx`, route `app/(app)/sms/page.tsx` |
 | Sync wiring | `lib/sync/SyncEngine.ts` (`sms_transactions` dispatchers), `lib/providers/SyncProvider.tsx` |
@@ -69,29 +69,32 @@ Expect: the SMS is captured (app open or closed), appears on `/sms` as pending
 (or auto-logs if a rule exists), and a notification fires. Categorize once with
 "remember" on, then resend — the second one should auto-apply silently.
 
-## Google Play compliance checklist (REQUIRED before public release)
-`READ_SMS` / `RECEIVE_SMS` are restricted. Budget/expense tracking is a permitted
-exception, but you must:
+## Google Play compliance (REQUIRED before public release)
+`RECEIVE_SMS` is a restricted permission. The eligible exception we submit under is
+**"SMS-based money management"** (apps that track and manage budget) — see the Play
+[SMS/Call-Log policy](https://support.google.com/googleplay/android-developer/answer/10208820).
+Full submission steps and the exact text to paste live in **`docs/play-release.md`**.
 
-- [ ] File the **Permissions Declaration Form** in Play Console (core feature:
-      financial transaction tracking). Attach a **demo video** of the SMS →
-      auto-categorization flow.
-- [ ] Show a **prominent in-app disclosure + consent** screen before the runtime
-      SMS permission request (not just the OS dialog).
-- [ ] Store-listing description must document SMS reading as core functionality.
-- [ ] Privacy policy + Data Safety form must state: transaction SMS are parsed
-      **on-device**; only financial SMS are processed; **non-financial SMS are
-      never collected or transmitted** (enforced by `SmsFilter`).
-- [ ] Have a fallback: internal-testing track / direct APK if public review is
-      rejected. Webview-wrapper apps can trip the "minimum functionality" policy —
-      the substantial native code (background receiver, local notifications) is
-      the mitigation.
+Status of the in-app prerequisites:
+- [x] Request **only** `RECEIVE_SMS` (no `READ_SMS`; the inbox is never read).
+- [x] **No third-party egress** — parsing is 100% on-device; the OpenRouter LLM
+      fallback was removed. The raw SMS body/sender stay on-device; only extracted
+      fields + a hashed dedupe key sync (see `ingestSmsClient` / `ingestSmsTransaction`).
+- [x] **Prominent disclosure** before the OS permission prompt (`NativeSetup.tsx`)
+      with a link to the privacy policy; the OS prompt only fires after the user taps Allow.
+- [x] In-app **privacy policy** at `/legal/privacy-policy`.
+- [ ] File the **Permissions Declaration Form** + record the **demo video** (Console).
+- [ ] Complete the **Data Safety** form (Console).
+- [ ] Store-listing copy documents SMS reading as core functionality (Console).
+- [ ] Upload to an **internal-testing track** first as a rejection-safe fallback.
+      The remote-WebView shell can trip "minimum functionality"; the substantial
+      native code (background receiver, local notifications, rule engine) is the mitigation.
 
 ## Notes / future work
 - **Background-while-killed notifications:** MVP queues SMS natively and notifies
-  on next app open (the live path notifies immediately while open). True
-  app-killed push would need the receiver to parse natively or ping a server
-  route — a v2 enhancement.
-- `parseSmsWithLLM` reuses `OPENROUTER_API_KEY`; needs network. Regex covers
-  common HDFC/ICICI/SBI/UPI formats offline.
+  on next app open (the live path notifies immediately while open). The native
+  parser (`SmsParser.java`) also matches rules and notifies while the app is closed.
+- Parsing is on-device regex only (`parseSmsTransaction.ts`); SMS that don't yield
+  an amount become `pending` for manual allocation on `/sms`. Keep the JS and
+  native (`SmsParser.java`) patterns in sync.
 - iOS builds (if added) must exclude this feature.

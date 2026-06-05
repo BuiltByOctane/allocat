@@ -25,7 +25,11 @@ async function getAuthed() {
 type Supa = Awaited<ReturnType<typeof createClient>>;
 
 export interface IngestSmsInput {
-  raw: string;
+  /**
+   * Raw SMS body / sender are intentionally NOT sent from the client (kept
+   * on-device). Declared optional only for the dev harness; never persisted.
+   */
+  raw?: string;
   sender?: string | null;
   amount: number | null;
   currency?: string | null;
@@ -81,8 +85,8 @@ export async function ingestSmsTransaction(input: IngestSmsInput) {
     .from("sms_transactions")
     .insert({
       user_id: user.id,
-      raw_text: input.raw,
-      sender: input.sender ?? null,
+      // raw_text / sender deliberately omitted — the raw SMS never leaves the
+      // device; only extracted fields + the hashed dedupe_key are stored.
       amount: input.amount,
       currency: input.currency ?? null,
       merchant_raw: input.merchantRaw ?? null,
@@ -295,67 +299,6 @@ async function sendNearLimitPush(
   });
 }
 
-// ─── LLM fallback (tier 2) ─────────────────────────────────────────────────────
-
-export interface LlmParsedTxn {
-  amount: number | null;
-  currency: string | null;
-  merchant: string | null;
-  direction: "debit" | "credit" | null;
-  occurredAt: string | null;
-}
-
-/**
- * Tier-2 parser: when on-device regex confidence is low, extract fields with the
- * model. Returns null on any failure so the caller can degrade gracefully.
- */
-export async function parseSmsWithLLM(raw: string): Promise<LlmParsedTxn | null> {
-  await getAuthed();
-  const key = process.env.OPENROUTER_API_KEY;
-  if (!key) return null;
-
-  const prompt = [
-    "Extract transaction fields from this bank/UPI SMS. Respond with ONLY a JSON",
-    'object: {"amount":number|null,"currency":string|null,"merchant":string|null,',
-    '"direction":"debit"|"credit"|null,"occurredAt":"YYYY-MM-DD"|null}.',
-    "amount is the transaction amount (not the available balance).",
-    "merchant is the payee/sender name or UPI handle. No prose, no code fences.",
-    "",
-    `SMS: ${raw}`,
-  ].join("\n");
-
-  try {
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "HTTP-Referer": "https://allocat.app",
-        "X-Title": "AlloCat",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "openai/gpt-oss-120b:free",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0,
-      }),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const content: string = data?.choices?.[0]?.message?.content ?? "";
-    const match = content.match(/\{[\s\S]*\}/);
-    if (!match) return null;
-    const parsed = JSON.parse(match[0]) as LlmParsedTxn;
-    return {
-      amount: typeof parsed.amount === "number" ? parsed.amount : null,
-      currency: parsed.currency ?? null,
-      merchant: parsed.merchant ?? null,
-      direction:
-        parsed.direction === "debit" || parsed.direction === "credit"
-          ? parsed.direction
-          : null,
-      occurredAt: parsed.occurredAt ?? null,
-    };
-  } catch {
-    return null;
-  }
-}
+// Note: SMS parsing is 100% on-device (lib/ai/parseSmsTransaction.ts). The former
+// OpenRouter LLM fallback was removed so no SMS content is ever sent to a third
+// party — required for the Play "SMS-based money management" data-use policy.

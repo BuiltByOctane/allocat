@@ -19,28 +19,36 @@ final class SmsParser {
         String direction; // "debit" | "credit" | null
     }
 
+    // Keep these patterns in sync with lib/ai/parseSmsTransaction.ts.
+    private static final String STOP =
+        "(?=\\s+(?:on|ref|refno|ref no|upi|avl|a/c|info|not|via|dt|your|bal|txn|using|cr|dr|\\.|,)|$)";
+
     private static final Pattern CURRENCY =
         Pattern.compile("₹|\\bRs\\.?\\b|\\bINR\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern DEBIT =
-        Pattern.compile("\\b(debited|debit|spent|sent|paid|withdrawn|purchase)\\b", Pattern.CASE_INSENSITIVE);
+        Pattern.compile("\\b(debited|debit|spent|sent|paid|withdrawn|w/d|purchase|txn|transferred|auto[-\\s]?debit|e-?mandate)\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern CREDIT =
-        Pattern.compile("\\b(credited|credit|received|deposited)\\b", Pattern.CASE_INSENSITIVE);
-    private static final Pattern AMT1 =
-        Pattern.compile("(?:₹|Rs\\.?|INR)\\s*([\\d,]+(?:\\.\\d{1,2})?)", Pattern.CASE_INSENSITIVE);
-    private static final Pattern AMT2 = Pattern.compile(
-        "(?:debited|credited|debit|credit|spent|sent|paid)\\s+(?:by|for|with)?\\s*(?:₹|Rs\\.?|INR)?\\s*([\\d,]+(?:\\.\\d{1,2})?)",
+        Pattern.compile("\\b(credited|credit|received|deposited|refund(?:ed)?)\\b", Pattern.CASE_INSENSITIVE);
+    // Balance clauses report the post-txn balance, not the spend — strip first.
+    private static final Pattern BALANCE = Pattern.compile(
+        "(?:avl\\.?\\s*bal(?:ance)?|available\\s+bal(?:ance)?|a/c\\s+bal(?:ance)?|bal(?:ance)?)\\s*:?\\s*(?:₹|Rs\\.?|INR)?\\s*[\\d,]+(?:\\.\\d{1,2})?",
         Pattern.CASE_INSENSITIVE);
+    private static final Pattern AMT_KW = Pattern.compile(
+        "(?:debited|credited|debit|credit|spent|sent|paid|withdrawn|purchase|txn|transferred)\\s+(?:of|by|for|with)?\\s*(?:₹|Rs\\.?|INR)?\\s*([\\d,]+(?:\\.\\d{1,2})?)",
+        Pattern.CASE_INSENSITIVE);
+    private static final Pattern AMT_CUR =
+        Pattern.compile("(?:₹|Rs\\.?|INR)\\s*([\\d,]+(?:\\.\\d{1,2})?)", Pattern.CASE_INSENSITIVE);
 
     private static final Pattern[] MERCHANTS = new Pattern[] {
         Pattern.compile("(?:to|from|by)\\s+VPA\\s+([\\w.\\-]+)@[\\w.\\-]+", Pattern.CASE_INSENSITIVE),
         Pattern.compile("(?:to|from)\\s+([\\w.\\-]+)@[\\w.\\-]+", Pattern.CASE_INSENSITIVE),
         Pattern.compile(
-            "(?:trf to|transfer to|sent to|paid to|to)\\s+([A-Za-z0-9][A-Za-z0-9 &._\\-]*?)(?=\\s+(?:on|ref|refno|ref no|upi|avl|a/c|info|not|\\.|,)|$)",
+            "(?:trf to|transfer to|sent to|paid to|towards|to)\\s+([A-Za-z0-9][A-Za-z0-9 &._\\-]*?)" + STOP,
             Pattern.CASE_INSENSITIVE),
+        Pattern.compile("\\bat\\s+([A-Za-z0-9][A-Za-z0-9 &._\\-]*?)" + STOP, Pattern.CASE_INSENSITIVE),
         Pattern.compile("(?:&|and)\\s+([A-Za-z0-9][A-Za-z0-9 &._\\-]*?)\\s+credited", Pattern.CASE_INSENSITIVE),
-        Pattern.compile(
-            "\\bfrom\\s+([A-Za-z0-9][A-Za-z0-9 &._\\-]*?)(?=\\s+(?:on|ref|refno|upi|avl|\\.|,)|$)",
-            Pattern.CASE_INSENSITIVE),
+        Pattern.compile("\\binfo[:\\-]?\\s*([A-Za-z0-9][A-Za-z0-9 &._\\-]*?)" + STOP, Pattern.CASE_INSENSITIVE),
+        Pattern.compile("\\bfrom\\s+([A-Za-z0-9][A-Za-z0-9 &._\\-]*?)" + STOP, Pattern.CASE_INSENSITIVE),
     };
 
     static Parsed parse(String body) {
@@ -70,13 +78,16 @@ final class SmsParser {
     }
 
     private static Double extractAmount(String t) {
-        Matcher m1 = AMT1.matcher(t);
-        if (m1.find()) {
-            Double n = num(m1.group(1));
+        // Strip balance clauses so an available-balance figure isn't read as the spend.
+        String s = BALANCE.matcher(t).replaceAll(" ");
+        // Keyword-adjacent amount first (most reliable), then currency-adjacent.
+        Matcher mk = AMT_KW.matcher(s);
+        if (mk.find()) {
+            Double n = num(mk.group(1));
             if (n != null) return n;
         }
-        Matcher m2 = AMT2.matcher(t);
-        if (m2.find()) return num(m2.group(1));
+        Matcher mc = AMT_CUR.matcher(s);
+        if (mc.find()) return num(mc.group(1));
         return null;
     }
 

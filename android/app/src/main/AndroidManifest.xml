@@ -58,7 +58,9 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Core SMS transaction-tracking feature (declared in Play Console). -->
+    <!-- Core SMS transaction-tracking feature ("SMS-based money management",
+         declared in Play Console). Only RECEIVE_SMS is used: incoming SMS are
+         caught via the broadcast receiver and parsed on-device. The app never
+         reads the existing SMS inbox, so READ_SMS is intentionally NOT declared. -->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
-    <uses-permission android:name="android.permission.READ_SMS" />
 </manifest>

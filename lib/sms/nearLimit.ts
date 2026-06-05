@@ -7,7 +7,50 @@ export interface NearLimitInfo {
   over: boolean;
 }
 
+export interface PaceInfo {
+  name: string;
+  /** Day-of-month the item is projected to run out. */
+  byDay: number;
+}
+
 const THRESHOLD = 0.9;
+
+/** "3" → "3rd", "21" → "21st". */
+export function ordinal(n: number): string {
+  if (n >= 11 && n <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
+}
+
+/**
+ * Predictive pace check: after a spend, is the item on track to run out before
+ * month-end (at the current daily rate)? Mirrors the native check in
+ * SmsTransactionReceiver.java. Returns null when not yet at risk.
+ */
+export async function paceFromIDB(budgetItemId: string): Promise<PaceInfo | null> {
+  const db = getDB();
+  const item = await db.budget_items.get(budgetItemId);
+  if (!item) return null;
+  const planned = Number(item.planned_amount);
+  const actual = Number(item.actual_amount);
+  if (!(planned > 0) || !(actual > 0)) return null;
+
+  const now = new Date();
+  const day = now.getDate();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  if (day < 3) return null; // too early to project reliably
+  const byDay = Math.ceil((planned * day) / actual);
+  if (byDay > daysInMonth) return null; // on pace to stay within budget
+  return { name: item.name, byDay };
+}
 
 /**
  * Near-limit check from IDB after a spend is applied. Checks the budget ITEM

@@ -20,31 +20,15 @@ export function NativeSetup() {
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
-    void requestAll().then((firstRun) => {
-      if (firstRun) setShow(true);
-    });
+    // Show the disclosure on first run only. We deliberately do NOT request any
+    // permission here — the SMS prominent-disclosure policy requires the OS
+    // permission prompt to fire only AFTER the user reads this and taps Allow.
+    try {
+      if (localStorage.getItem(DONE_KEY) !== "1") setShow(true);
+    } catch {
+      /* ignore */
+    }
   }, []);
-
-  async function requestAll(): Promise<boolean> {
-    try {
-      const { LocalNotifications } = await import("@capacitor/local-notifications");
-      const p = await LocalNotifications.requestPermissions();
-      setNotif(p.display === "granted");
-    } catch {
-      /* ignore */
-    }
-    try {
-      const r = await SmsReader.requestPermission();
-      setSms(r.granted);
-    } catch {
-      /* ignore */
-    }
-    try {
-      return localStorage.getItem(DONE_KEY) !== "1";
-    } catch {
-      return false;
-    }
-  }
 
   function dismiss() {
     try {
@@ -67,10 +51,18 @@ export function NativeSetup() {
           </h1>
         </div>
         <p className="text-sm text-muted-foreground">
-          AlloCat reads your bank/UPI transaction SMS and alerts you to allocate
-          each spend. For this to work — even when the app is closed — grant the
-          permissions and enable the two device settings below.
+          AlloCat reads only your bank/UPI <strong>transaction</strong> SMS to
+          auto-track spending. Messages are parsed <strong>on your device</strong>;
+          the raw SMS text is never uploaded and never shared with anyone. OTPs and
+          personal messages are ignored. For this to work even when the app is
+          closed, grant the permissions and enable the two device settings below.
         </p>
+        <a
+          href="/legal/privacy-policy"
+          className="-mt-2 text-xs font-bold uppercase tracking-widest text-muted-foreground underline"
+        >
+          Read our privacy policy
+        </a>
 
         <Step
           n={1}

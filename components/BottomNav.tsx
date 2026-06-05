@@ -10,7 +10,6 @@ const navItems = [
   { label: "Budget", href: "/budget", icon: "account_balance_wallet" },
   { label: "Net Worth", href: "/net-worth", icon: "pie_chart" },
   { label: "Debt", href: "/debt", icon: "credit_card" },
-  { label: "SMS", href: "/sms", icon: "sms" },
   { label: "Profile", href: "/profile", icon: "person" },
 ];
 

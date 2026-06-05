@@ -85,6 +85,25 @@ export default function ProfilePage() {
             />
           </Link>
 
+          <Link
+            href="/sms"
+            className="w-full flex justify-between items-center p-5 bg-card/50 border border-border hover:bg-muted transition-colors group"
+          >
+            <div className="flex items-center gap-4">
+              <MaterialSymbol icon="sms" className="text-muted-foreground" />
+              <div>
+                <span className="font-bold tracking-tight text-foreground block">SMS Transactions</span>
+                <span className="font-mono text-[10px] tracking-[0.1em] uppercase text-muted-foreground">
+                  Review & allocate spends from SMS
+                </span>
+              </div>
+            </div>
+            <MaterialSymbol
+              icon="chevron_right"
+              className="text-muted-foreground group-hover:translate-x-1 transition-transform"
+            />
+          </Link>
+
         </div>
       </section>
 

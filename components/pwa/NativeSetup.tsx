@@ -104,7 +104,7 @@ export function NativeSetup() {
         <Step
           n={3}
           title="Enable Autostart"
-          desc="Lets AlloCat catch transactions when the app is closed. Find AlloCat in the list and turn it on."
+          desc="Lets AlloCat catch transactions when the app is closed. This opens your phone Settings — search for “Auto start” (or “Autostart” / “Background”), open it, find AlloCat and turn it ON."
           action="Open settings"
           onClick={() => void SmsReader.openAutostartSettings()}
         />
@@ -112,7 +112,7 @@ export function NativeSetup() {
         <Step
           n={4}
           title="Don't restrict battery"
-          desc="Stops the system from killing the SMS listener in the background."
+          desc="Stops the system from killing the SMS listener in the background. This opens Battery optimization — find AlloCat in the list and set it to “Don't optimize” (or “Unrestricted” / “No restrictions”)."
           action="Open settings"
           onClick={() => void SmsReader.openBatterySettings()}
         />

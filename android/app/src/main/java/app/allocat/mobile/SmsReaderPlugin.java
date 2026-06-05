@@ -171,37 +171,48 @@ public class SmsReaderPlugin extends Plugin {
         { "com.samsung.android.lool", "com.samsung.android.sm.ui.battery.BatteryActivity" },
     };
 
-    /** Opens the OEM autostart manager (best-effort), else the app's settings page. */
+    /**
+     * Opens the OEM autostart manager (best-effort). Some vendors mark these
+     * activities non-exported or rename them per OS version, so we just try to
+     * launch each and catch failures (resolveActivity often returns null even
+     * when launching works). If none open, fall back to the main Settings app —
+     * NOT the app-details page — so the user can search "auto start" themselves.
+     */
     @PluginMethod
     public void openAutostartSettings(PluginCall call) {
         for (String[] t : AUTOSTART_TARGETS) {
-            Intent i = new Intent();
-            i.setComponent(new ComponentName(t[0], t[1]));
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            if (getContext().getPackageManager().resolveActivity(i, 0) != null) {
-                try {
-                    getContext().startActivity(i);
-                    call.resolve();
-                    return;
-                } catch (Exception ignored) {
-                }
+            try {
+                Intent i = new Intent();
+                i.setComponent(new ComponentName(t[0], t[1]));
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(i);
+                call.resolve();
+                return;
+            } catch (Exception ignored) {
             }
         }
-        openAppDetails();
+        openMainSettings();
         call.resolve();
     }
 
-    /** Asks the OS to exempt the app from battery optimization. */
+    /**
+     * Opens the battery-optimization list (Settings > Battery optimization),
+     * where the user can set AlloCat to "Don't optimize" / "Unrestricted". Uses
+     * the list screen rather than ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS so
+     * we don't need the Play-restricted REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+     * permission. Falls back to the main Settings app.
+     */
     @PluginMethod
     public void openBatterySettings(PluginCall call) {
         try {
-            Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
-            i.setData(Uri.parse("package:" + getContext().getPackageName()));
+            Intent i = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             getContext().startActivity(i);
-        } catch (Exception e) {
-            openAppDetails();
+            call.resolve();
+            return;
+        } catch (Exception ignored) {
         }
+        openMainSettings();
         call.resolve();
     }
 
@@ -219,6 +230,17 @@ public class SmsReaderPlugin extends Plugin {
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             getContext().startActivity(i);
         } catch (Exception ignored) {
+        }
+    }
+
+    /** Opens the top-level Settings app so the user can search a vendor screen. */
+    private void openMainSettings() {
+        try {
+            Intent i = new Intent(Settings.ACTION_SETTINGS);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
+        } catch (Exception ignored) {
+            openAppDetails();
         }
     }
 }

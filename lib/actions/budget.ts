@@ -4,7 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/types/database";
 import { logActivity, fmt, getUserCurrency } from "@/lib/server/activity-logger";
 import { notifyUser } from "@/lib/server/push-notify";
-import { computeAutoCompletion } from "@/lib/utils/budget-completion";
+import {
+  computeAutoCompletion,
+  actualOnManualComplete,
+} from "@/lib/utils/budget-completion";
 import { addAssetEntry } from "@/lib/actions/asset-history";
 import { makePayment } from "@/lib/actions/debt";
 
@@ -546,6 +549,20 @@ export async function updateBudgetItem(
     }
   }
 
+  // Marking an item complete treats the full planned allocation as used: bump
+  // actual up to planned (an existing overspend is kept). Only on false→true.
+  if (updates.is_completed === true && !existingItem.is_completed) {
+    const planned =
+      updates.planned_amount !== undefined
+        ? Number(updates.planned_amount)
+        : Number(existingItem.planned_amount);
+    const curActual =
+      updates.actual_amount !== undefined
+        ? Number(updates.actual_amount)
+        : Number(existingItem.actual_amount);
+    finalUpdates.actual_amount = actualOnManualComplete(planned, curActual);
+  }
+
   const { data, error } = await supabase
     .from("budget_items")
     .update({
@@ -569,12 +586,12 @@ export async function updateBudgetItem(
       string | null;
 
   if (
-    updates.actual_amount !== undefined &&
+    finalUpdates.actual_amount !== undefined &&
     effectiveLinkType &&
     effectiveLinkId &&
-    Number(updates.actual_amount) > Number(existingItem.actual_amount)
+    Number(finalUpdates.actual_amount) > Number(existingItem.actual_amount)
   ) {
-    const delta = Number(updates.actual_amount) - Number(existingItem.actual_amount);
+    const delta = Number(finalUpdates.actual_amount) - Number(existingItem.actual_amount);
     try {
       if (effectiveLinkType === "asset") {
         await addAssetEntry(effectiveLinkId, "add_funds", delta, `Budget: ${data.name}`, undefined, { suppressLog: true });

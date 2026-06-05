@@ -7,6 +7,7 @@ import { BadgeUpdater } from "@/components/pwa/BadgeUpdater";
 import { PushPermissionPrompt } from "@/components/pwa/PushPermissionPrompt";
 import { SmsBridge } from "@/components/pwa/SmsBridge";
 import { NativeSetup } from "@/components/pwa/NativeSetup";
+import { TourPrompt } from "@/components/tour/TourPrompt";
 import { TourProvider } from "@/lib/tour/TourContext";
 import { CurrencyProvider } from "@/lib/providers/CurrencyProvider";
 
@@ -32,6 +33,7 @@ export default async function AppLayout({
         </main>
         <InstallPrompt />
         <SmsBridge />
+        <TourPrompt />
         <NativeSetup />
         <BadgeUpdater />
         <BottomNav />

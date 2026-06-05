@@ -2,7 +2,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getBudgetForPeriod } from "@/lib/actions/budget";
 import { getDB } from "@/lib/db";
 import { useEnqueue } from "@/lib/hooks/useSync";
-import { computeAutoCompletion } from "@/lib/utils/budget-completion";
+import {
+  computeAutoCompletion,
+  actualOnManualComplete,
+} from "@/lib/utils/budget-completion";
 import { applyLinkedSpendCascadeIDB } from "@/lib/utils/budget-cascade";
 import { DASHBOARD_KEY } from "./useDashboard";
 import { NET_WORTH_KEY } from "./useNetWorth";
@@ -323,8 +326,25 @@ export function useUpdateBudgetItem() {
         );
       }
 
+      // Marking an item complete treats the full planned allocation as used:
+      // bump actual up to planned (overspends are kept). Only on the
+      // false→true transition, and respects an explicit actual in the same save.
+      if (updates.is_completed === true && existing && !existing.is_completed) {
+        const planned =
+          updates.planned_amount !== undefined
+            ? Number(updates.planned_amount)
+            : Number(existing.planned_amount);
+        const curActual =
+          updates.actual_amount !== undefined
+            ? Number(updates.actual_amount)
+            : Number(existing.actual_amount);
+        finalUpdates.actual_amount = actualOnManualComplete(planned, curActual);
+      }
+
+      // Cascade off finalUpdates so a completion-driven actual bump still
+      // flows to linked asset/debt/goal rows.
       const cascade = existing
-        ? await applyLinkedSpendCascadeIDB(existing, updates)
+        ? await applyLinkedSpendCascadeIDB(existing, finalUpdates)
         : { touchedNetWorth: false, touchedGoals: false, touchedDebt: false };
 
       await db.budget_items.update(itemId, {
@@ -346,7 +366,7 @@ export function useUpdateBudgetItem() {
       // Force refetch unconditionally on actual_amount changes so cross-section
       // caches reflect the cascade — covers legacy IDB rows where link_type
       // hadn't been rewritten yet.
-      if (updates.actual_amount !== undefined) {
+      if (updates.actual_amount !== undefined || updates.is_completed === true) {
         await qc.refetchQueries({ queryKey: NET_WORTH_KEY, type: "all" });
         await qc.refetchQueries({ queryKey: GOALS_KEY, type: "all" });
         await qc.refetchQueries({ queryKey: DEBT_KEY, type: "all" });

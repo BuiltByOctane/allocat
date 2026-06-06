@@ -17,6 +17,16 @@ export function NativeShell() {
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
+    // Native splash is held (launchAutoHide:false) until the WebView is ready.
+    // Now that the web layer has mounted, hide it — with a frame's delay so the
+    // first paint lands underneath before the splash fades out.
+    (async () => {
+      const { SplashScreen } = await import("@capacitor/splash-screen");
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => void SplashScreen.hide({ fadeOutDuration: 250 }))
+      );
+    })();
+
     let backHandle: PluginListenerHandle | undefined;
     let urlHandle: PluginListenerHandle | undefined;
     (async () => {

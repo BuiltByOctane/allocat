@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+      Android 12+ system splash. The platform shows a centered, circular-masked
+      icon (the paw) on a solid background, plus an optional branding image at
+      the bottom (the wordmark). The full paw+wordmark lockup in @drawable/splash
+      is only used pre-12; on 12+ this split is the closest match the OS allows.
+    -->
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:windowSplashScreenBackground">@android:color/white</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_paw</item>
+        <item name="android:windowSplashScreenBrandingImage">@drawable/splash_wordmark</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
+    </style>
+
+</resources>

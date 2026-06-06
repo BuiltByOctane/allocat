@@ -25,6 +25,18 @@ const config: CapacitorConfig = {
       smallIcon: "ic_notification",
       iconColor: "#F4A340",
     },
+    // Remote-URL mode loads the deployed app over the network, so the native
+    // splash must stay up until the WebView is ready — otherwise users see a
+    // blank WebView during the load. Auto-hide is disabled here; the web layer
+    // calls SplashScreen.hide() once it mounts (see NativeShell).
+    SplashScreen: {
+      launchAutoHide: false,
+      backgroundColor: "#ffffff",
+      androidScaleType: "CENTER_INSIDE",
+      showSpinner: false,
+      splashFullScreen: true,
+      splashImmersive: false,
+    },
   },
 };
 

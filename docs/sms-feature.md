@@ -14,7 +14,7 @@ Incoming SMS ─► SmsTransactionReceiver (fires even app-killed)
         SmsQueue (SharedPreferences)  +  emit "smsReceived" if WebView alive
                  │
    SmsBridge.tsx (native-only) ─► ingestSmsClient()
-                 │  parseTransactionSms (regex, 100% on-device — no LLM/network)
+                 │  parseTransactionSms (regex, 100% on-device)
                  │  matchMerchantRule (IDB)
                  ▼
         optimistic IDB write + enqueue ─► SyncEngine ─► ingestSmsTransaction (server)

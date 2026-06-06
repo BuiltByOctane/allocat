@@ -34,7 +34,7 @@ export default function SuggestedPrompts({ onSelect }: SuggestedPromptsProps) {
           <button
             key={prompt}
             onClick={() => onSelect(prompt)}
-            className="w-full rounded-xl border border-border bg-card px-4 py-3 text-left text-sm text-foreground transition-colors active:bg-border hover:bg-border"
+            className="w-full rounded-2xl border border-border bg-card px-4 py-3 text-left text-sm text-foreground transition-colors active:bg-border hover:bg-border"
           >
             {prompt}
           </button>

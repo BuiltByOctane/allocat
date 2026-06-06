@@ -37,7 +37,7 @@ export default function ChatInput({ value, onChange, onSend, disabled }: ChatInp
         onKeyDown={handleKeyDown}
         placeholder="Ask AlloCat anything…"
         disabled={disabled}
-        className="flex-1 resize-none rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm text-foreground placeholder:text-(--muted-foreground,#888) outline-none focus:ring-1 focus:ring-foreground disabled:opacity-50 transition-all"
+        className="flex-1 resize-none rounded-2xl border border-border bg-card px-3.5 py-2.5 text-sm text-foreground placeholder:text-(--muted-foreground,#888) outline-none focus:ring-1 focus:ring-foreground disabled:opacity-50 transition-all"
         style={{ minHeight: "44px", maxHeight: "120px" }}
       />
       <button

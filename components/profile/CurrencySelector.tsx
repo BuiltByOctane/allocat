@@ -77,7 +77,7 @@ export default function CurrencySelector() {
       )}
 
       {update.isError && (
-        <div className="px-5 py-2 text-[11px] text-red-500 border-t border-border">
+        <div className="px-5 py-2 text-[11px] text-neg border-t border-border">
           {(update.error as Error).message}
         </div>
       )}

@@ -11,6 +11,9 @@ import { DASHBOARD_KEY } from "@/lib/hooks/useDashboard";
 import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { InlineEditableNumber } from "@/components/ui/InlineEditableNumber";
+import { Progress } from "@/components/ui/Progress";
+import { resolveColor } from "@/lib/theme/dataViz";
+import BudgetEmptyState from "@/components/budget/BudgetEmptyState";
 import { BudgetSetupSheet } from "@/components/budget/BudgetSetupSheet";
 
 const MONTHS = [
@@ -22,6 +25,7 @@ interface CategoryData {
   id: string;
   name: string;
   icon?: string | null;
+  color?: string | null;
   type: string;
   allocated: number;
   spent: number;
@@ -42,45 +46,30 @@ interface BudgetPageProps {
   defaultYear: number;
 }
 
+// Thin wrappers over the shared <Progress/> primitive — preserve each call
+// site's spacing + input convention (TickRuler takes 0–100, SegBar takes 0–1).
 function TickRuler({ pct }: { pct: number }) {
-  const count = 41;
-  return (
-    <div className="relative h-[18px] mt-[18px]">
-      <div className="absolute inset-0 flex justify-between">
-        {Array.from({ length: count }).map((_, i) => {
-          const filled = i / (count - 1) <= pct / 100;
-          const h = i % 10 === 0 ? 14 : i % 5 === 0 ? 9 : 5;
-          return (
-            <div
-              key={i}
-              style={{
-                width: 1,
-                height: h,
-                background: filled ? "var(--foreground)" : "var(--progress-empty)",
-              }}
-            />
-          );
-        })}
-      </div>
-    </div>
-  );
+  return <Progress variant="ticks" value={pct} className="mt-[18px]" />;
 }
 
-function SegBar({ pct }: { pct: number }) {
-  const count = 20;
+function SegBar({
+  pct,
+  state,
+  color,
+}: {
+  pct: number;
+  state?: "normal" | "over";
+  color?: string;
+}) {
   return (
-    <div className="flex gap-[2px] mt-2.5">
-      {Array.from({ length: count }).map((_, j) => (
-        <div
-          key={j}
-          className="flex-1"
-          style={{
-            height: 3,
-            background: j / count < pct ? "var(--foreground)" : "var(--progress-empty)",
-          }}
-        />
-      ))}
-    </div>
+    <Progress
+      variant="segments"
+      segments={20}
+      value={pct * 100}
+      state={state}
+      color={state === "over" ? undefined : color}
+      className="mt-2.5"
+    />
   );
 }
 
@@ -197,7 +186,7 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
             </div>
             <div
               className="text-[72px] md:text-[84px] leading-[0.95] tracking-[-0.025em] mt-2.5 tabular-nums"
-              style={{ color: totalRemaining < 0 ? "#ef4444" : "var(--foreground)" }}
+              style={{ color: totalRemaining < 0 ? "var(--neg)" : "var(--foreground)" }}
             >
               {totalRemaining < 0 ? "−" : ""}
               <CurrencyText value={Math.abs(totalRemaining)} />
@@ -240,7 +229,7 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
               </div>
             </div>
             {budgetTotalError && (
-              <p className="mt-2 font-mono text-[11px] text-red-400 text-right">{budgetTotalError}</p>
+              <p className="mt-2 font-mono text-[11px] text-neg text-right">{budgetTotalError}</p>
             )}
             <div className="flex justify-end mt-3">
               <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground tabular-nums">
@@ -299,29 +288,11 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
           {/* Category rows */}
           <div className="md:border-l border-border">
             {data.categories.length === 0 ? (
-              <div className="px-7 py-12 text-center">
-                <p className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
-                  No categories yet
-                </p>
-                <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
-                  Use a template to set up quickly, or add categories one by one.
-                </p>
-                <div className="mt-6 flex flex-col items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => { haptic.light(); setIsSetupOpen(true); }}
-                    className="font-mono text-[10px] tracking-[0.14em] uppercase px-6 py-3 border border-foreground text-foreground hover:bg-foreground hover:text-background transition-colors"
-                  >
-                    Set Up Budget
-                  </button>
-                  <button
-                    type="button"
-                    onClick={openAddCategory}
-                    className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground underline underline-offset-4"
-                  >
-                    Add manually
-                  </button>
-                </div>
+              <div className="px-7">
+                <BudgetEmptyState
+                  onSetup={() => { haptic.light(); setIsSetupOpen(true); }}
+                  onAddCategory={openAddCategory}
+                />
               </div>
             ) : (
               <div className="px-7">
@@ -356,6 +327,10 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
                         <div className="flex justify-between items-baseline gap-2">
                           <div className="flex items-baseline gap-2.5 min-w-0">
                             <span
+                              className="size-1.5 rounded-full shrink-0 self-center"
+                              style={{ background: resolveColor({ id: cat.id, color: cat.color }) }}
+                            />
+                            <span
                               className="font-mono text-[10px] shrink-0"
                               style={{ color: "var(--dimmer)" }}
                             >
@@ -374,7 +349,7 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
                             </span>
                           </div>
                           <div className="font-mono text-[12px] tabular-nums shrink-0">
-                            <span style={{ color: isOver ? "#ef4444" : "var(--foreground)" }}>
+                            <span style={{ color: isOver ? "var(--neg)" : "var(--foreground)" }}>
                               <CurrencyText value={cat.spent} />
                             </span>
                             <span className="text-muted-foreground">
@@ -382,7 +357,11 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
                             </span>
                           </div>
                         </div>
-                        <SegBar pct={Math.min(pct, 1)} />
+                        <SegBar
+                          pct={Math.min(pct, 1)}
+                          state={isOver ? "over" : "normal"}
+                          color={resolveColor({ id: cat.id, color: cat.color })}
+                        />
                       </div>
                     </Link>
                   );
@@ -468,7 +447,7 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
               </div>
 
               {addCategoryMutation.isError && (
-                <p className="font-mono text-[11px] text-red-400">{addCategoryError}</p>
+                <p className="font-mono text-[11px] text-neg">{addCategoryError}</p>
               )}
 
               <div className="flex flex-col gap-3">

@@ -74,6 +74,7 @@ export type Database = {
           user_id: string
           name: string
           icon: string | null
+          color: string | null
           type: "needs" | "wants" | "investments" | "misc"
           allocated_amount: number
           created_at: string
@@ -85,6 +86,7 @@ export type Database = {
           user_id: string
           name: string
           icon?: string | null
+          color?: string | null
           type: "needs" | "wants" | "investments" | "misc"
           allocated_amount?: number
           created_at?: string
@@ -93,6 +95,7 @@ export type Database = {
         Update: {
           name?: string
           icon?: string | null
+          color?: string | null
           type?: "needs" | "wants" | "investments" | "misc"
           allocated_amount?: number
           updated_at?: string
@@ -162,6 +165,7 @@ export type Database = {
           user_id: string
           name: string
           icon: string
+          color: string | null
           created_at: string
         }
         Insert: {
@@ -169,11 +173,13 @@ export type Database = {
           user_id: string
           name: string
           icon?: string
+          color?: string | null
           created_at?: string
         }
         Update: {
           name?: string
           icon?: string
+          color?: string | null
           created_at?: string
         }
         Relationships: []
@@ -216,6 +222,7 @@ export type Database = {
           user_id: string
           name: string
           icon: string | null
+          color: string | null
           category: string | null
           category_id: string | null
           value: number
@@ -231,6 +238,7 @@ export type Database = {
           user_id: string
           name: string
           icon?: string | null
+          color?: string | null
           category?: string | null
           category_id?: string | null
           value?: number
@@ -244,6 +252,7 @@ export type Database = {
         Update: {
           name?: string
           icon?: string | null
+          color?: string | null
           category?: string | null
           category_id?: string | null
           value?: number
@@ -269,6 +278,7 @@ export type Database = {
           user_id: string
           name: string
           icon: string | null
+          color: string | null
           type: "internal" | "external" | "lent"
           principal: number
           interest_rate: number
@@ -287,6 +297,7 @@ export type Database = {
           user_id: string
           name: string
           icon?: string | null
+          color?: string | null
           type: "internal" | "external" | "lent"
           principal?: number
           interest_rate?: number
@@ -303,6 +314,7 @@ export type Database = {
         Update: {
           name?: string
           icon?: string | null
+          color?: string | null
           type?: "internal" | "external" | "lent"
           principal?: number
           interest_rate?: number

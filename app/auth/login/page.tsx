@@ -63,7 +63,7 @@ export default function LoginPage() {
 
         <form action={handleSubmit} className="flex flex-col gap-6">
           {errorMsg && (
-            <div className="border border-red-500/30 bg-red-500/5 px-4 py-3 text-red-500 text-sm font-mono tracking-wide">
+            <div className="border border-neg/30 bg-neg/5 px-4 py-3 text-neg text-sm font-mono tracking-wide">
               {errorMsg}
             </div>
           )}

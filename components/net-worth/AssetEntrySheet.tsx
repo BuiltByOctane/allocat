@@ -169,7 +169,7 @@ export function AssetEntrySheet({ open, entryType, currentValue, onClose, onSave
             </div>
 
             {error && (
-              <p className="text-xs text-red-500 font-medium">{error}</p>
+              <p className="text-xs text-neg font-medium">{error}</p>
             )}
 
             <div className="flex gap-3 pt-1">

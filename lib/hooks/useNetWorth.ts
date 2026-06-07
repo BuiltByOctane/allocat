@@ -30,6 +30,7 @@ export async function getNetWorthFromIDB() {
       user_id: a.user_id,
       name: a.name,
       icon: a.icon,
+      color: a.color ?? null,
       category_id: a.category_id ?? null,
       category_name: cat?.name ?? a.category ?? "Other",
       category_icon: cat?.icon ?? "📦",
@@ -104,6 +105,7 @@ export function useAddAsset() {
         user_id: "__pending__",
         name,
         icon: icon ?? null,
+        color: null,
         category: null,
         category_id: categoryId,
         value,
@@ -165,6 +167,7 @@ export function useUpdateAsset() {
       updates: {
         name?: string;
         icon?: string;
+        color?: string | null;
         category_id?: string | null;
         is_goal?: boolean;
         target_amount?: number | null;

@@ -43,6 +43,7 @@ export function useAddAssetCategory() {
         user_id: "__pending__",
         name,
         icon,
+        color: null,
         created_at: now,
       });
 

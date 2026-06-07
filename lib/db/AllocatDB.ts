@@ -177,5 +177,16 @@ export class AllocatDB extends Dexie {
       sms_transactions:
         "id, user_id, status, dedupe_key, [user_id+status], occurred_at, created_at",
     });
+
+    // v9: per-entity `color` (palette key) added to categories/assets/debts/
+    // asset_categories. Non-indexed display field → schema strings unchanged;
+    // the bump only forces re-hydration so the new column lands on cached rows.
+    this.version(9).upgrade(async (tx) => {
+      const meta = tx.table("sync_meta");
+      await meta.delete("categories");
+      await meta.delete("assets");
+      await meta.delete("debts");
+      await meta.delete("asset_categories");
+    });
   }
 }

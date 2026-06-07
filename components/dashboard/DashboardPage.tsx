@@ -34,16 +34,19 @@ function NetWorthChart({ data }: { data: { net_worth: number | string; snapshot_
   const linePath = `M ${points.join(" L ")}`;
   const areaPath = `M ${points.join(" L ")} L ${W - pad},${H} L ${pad},${H} Z`;
 
+  // Tint by trend direction: up = positive, down = negative.
+  const trendColor = values[values.length - 1] >= values[0] ? "var(--pos)" : "var(--neg)";
+
   return (
     <svg viewBox={`0 0 ${W} ${H}`} fill="none" preserveAspectRatio="none" className="w-full h-full">
       <defs>
         <linearGradient id="areaGrad" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="var(--foreground)" stopOpacity="0.12" />
-          <stop offset="100%" stopColor="var(--foreground)" stopOpacity="0" />
+          <stop offset="0%" stopColor={trendColor} stopOpacity="0.16" />
+          <stop offset="100%" stopColor={trendColor} stopOpacity="0" />
         </linearGradient>
       </defs>
       <path d={areaPath} fill="url(#areaGrad)" />
-      <path d={linePath} stroke="var(--foreground)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={linePath} stroke={trendColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -123,7 +126,7 @@ export default function DashboardPage({ data }: DashboardProps) {
               <>
                 <div
                   className="text-[48px] leading-[0.95] tabular-nums"
-                  style={{ color: data.budget.remaining < 0 ? "#ef4444" : "var(--foreground)" }}
+                  style={{ color: data.budget.remaining < 0 ? "var(--neg)" : "var(--foreground)" }}
                 >
                   <CurrencyText value={data.budget.remaining} />
                 </div>
@@ -142,7 +145,7 @@ export default function DashboardPage({ data }: DashboardProps) {
                           background:
                             j / 30 < budgetSpentPct / 100
                               ? data.budget!.spent > data.budget!.totalBudget
-                                ? "#ef4444"
+                                ? "var(--neg)"
                                 : "var(--foreground)"
                               : "var(--progress-empty)",
                         }}
@@ -193,7 +196,7 @@ export default function DashboardPage({ data }: DashboardProps) {
               <div className="text-right">
                 <div
                   className="font-mono text-[12px] tabular-nums"
-                  style={{ color: netWorthChange >= 0 ? "var(--foreground)" : "#ef4444" }}
+                  style={{ color: netWorthChange >= 0 ? "var(--pos)" : "var(--neg)" }}
                 >
                   {netWorthChange > 0 ? "+" : ""}{netWorthChange}%
                 </div>

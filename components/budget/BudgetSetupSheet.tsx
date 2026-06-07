@@ -300,6 +300,7 @@ export function BudgetSetupSheet({
           budget_id: budgetId,
           user_id: "__pending__",
           name: catName,
+          color: null,
           icon: cat.icon,
           type: "misc",
           allocated_amount: cat.allocation,
@@ -496,7 +497,7 @@ export function BudgetSetupSheet({
                           <button
                             type="button"
                             onClick={() => handleDeleteUserTemplate(t.id)}
-                            className="text-muted-foreground hover:text-red-400 transition-colors shrink-0"
+                            className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
                           >
                             <span className="material-symbols-outlined text-base">
                               delete
@@ -558,7 +559,7 @@ export function BudgetSetupSheet({
                       <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full transition-all duration-200 ${
-                            isOverAllocated ? "bg-red-500" : "bg-primary"
+                            isOverAllocated ? "bg-neg" : "bg-primary"
                           }`}
                           style={{ width: `${allocPct}%` }}
                         />
@@ -570,7 +571,7 @@ export function BudgetSetupSheet({
                         <span
                           className={
                             isOverAllocated
-                              ? "text-red-400 font-semibold"
+                              ? "text-neg font-semibold"
                               : "text-primary font-semibold"
                           }
                         >
@@ -692,7 +693,7 @@ export function BudgetSetupSheet({
                 </div>
 
                 {error ? (
-                  <p className="text-xs text-red-400">{error}</p>
+                  <p className="text-xs text-neg">{error}</p>
                 ) : null}
 
                 {/* Create button */}
@@ -781,7 +782,7 @@ function CategoryCard({
         <button
           type="button"
           onClick={onRemove}
-          className="text-muted-foreground hover:text-red-400 transition-colors shrink-0"
+          className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
         >
           <span className="material-symbols-outlined text-base">close</span>
         </button>
@@ -819,7 +820,7 @@ function CategoryCard({
               <button
                 type="button"
                 onClick={() => onRemoveItem(item.id)}
-                className="text-muted-foreground hover:text-red-400 transition-colors shrink-0"
+                className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
               >
                 <span className="material-symbols-outlined text-[14px]">
                   close
@@ -831,7 +832,7 @@ function CategoryCard({
           {category.allocation > 0 && (
             <p
               className={`text-[10px] tabular-nums px-1 ${
-                itemsExceed ? "text-red-400 font-medium" : "text-muted-foreground"
+                itemsExceed ? "text-neg font-medium" : "text-muted-foreground"
               }`}
             >
               items: <CurrencyText value={itemsTotal} /> /{" "}

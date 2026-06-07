@@ -4,6 +4,8 @@ import { Drawer } from "vaul";
 import { useEffect, useRef, useState } from "react";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
+import { ColorPicker } from "@/components/ui/ColorPicker";
+import type { CatKey } from "@/lib/theme/dataViz";
 import { calcTotalRepayable, calcEMI } from "@/lib/utils/debt-calc";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 
@@ -16,12 +18,14 @@ interface DebtFormData {
   interestType: "flat" | "diminishing";
   loanTenureMonths: number | null;
   totalRepayable: number;
+  color: string | null;
 }
 
 interface DebtData {
   id: string;
   name: string;
   icon?: string | null;
+  color?: string | null;
   type: "internal" | "external" | "lent";
   principal: number;
   interestRate: number;
@@ -69,6 +73,7 @@ export function DebtDetailSheet({
   const [interestType, setInterestType] = useState<"flat" | "diminishing">("flat");
   const [tenure, setTenure] = useState("");
   const [monthlyMin, setMonthlyMin] = useState("");
+  const [color, setColor] = useState<CatKey | null>(null);
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -83,6 +88,7 @@ export function DebtDetailSheet({
       setInterestType(debt.interestType ?? "flat");
       setTenure(debt.loanTenureMonths ? String(debt.loanTenureMonths) : "");
       setMonthlyMin(debt.monthlyMin > 0 ? String(debt.monthlyMin) : "");
+      setColor((debt.color as CatKey | null) ?? null);
     } else {
       setName("");
       setType("external");
@@ -91,6 +97,7 @@ export function DebtDetailSheet({
       setInterestType("flat");
       setTenure("");
       setMonthlyMin("");
+      setColor(null);
     }
     setError("");
     setConfirmDelete(false);
@@ -130,6 +137,7 @@ export function DebtDetailSheet({
         interestType,
         loanTenureMonths: tenureNum,
         totalRepayable,
+        color,
       });
       haptic.success();
       onClose();
@@ -211,6 +219,12 @@ export function DebtDetailSheet({
                   onChange={(e) => setName(e.target.value)}
                   className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 />
+              </div>
+
+              {/* Color */}
+              <div>
+                <label className="text-[10px] font-mono uppercase tracking-[0.14em] text-muted-foreground block mb-1.5">Color</label>
+                <ColorPicker value={color} onChange={setColor} />
               </div>
 
               {/* Principal + Interest Rate */}
@@ -328,7 +342,7 @@ export function DebtDetailSheet({
               )}
 
               {error && (
-                <p className="text-[11px] text-red-400 font-mono">{error}</p>
+                <p className="text-[11px] text-neg font-mono">{error}</p>
               )}
             </div>
           </div>
@@ -347,8 +361,8 @@ export function DebtDetailSheet({
                   onClick={handleDelete}
                   className={`px-4 py-2.5 rounded-lg text-xs font-mono uppercase tracking-[0.1em] transition-colors ${
                     confirmDelete
-                      ? "bg-red-500/20 text-red-400 border border-red-500/30"
-                      : "bg-muted text-muted-foreground hover:text-red-400"
+                      ? "bg-destructive/20 text-destructive border border-destructive/30"
+                      : "bg-muted text-muted-foreground hover:text-destructive"
                   }`}
                 >
                   {confirmDelete ? "Confirm" : "Delete"}

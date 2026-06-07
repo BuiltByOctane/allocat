@@ -35,6 +35,7 @@ async function getCategoryFromIDB(categoryId: string) {
     id: category.id,
     name: category.name,
     icon: category.icon,
+    color: category.color ?? null,
     type: category.type,
     categoryAllocation: Number(category.allocated_amount),
     totalBudget: Number(budget.total_budget),

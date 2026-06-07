@@ -42,6 +42,13 @@ const colorPalettes = {
   orange: { light: { bg: "#fff7ed", card: "#ffffff", primary: "#ea580c", border: "rgba(234,88,12,0.1)" }, dark: { bg: "#431407", card: "#7c2d12", primary: "#fdba74", border: "rgba(253,186,116,0.1)" } },
 };
 
+/**
+ * Override boundary: this injector mutates ONLY the four structural vars
+ * --background / --card / --border / --primary (and their --color-* mirrors).
+ * It must NEVER touch the semantic (--pos/--neg/--warn/--info/--destructive)
+ * or categorical (--cat-1..8) tokens defined in app/globals.css — those carry
+ * fixed financial meaning and must stay constant across user hue choices.
+ */
 function ThemeInjector({ customTheme }: { customTheme: CustomTheme }) {
   const { resolvedTheme } = useTheme();
 

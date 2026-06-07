@@ -4,6 +4,8 @@ import { Drawer } from "vaul";
 import { useEffect, useRef, useState } from "react";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import EmojiPickerModal from "@/components/ui/EmojiPickerModal";
+import { ColorPicker } from "@/components/ui/ColorPicker";
+import type { CatKey } from "@/lib/theme/dataViz";
 
 export interface GoalFormData {
   name: string;
@@ -11,12 +13,14 @@ export interface GoalFormData {
   currentAmount: number;
   notes: string;
   icon: string | null;
+  color: string | null;
 }
 
 interface GoalData {
   id: string;
   name: string;
   icon?: string | null;
+  color?: string | null;
   target_amount: number;
   current_amount: number;
   notes?: string | null;
@@ -51,6 +55,7 @@ export function GoalDetailSheet({
   const [currentAmount, setCurrentAmount] = useState("");
   const [notes, setNotes] = useState("");
   const [icon, setIcon] = useState<string | null>(null);
+  const [color, setColor] = useState<CatKey | null>(null);
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -64,12 +69,14 @@ export function GoalDetailSheet({
       setCurrentAmount(String(goal.current_amount));
       setNotes(goal.notes ?? "");
       setIcon(goal.icon ?? null);
+      setColor((goal.color as CatKey | null) ?? null);
     } else {
       setName("");
       setTargetAmount("");
       setCurrentAmount("");
       setNotes("");
       setIcon(null);
+      setColor(null);
     }
     setError("");
     setConfirmDelete(false);
@@ -100,6 +107,7 @@ export function GoalDetailSheet({
         currentAmount: current,
         notes: notes.trim(),
         icon,
+        color,
       });
       haptic.success();
       onClose();
@@ -211,6 +219,11 @@ export function GoalDetailSheet({
                   />
                 </div>
 
+                <div>
+                  <label className="text-[10px] font-mono uppercase tracking-[0.14em] text-muted-foreground block mb-1.5">Color</label>
+                  <ColorPicker value={color} onChange={setColor} />
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-[10px] font-mono uppercase tracking-[0.14em] text-muted-foreground block mb-1.5">Target</label>
@@ -251,7 +264,7 @@ export function GoalDetailSheet({
                 </div>
 
                 {error && (
-                  <p className="text-[11px] text-red-400 font-mono">{error}</p>
+                  <p className="text-[11px] text-neg font-mono">{error}</p>
                 )}
               </div>
             </div>
@@ -263,8 +276,8 @@ export function GoalDetailSheet({
                   onClick={handleDelete}
                   className={`w-full py-2.5 rounded-lg text-xs font-mono uppercase tracking-[0.1em] transition-colors ${
                     confirmDelete
-                      ? "bg-red-500/20 text-red-400 border border-red-500/30"
-                      : "bg-muted text-muted-foreground hover:text-red-400"
+                      ? "bg-destructive/20 text-destructive border border-destructive/30"
+                      : "bg-muted text-muted-foreground hover:text-destructive"
                   }`}
                 >
                   {confirmDelete ? "Confirm Delete" : "Delete Goal"}

@@ -72,16 +72,27 @@ export function InlineEditableNumber({ value, onSave, className = "", formatAsCu
 
   const displayVal = value.toLocaleString(def.locale);
 
+  const enterEdit = () => {
+    haptic.light();
+    setIsEditing(true);
+  };
+
   return (
     <span
-      onClick={() => {
-        haptic.light();
-        setIsEditing(true);
+      role="button"
+      tabIndex={0}
+      aria-label="Edit value"
+      onClick={enterEdit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          enterEdit();
+        }
       }}
-      className={`relative inline-flex cursor-pointer hover:bg-muted transition-colors rounded px-1 -mx-1 font-mono ${className}`}
+      className={`inline-flex items-center gap-1 cursor-pointer border-b border-dotted border-muted-foreground/50 hover:border-foreground transition-colors font-mono ${className}`}
     >
-      <Pencil className="absolute -top-1 -right-2 w-2.5 h-2.5 text-muted-foreground shrink-0" />
       {formatAsCurrency ? <CurrencyText value={value} /> : displayVal}
+      <Pencil className="w-2.5 h-2.5 text-muted-foreground shrink-0" aria-hidden />
     </span>
   );
 }

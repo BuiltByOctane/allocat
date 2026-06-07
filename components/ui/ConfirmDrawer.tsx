@@ -56,7 +56,7 @@ export function ConfirmDrawer({
                 haptic.heavy();
                 onConfirm();
               }}
-              className="w-full py-3.5 bg-red-500/10 text-red-500 font-bold rounded-xl active:scale-[0.98] transition-all hover:bg-red-500/20"
+              className="w-full py-3.5 bg-destructive/10 text-destructive font-bold rounded-xl active:scale-[0.98] transition-all hover:bg-destructive/20"
             >
               {confirmText}
             </button>

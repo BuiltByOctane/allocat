@@ -152,6 +152,7 @@ export async function updateAsset(
     name?: string;
     value?: number;
     icon?: string;
+    color?: string | null;
     category_id?: string | null;
     is_goal?: boolean;
     target_amount?: number | null;

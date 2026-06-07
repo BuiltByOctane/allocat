@@ -11,6 +11,8 @@ import { useAchieveGoalAsset } from "@/lib/hooks/useGoals";
 import { useAssetCategories } from "@/lib/hooks/useAssetCategories";
 import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
+import { ColorPicker } from "@/components/ui/ColorPicker";
+import type { CatKey } from "@/lib/theme/dataViz";
 import { AssetEntrySheet } from "./AssetEntrySheet";
 
 type EntryType = "add_funds" | "withdraw" | "update_value";
@@ -19,6 +21,7 @@ export interface AssetDetail {
   id: string;
   name: string;
   icon: string | null;
+  color?: string | null;
   category_id: string | null;
   category_name: string;
   category_icon: string;
@@ -170,6 +173,17 @@ export function AssetDetailSheet({ asset, onClose }: AssetDetailSheetProps) {
                     </div>
                   </div>
 
+                  {/* Color */}
+                  <div className="flex items-center gap-3 flex-wrap mb-4">
+                    <span className="t-label text-muted-foreground shrink-0">Color</span>
+                    <ColorPicker
+                      value={(asset.color as CatKey | null) ?? null}
+                      onChange={(c) =>
+                        updateAssetMutation.mutate({ id: asset.id, updates: { color: c } })
+                      }
+                    />
+                  </div>
+
                   {/* Current value + invested + gain/loss */}
                   <div className="space-y-3">
                     <div>
@@ -199,7 +213,7 @@ export function AssetDetailSheet({ asset, onClose }: AssetDetailSheetProps) {
                               <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-0.5">
                                 {isPositive ? "Gain" : "Loss"}
                               </p>
-                              <span className={`text-sm font-semibold tabular-nums ${isPositive ? "text-green-500" : "text-red-500"}`}>
+                              <span className={`text-sm font-semibold tabular-nums ${isPositive ? "text-pos" : "text-neg"}`}>
                                 {isPositive ? "+" : ""}
                                 <CurrencyText value={gain} className="inline" />
                                 {" "}
@@ -369,7 +383,7 @@ export function AssetDetailSheet({ asset, onClose }: AssetDetailSheetProps) {
                   <div className="pt-2">
                     <button
                       onClick={() => { haptic.heavy(); setConfirmDelete(true); }}
-                      className="w-full py-3 text-red-500 text-sm font-medium rounded-xl border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 transition-colors"
+                      className="w-full py-3 text-destructive text-sm font-medium rounded-xl border border-destructive/20 bg-destructive/5 hover:bg-destructive/10 transition-colors"
                     >
                       Delete Asset
                     </button>

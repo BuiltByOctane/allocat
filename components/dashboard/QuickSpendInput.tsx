@@ -45,7 +45,7 @@ function AllocationStatus({ result }: { result: SpendResult }) {
         </span>
         <span
           className="font-mono text-[11px] tabular-nums"
-          style={{ color: isOver || isCritical ? "#ef4444" : isWarning ? "#f59e0b" : "var(--foreground)" }}
+          style={{ color: isOver || isCritical ? "var(--neg)" : isWarning ? "var(--warn)" : "var(--foreground)" }}
         >
           {isOver ? (
             <>
@@ -72,7 +72,7 @@ function AllocationStatus({ result }: { result: SpendResult }) {
               height: 2,
               background:
                 isOver
-                  ? j < 20 ? "#ef4444" : "var(--progress-empty)"
+                  ? j < 20 ? "var(--neg)" : "var(--progress-empty)"
                   : j / 20 < barPct / 100
                   ? "var(--foreground)"
                   : "var(--progress-empty)",
@@ -298,7 +298,7 @@ export default function QuickSpendInput({ categories }: QuickSpendInputProps) {
           </div>
 
           {validationError && (
-            <p className="font-mono text-[10px] text-red-400">{validationError}</p>
+            <p className="font-mono text-[10px] text-neg">{validationError}</p>
           )}
 
           <button

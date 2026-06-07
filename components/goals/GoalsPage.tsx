@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { GoalDetailSheet } from "./GoalDetailSheet";
 import type { GoalFormData } from "./GoalDetailSheet";
 import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Progress } from "@/components/ui/Progress";
+import { resolveColor } from "@/lib/theme/dataViz";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { CurrencySymbol } from "@/components/ui/CurrencySymbol";
@@ -24,6 +27,7 @@ type GoalRow = {
   user_id: string;
   name: string;
   icon: string | null;
+  color: string | null;
   target_amount: number;
   current_amount: number;
   notes: string | null;
@@ -33,20 +37,17 @@ type GoalRow = {
   updated_at: string;
 };
 
-function SegBar({ pct, segments = 20 }: { pct: number; segments?: number }) {
+function SegBar({
+  pct,
+  segments = 20,
+  color,
+}: {
+  pct: number;
+  segments?: number;
+  color?: string;
+}) {
   return (
-    <div className="flex gap-[2px] mt-2.5">
-      {Array.from({ length: segments }).map((_, j) => (
-        <div
-          key={j}
-          className="flex-1"
-          style={{
-            height: 3,
-            background: j / segments < pct ? "var(--foreground)" : "var(--progress-empty)",
-          }}
-        />
-      ))}
-    </div>
+    <Progress variant="segments" segments={segments} value={pct * 100} color={color} className="mt-2.5" />
   );
 }
 
@@ -121,6 +122,7 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
           name: formData.name,
           target_amount: formData.targetAmount,
           current_amount: formData.currentAmount,
+          color: formData.color,
         },
       });
       if (formData.icon !== (sheetGoal.icon ?? null) && formData.icon) {
@@ -187,21 +189,15 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
 
       <main className="pb-10 mt-20">
         {/* Tabs */}
-        <div className="px-7 pt-4 flex gap-1 border-b border-border">
-          {(["active", "achieved"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => { haptic.light(); setTab(t); }}
-              className={`font-mono text-[10px] tracking-[0.14em] uppercase px-3 py-2 border-b-2 transition-colors ${
-                tab === t
-                  ? "text-foreground border-foreground"
-                  : "text-muted-foreground border-transparent"
-              }`}
-            >
-              {t === "active" ? `Active · ${activeGoals.length}` : `Achieved · ${achievedGoals.length}`}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          className="px-7 pt-4"
+          options={[
+            { label: "Active", value: "active", count: activeGoals.length },
+            { label: "Achieved", value: "achieved", count: achievedGoals.length },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
 
         {/* Quick Update — Active only */}
         {tab === "active" && activeGoals.length > 0 && (
@@ -210,7 +206,7 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
               <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
                 Quick Update
               </span>
-              <span className="font-mono text-[10px] text-muted-foreground">Step 01</span>
+              <span className="font-mono text-[10px] text-muted-foreground">Select goal</span>
             </div>
 
             <div className="px-7">
@@ -334,6 +330,10 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
                       <div className="py-4">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
+                            <span
+                              className="size-1.5 rounded-full shrink-0"
+                              style={{ background: resolveColor({ id: goal.id, color: goal.color }) }}
+                            />
                             <span className="font-mono text-[10px] text-muted-foreground shrink-0 tabular-nums">{num}</span>
                             <span className="text-lg shrink-0">{goal.icon || "🎯"}</span>
                             <div className="min-w-0">
@@ -352,7 +352,7 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
                             </div>
                           </div>
                         </div>
-                        <SegBar pct={pct} />
+                        <SegBar pct={pct} color={resolveColor({ id: goal.id, color: goal.color })} />
                       </div>
                     </button>
                     {!isAchieved && (

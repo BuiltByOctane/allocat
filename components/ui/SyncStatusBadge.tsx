@@ -12,7 +12,7 @@ export function SyncStatusBadge() {
     <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-card border border-border">
       {!isOnline ? (
         <>
-          <span className="size-2 rounded-full bg-red-500 shrink-0" />
+          <span className="size-2 rounded-full bg-neg shrink-0" />
           <span className="text-[10px] font-medium text-muted-foreground">
             Offline
           </span>

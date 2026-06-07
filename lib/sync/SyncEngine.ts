@@ -4,6 +4,7 @@ import {
   updateBudgetTotal,
   updateCategoryAllocation,
   updateCategoryIcon,
+  updateCategoryColor,
   updateCategoryName,
   deleteCategory,
   addBudgetItem,
@@ -105,6 +106,8 @@ export class SyncEngine {
         const u = p.updates as Record<string, unknown>;
         if (u.icon !== undefined)
           return updateCategoryIcon(p.categoryId as string, u.icon as string);
+        if (u.color !== undefined)
+          return updateCategoryColor(p.categoryId as string, u.color as string | null);
         if (u.name !== undefined)
           return updateCategoryName(p.categoryId as string, u.name as string);
         if (u.allocated_amount !== undefined)

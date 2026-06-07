@@ -209,9 +209,9 @@ export default function ProfilePage() {
         <form action={signOut} className="w-full max-w-sm">
           <button
             type="submit"
-            className="group relative flex items-center justify-center w-full py-5 border border-red-500/30 hover:bg-red-500/10 transition-all duration-300 active:scale-95"
+            className="group relative flex items-center justify-center w-full py-5 border border-destructive/30 hover:bg-destructive/10 transition-all duration-300 active:scale-95"
           >
-            <span className="text-red-500 font-black uppercase tracking-[0.3em] text-sm">Logout</span>
+            <span className="text-destructive font-black uppercase tracking-[0.3em] text-sm">Logout</span>
           </button>
         </form>
 

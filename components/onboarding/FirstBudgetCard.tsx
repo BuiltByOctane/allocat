@@ -10,13 +10,8 @@ import {
 } from "@/lib/budget-templates";
 import { getBudgetForPeriod, setupBudgetFromTemplate } from "@/lib/actions/budget";
 import { markUserAsOnboarded } from "@/lib/actions/profile";
-
-const fmtINR = (n: number) =>
-  new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(n);
+import { useFormatCurrency } from "@/lib/hooks/useFormatCurrency";
+import { useCurrency } from "@/lib/providers/CurrencyProvider";
 
 // Templates worth offering as a starting point (skip the empty "blank" one —
 // "Skip for now" already covers starting empty).
@@ -53,6 +48,8 @@ export function FirstBudgetCard() {
   const router = useRouter();
   const haptic = useHaptic();
   const reduce = useReducedMotion();
+  const fmt = useFormatCurrency();
+  const sym = useCurrency().def.symbol;
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [total, setTotal] = useState("");
@@ -164,10 +161,10 @@ export function FirstBudgetCard() {
       {/* Total budget */}
       <div className="flex flex-col gap-2">
         <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/40">
-          Monthly budget (₹)
+          Monthly budget ({sym})
         </label>
         <div className="flex items-center gap-2 rounded-2xl border border-white/12 bg-white/[0.02] px-4 py-3 focus-within:border-white/40">
-          <span className="text-lg text-white/40">₹</span>
+          <span className="text-lg text-white/40">{sym}</span>
           <input
             type="number"
             inputMode="decimal"
@@ -187,7 +184,7 @@ export function FirstBudgetCard() {
             className="font-mono text-[11px] text-white/45"
           >
             {selected.categories.length} categories ·{" "}
-            {fmtINR(totalNum)} allocated across {selected.name}
+            {fmt(totalNum)} allocated across {selected.name}
           </motion.p>
         )}
       </div>

@@ -21,6 +21,7 @@ export async function getDebtData() {
     id: d.id,
     name: d.name,
     icon: d.icon,
+    color: d.color ?? null,
     type: d.type,
     principal: Number(d.principal),
     interestRate: Number(d.interest_rate),

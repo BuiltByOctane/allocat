@@ -4,6 +4,9 @@ import { useState, useEffect } from "react";
 import { DebtDetailSheet } from "./DebtDetailSheet";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { useHaptic } from "@/lib/hooks/useHaptic";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Progress } from "@/components/ui/Progress";
+import { resolveColor } from "@/lib/theme/dataViz";
 import {
   useAddDebt,
   useUpdateDebt,
@@ -24,6 +27,7 @@ type Debt = {
   id: string;
   name: string;
   icon?: string | null;
+  color?: string | null;
   type: "internal" | "external" | "lent";
   principal: number;
   interestRate: number;
@@ -46,25 +50,11 @@ function MonthCaption() {
   );
 }
 
-// 41-tick ruler — exact same pattern as BudgetPage TickRuler
+// 41-tick ruler over the shared <Progress/> primitive (pct is 0–1 here).
 function TickRuler({ pct }: { pct: number }) {
-  const count = 41;
   return (
     <div>
-      <div className="relative h-[18px]">
-        <div className="absolute inset-0 flex justify-between items-end">
-          {Array.from({ length: count }).map((_, i) => (
-            <div
-              key={i}
-              style={{
-                width: 1,
-                height: i % 10 === 0 ? 14 : i % 5 === 0 ? 9 : 5,
-                background: i / (count - 1) <= pct ? "var(--foreground)" : "var(--progress-empty)",
-              }}
-            />
-          ))}
-        </div>
-      </div>
+      <Progress variant="ticks" value={pct * 100} />
       <div className="flex justify-between mt-1.5">
         {["0", "25%", "50%", "75%", "paid"].map((l) => (
           <span key={l} className="font-mono text-[9px] text-foreground/30 tracking-[0.08em]">
@@ -76,22 +66,10 @@ function TickRuler({ pct }: { pct: number }) {
   );
 }
 
-// 20-segment dash bar per debt — matches budget SegBar style
-function SegBar({ pct }: { pct: number }) {
-  const count = 20;
+// 20-segment dash bar per debt (pct is 0–1).
+function SegBar({ pct, color }: { pct: number; color?: string }) {
   return (
-    <div className="flex gap-[2px] mt-2.5">
-      {Array.from({ length: count }).map((_, j) => (
-        <div
-          key={j}
-          className="flex-1"
-          style={{
-            height: 3,
-            background: j / count < pct ? "var(--foreground)" : "var(--progress-empty)",
-          }}
-        />
-      ))}
-    </div>
+    <Progress variant="segments" segments={20} value={pct * 100} color={color} className="mt-2.5" />
   );
 }
 
@@ -172,6 +150,7 @@ export default function DebtPage({ data }: { data: Debt[] }) {
     interestType: "flat" | "diminishing";
     loanTenureMonths: number | null;
     totalRepayable: number;
+    color: string | null;
   }) {
     if (sheetMode === "add") {
       addDebtMutation.mutate({
@@ -195,6 +174,7 @@ export default function DebtPage({ data }: { data: Debt[] }) {
           interest_type: formData.interestType,
           loan_tenure_months: formData.loanTenureMonths,
           total_repayable: formData.totalRepayable,
+          color: formData.color,
         },
       });
     }
@@ -320,7 +300,7 @@ const trendPct = trendData?.trendPct ?? 0;
               <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
                 Quick Payment
               </span>
-              <span className="font-mono text-[10px] text-muted-foreground">Step 01</span>
+              <span className="font-mono text-[10px] text-muted-foreground">Select debt</span>
             </div>
 
             <div className="px-7">
@@ -388,24 +368,17 @@ const trendPct = trendData?.trendPct ?? 0;
         )}
 
         {/* ── Tabs ─────────────────────────────────────────────────── */}
-        <div id="debt-tabs" className="px-7 pt-5 pb-1 flex gap-5">
-          {([
-            { key: "internal", count: allActiveDebts.filter((d) => d.type === "internal").length, label: "Internal" },
-            { key: "external", count: allActiveDebts.filter((d) => d.type === "external").length, label: "External" },
-            { key: "closed", count: closedDebts.length, label: "Closed" },
-          ] as const).map(({ key, count, label }) => (
-            <button
-              key={key}
-              onClick={() => { haptic.light(); setActiveTab(key); }}
-              className={`font-mono text-[10px] tracking-[0.14em] uppercase pb-1 transition-colors ${
-                activeTab === key
-                  ? "text-foreground border-b border-foreground"
-                  : "text-muted-foreground border-b border-transparent hover:text-foreground"
-              }`}
-            >
-              {label} · {count}
-            </button>
-          ))}
+        <div id="debt-tabs">
+          <SegmentedControl
+            className="px-7 pt-5"
+            options={[
+              { label: "Internal", value: "internal", count: allActiveDebts.filter((d) => d.type === "internal").length },
+              { label: "External", value: "external", count: allActiveDebts.filter((d) => d.type === "external").length },
+              { label: "Closed", value: "closed", count: closedDebts.length },
+            ]}
+            value={activeTab}
+            onChange={setActiveTab}
+          />
         </div>
 
         {/* ── Active Debts ──────────────────────────────────────────── */}
@@ -443,6 +416,10 @@ const trendPct = trendData?.trendPct ?? 0;
                   >
                     <div className="flex justify-between items-baseline">
                       <div className="flex items-baseline gap-2.5">
+                        <span
+                          className="size-1.5 rounded-full shrink-0 self-center"
+                          style={{ background: resolveColor({ id: debt.id, color: debt.color }) }}
+                        />
                         <span className="font-mono text-[10px] text-foreground/30">
                           {String(i + 1).padStart(2, "0")}
                         </span>
@@ -465,7 +442,7 @@ const trendPct = trendData?.trendPct ?? 0;
                         )}
                       </div>
                     </div>
-                    <SegBar pct={paidPct} />
+                    <SegBar pct={paidPct} color={resolveColor({ id: debt.id, color: debt.color })} />
                     <div className="flex justify-between mt-1.5">
                       <span className="font-mono text-[9px] text-muted-foreground tracking-[0.08em] uppercase">
                         {Math.round(paidPct * 100)}% paid off

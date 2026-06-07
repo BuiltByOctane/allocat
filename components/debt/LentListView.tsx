@@ -170,7 +170,7 @@ export function LentDetailSheet({
                   className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
-              {error && <p className="text-[11px] text-red-400 font-mono">{error}</p>}
+              {error && <p className="text-[11px] text-neg font-mono">{error}</p>}
             </div>
           </div>
           <div className="px-5 pb-8 pt-3 border-t border-border shrink-0 space-y-2">
@@ -186,8 +186,8 @@ export function LentDetailSheet({
                   onClick={handleDelete}
                   className={`px-4 py-2.5 rounded-lg text-xs font-mono uppercase tracking-[0.1em] transition-colors ${
                     confirmDelete
-                      ? "bg-red-500/20 text-red-400 border border-red-500/30"
-                      : "bg-muted text-muted-foreground hover:text-red-400"
+                      ? "bg-destructive/20 text-destructive border border-destructive/30"
+                      : "bg-muted text-muted-foreground hover:text-destructive"
                   }`}
                 >
                   {confirmDelete ? "Confirm" : "Delete"}
@@ -206,8 +206,8 @@ export function LentDetailSheet({
                   onClick={handleDelete}
                   className={`px-4 py-2.5 rounded-lg text-xs font-mono uppercase tracking-[0.1em] transition-colors ${
                     confirmDelete
-                      ? "bg-red-500/20 text-red-400 border border-red-500/30"
-                      : "bg-muted text-muted-foreground hover:text-red-400"
+                      ? "bg-destructive/20 text-destructive border border-destructive/30"
+                      : "bg-muted text-muted-foreground hover:text-destructive"
                   }`}
                 >
                   {confirmDelete ? "Confirm" : "Delete"}
@@ -289,7 +289,7 @@ export function PaymentSheet({
             <p id="pay-sheet-desc" className="sr-only">Record received payment</p>
           </div>
           <div className="px-5 py-4">
-            <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mb-2">Step 01</div>
+            <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mb-2">Amount</div>
             <div className="flex items-baseline gap-1.5 py-3 border-t border-border border-b border-b-border">
               <span className="currency-symbol font-sans text-foreground/30" style={{ fontSize: "calc(0.62 * 28px)" }}><CurrencySymbol /></span>
               <input

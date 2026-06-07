@@ -292,7 +292,7 @@ export function ItemDetailSheet({
                       </span>
                       <span
                         className={`text-xs font-bold tabular-nums ${
-                          isOverAllocation ? "text-red-400" : "text-primary"
+                          isOverAllocation ? "text-neg" : "text-primary"
                         }`}
                       >
                         {isOverAllocation
@@ -310,7 +310,7 @@ export function ItemDetailSheet({
                   <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-200 ${
-                        isOverAllocation ? "bg-red-500" : "bg-primary"
+                        isOverAllocation ? "bg-neg" : "bg-primary"
                       }`}
                       style={{ width: `${usedPct}%` }}
                     />
@@ -393,7 +393,7 @@ export function ItemDetailSheet({
                         !hasCategoryBudget
                           ? "opacity-40 cursor-not-allowed border-border"
                           : isOverAllocation
-                          ? "border-red-400 focus:border-red-400"
+                          ? "border-neg focus:border-neg"
                           : "border-border focus:border-primary"
                       }`}
                       placeholder={hasCategoryBudget ? "0" : "—"}
@@ -405,7 +405,7 @@ export function ItemDetailSheet({
                       Set category budget first
                     </p>
                   ) : isOverAllocation ? (
-                    <p className="text-[10px] text-red-400">
+                    <p className="text-[10px] text-neg">
                       Over by <CurrencyText value={Math.abs(remaining!)} />
                     </p>
                   ) : remaining !== null && plannedNum > 0 ? (
@@ -528,7 +528,7 @@ export function ItemDetailSheet({
                 />
               </div>
 
-              {error ? <p className="text-xs text-red-400">{error}</p> : null}
+              {error ? <p className="text-xs text-neg">{error}</p> : null}
 
               {/* Actions */}
               <div className="flex flex-col gap-3 pt-1">
@@ -554,7 +554,7 @@ export function ItemDetailSheet({
                     onClick={handleDelete}
                     className={`w-full py-3.5 rounded-xl text-sm font-medium active:scale-[0.98] transition-all ${
                       confirmDelete
-                        ? "bg-red-500/10 text-red-500 font-bold"
+                        ? "bg-destructive/10 text-destructive font-bold"
                         : "bg-muted text-muted-foreground"
                     }`}
                   >

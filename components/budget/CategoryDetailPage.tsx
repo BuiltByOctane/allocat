@@ -8,6 +8,8 @@ import { useFormatCurrency } from "@/lib/hooks/useFormatCurrency";
 import { InlineEditableText } from "@/components/ui/InlineEditableText";
 import { InlineEditableNumber } from "@/components/ui/InlineEditableNumber";
 import EmojiPickerModal from "@/components/ui/EmojiPickerModal";
+import { ColorPicker } from "@/components/ui/ColorPicker";
+import type { CatKey } from "@/lib/theme/dataViz";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { ItemDetailSheet, NEW_ITEM_ID } from "@/components/budget/ItemDetailSheet";
 import { useHaptic } from "@/lib/hooks/useHaptic";
@@ -85,6 +87,7 @@ interface CategoryData {
   id: string;
   name: string;
   icon?: string | null;
+  color?: string | null;
   type?: "needs" | "wants" | "investments" | "misc" | null;
   categoryAllocation: number;
   totalBudget: number;
@@ -107,6 +110,7 @@ function CategoryDetailContent({
 
   const [items, setItems] = useState<BudgetItem[]>(data.items);
   const [icon, setIcon] = useState(data.icon || null);
+  const [color, setColor] = useState<CatKey | null>((data.color as CatKey | null) ?? null);
   const [name, setName] = useState(data.name);
   const [categoryAllocation, setCategoryAllocation] = useState(data.categoryAllocation);
   const [selectedItem, setSelectedItem] = useState<BudgetItem | null>(null);
@@ -402,6 +406,19 @@ function CategoryDetailContent({
     }
   }
 
+  async function handleUpdateColor(next: CatKey | null) {
+    const prev = color;
+    setColor(next);
+    try {
+      const db = getDB();
+      await db.categories.update(categoryId, { color: next, updated_at: new Date().toISOString() });
+      await enqueue({ table: "categories", operation: "UPDATE", recordId: categoryId, payload: { categoryId, updates: { color: next } } });
+      invalidateBudgetCaches();
+    } catch {
+      setColor(prev);
+    }
+  }
+
   async function handleUpdateCategoryName(newName: string) {
     if (!newName.trim()) return;
     const trimmed = newName.trim();
@@ -491,7 +508,7 @@ function CategoryDetailContent({
         <button
           id="category-delete"
           onClick={() => { haptic.heavy(); setIsConfirmDeleteOpen(true); }}
-          className="size-9 flex items-center justify-center text-muted-foreground hover:text-red-400 transition-colors"
+          className="size-9 flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
           title="Delete Category"
         >
           <span className="material-symbols-outlined text-[18px]">delete</span>
@@ -500,6 +517,12 @@ function CategoryDetailContent({
 
       {/* Hairline */}
       <div className="h-px bg-border mx-7" />
+
+      {/* Color */}
+      <div className="px-7 py-3 flex items-center gap-3 flex-wrap border-b border-border">
+        <span className="t-label text-muted-foreground shrink-0">Color</span>
+        <ColorPicker value={color} onChange={handleUpdateColor} />
+      </div>
 
       <div className="md:grid md:grid-cols-[1fr_1.5fr] flex-1">
         {/* Left — stats */}
@@ -512,7 +535,7 @@ function CategoryDetailContent({
               </span>
               <div
                 className="text-[44px] md:text-[52px] leading-[0.95] tracking-[-0.025em] tabular-nums mt-1"
-                style={{ color: left < 0 ? "#ef4444" : "var(--foreground)" }}
+                style={{ color: left < 0 ? "var(--neg)" : "var(--foreground)" }}
               >
                 {left < 0 ? "−" : ""}
                 <CurrencyText value={Math.abs(left)} />
@@ -584,7 +607,7 @@ function CategoryDetailContent({
                 Set Total Budget first →
               </button>
             ) : remainingBudgetCapacity < 0 ? (
-              <p className="font-mono text-[10px] text-red-400">
+              <p className="font-mono text-[10px] text-neg">
                 <CurrencyText value={Math.abs(remainingBudgetCapacity)} /> over
                 {" "}total budget cap.
               </p>
@@ -595,7 +618,7 @@ function CategoryDetailContent({
               </p>
             )}
             {validationError && (
-              <p className="font-mono text-[10px] text-red-400">{validationError}</p>
+              <p className="font-mono text-[10px] text-neg">{validationError}</p>
             )}
           </div>
         </div>

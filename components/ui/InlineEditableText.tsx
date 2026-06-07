@@ -60,13 +60,24 @@ export function InlineEditableText({ value, onSave, className = "", placeholder 
     );
   }
 
+  const enterEdit = () => {
+    haptic.light();
+    setIsEditing(true);
+  };
+
   return (
     <span
-      onClick={() => {
-        haptic.light();
-        setIsEditing(true);
+      role="button"
+      tabIndex={0}
+      aria-label="Edit text"
+      onClick={enterEdit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          enterEdit();
+        }
       }}
-      className={`cursor-pointer hover:bg-muted transition-colors rounded px-1 -mx-1 ${className}`}
+      className={`cursor-pointer border-b border-dotted border-muted-foreground/50 hover:border-foreground transition-colors ${className}`}
     >
       {value || (placeholder && <span className="opacity-50">{placeholder}</span>)}
     </span>

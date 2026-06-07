@@ -145,6 +145,7 @@ export function useAddBudgetCategory() {
         user_id: "__pending__",
         name: name.trim(),
         icon: null,
+        color: null,
         type,
         allocated_amount: 0,
         created_at: now,
@@ -224,6 +225,38 @@ export function useUpdateCategoryIcon() {
         operation: "UPDATE",
         recordId: categoryId,
         payload: { categoryId, updates: { icon } },
+      });
+    },
+    onSuccess: (_data, { month, year }) => {
+      qc.invalidateQueries({ queryKey: budgetKey(month, year) });
+    },
+  });
+}
+
+export function useUpdateCategoryColor() {
+  const qc = useQueryClient();
+  const enqueue = useEnqueue();
+
+  return useMutation({
+    mutationFn: async ({
+      categoryId,
+      color,
+    }: {
+      categoryId: string;
+      color: string | null;
+      month: number;
+      year: number;
+    }) => {
+      const db = getDB();
+      await db.categories.update(categoryId, {
+        color,
+        updated_at: new Date().toISOString(),
+      });
+      await enqueue({
+        table: "categories",
+        operation: "UPDATE",
+        recordId: categoryId,
+        payload: { categoryId, updates: { color } },
       });
     },
     onSuccess: (_data, { month, year }) => {

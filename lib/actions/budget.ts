@@ -206,6 +206,7 @@ export async function getBudgetForPeriod(month: number, year: number) {
       id: cat.id,
       name: cat.name,
       icon: cat.icon,
+      color: cat.color ?? null,
       type: cat.type,
       allocated: Number(cat.allocated_amount || 0),
       spent,
@@ -351,6 +352,23 @@ export async function updateCategoryIcon(categoryId: string, icon: string) {
   const { data, error } = await supabase
     .from("categories")
     .update({ icon })
+    .eq("id", categoryId)
+    .eq("user_id", user.id)
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function updateCategoryColor(categoryId: string, color: string | null) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const { data, error } = await supabase
+    .from("categories")
+    .update({ color })
     .eq("id", categoryId)
     .eq("user_id", user.id)
     .select()
@@ -1018,6 +1036,7 @@ export async function getCategoryData(categoryId: string) {
     id: categoryWithItems.id,
     name: categoryWithItems.name,
     icon: categoryWithItems.icon,
+    color: categoryWithItems.color ?? null,
     type: categoryWithItems.type,
     categoryAllocation: Number(categoryWithItems.allocated_amount || 0),
     totalBudget: allocationContext.totalBudget,

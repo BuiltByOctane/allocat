@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { MaterialSymbol } from "@/components/ui/MaterialSymbol";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import ActivityLogItem from "./ActivityLogItem";
 import ActivityDetailSheet from "./ActivityDetailSheet";
 import {
@@ -34,29 +35,6 @@ function monthLabel(m: SelectedMonth) {
 
 function monthKey(m: SelectedMonth) {
   return `${m.year}-${m.month}`;
-}
-
-function Chip({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`shrink-0 px-3 py-1.5 text-xs font-bold uppercase tracking-widest border transition-colors ${
-        active
-          ? "bg-foreground text-background border-foreground"
-          : "bg-transparent text-muted-foreground border-border hover:border-foreground/40"
-      }`}
-    >
-      {label}
-    </button>
-  );
 }
 
 interface ActivityPageProps {
@@ -91,40 +69,35 @@ export default function ActivityPage({ overrideLogs }: ActivityPageProps) {
       </header>
 
       <div className="px-5 pt-4 space-y-2">
-        <div id="activity-category-chips" className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-          {CATEGORY_CHIPS.map((chip) => (
-            <Chip
-              key={chip.value}
-              label={chip.label}
-              active={filter.category === chip.value}
-              onClick={() =>
-                setFilter((f) => ({ ...f, category: chip.value }))
-              }
-            />
-          ))}
+        <div id="activity-category-chips">
+          <SegmentedControl
+            variant="pill"
+            scroll
+            options={CATEGORY_CHIPS}
+            value={filter.category}
+            onChange={(category) => setFilter((f) => ({ ...f, category }))}
+          />
         </div>
 
         {availableMonths.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-            <Chip
-              label="All Time"
-              active={filter.selectedMonth === null}
-              onClick={() => setFilter((f) => ({ ...f, selectedMonth: null }))}
-            />
-            {availableMonths.map((m) => (
-              <Chip
-                key={monthKey(m)}
-                label={monthLabel(m)}
-                active={
-                  filter.selectedMonth !== null &&
-                  monthKey(filter.selectedMonth) === monthKey(m)
-                }
-                onClick={() =>
-                  setFilter((f) => ({ ...f, selectedMonth: m }))
-                }
-              />
-            ))}
-          </div>
+          <SegmentedControl
+            variant="pill"
+            scroll
+            options={[
+              { label: "All Time", value: "__all__" },
+              ...availableMonths.map((m) => ({ label: monthLabel(m), value: monthKey(m) })),
+            ]}
+            value={filter.selectedMonth ? monthKey(filter.selectedMonth) : "__all__"}
+            onChange={(v) =>
+              setFilter((f) => ({
+                ...f,
+                selectedMonth:
+                  v === "__all__"
+                    ? null
+                    : availableMonths.find((m) => monthKey(m) === v) ?? null,
+              }))
+            }
+          />
         )}
       </div>
 

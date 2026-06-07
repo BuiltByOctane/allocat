@@ -20,6 +20,7 @@ export async function getDebtFromIDB() {
     id: d.id,
     name: d.name,
     icon: d.icon,
+    color: d.color ?? null,
     type: d.type,
     principal: Number(d.principal),
     interestRate: Number(d.interest_rate),
@@ -90,6 +91,7 @@ export function useAddDebt() {
         user_id: "__pending__",
         name,
         icon: null,
+        color: null,
         type,
         principal,
         interest_rate: interestRate,
@@ -143,6 +145,7 @@ export function useUpdateDebt() {
         interest_type?: "flat" | "diminishing";
         loan_tenure_months?: number | null;
         total_repayable?: number;
+        color?: string | null;
       };
     }) => {
       const db = getDB();

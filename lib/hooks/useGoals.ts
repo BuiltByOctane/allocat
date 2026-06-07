@@ -15,6 +15,7 @@ export interface GoalRow {
   user_id: string;
   name: string;
   icon: string | null;
+  color: string | null;
   target_amount: number;
   current_amount: number;
   notes: string | null;
@@ -41,6 +42,7 @@ function toGoalRow(asset: any): GoalRow {
     user_id: asset.user_id,
     name: asset.name,
     icon: asset.icon ?? null,
+    color: asset.color ?? null,
     target_amount: Number(asset.target_amount ?? 0),
     current_amount: Number(asset.value ?? 0),
     notes: null,
@@ -65,6 +67,7 @@ async function ensureGoalsAssetCategoryId(userId: string): Promise<string | null
     user_id: userId,
     name: "Goals",
     icon: "🎯",
+    color: null,
     created_at: now,
   });
   return tempId;
@@ -108,6 +111,7 @@ export function useAddGoal() {
         user_id: userId,
         name,
         icon: icon ?? null,
+        color: null,
         category: null,
         category_id: categoryId,
         value: 0,
@@ -172,6 +176,7 @@ export function useUpdateGoal() {
         current_amount?: number;
         notes?: string | null;
         priority?: number;
+        color?: string | null;
       };
     }) => {
       const db = getDB();
@@ -197,6 +202,11 @@ export function useUpdateGoal() {
             Number(asset.invested_amount ?? asset.value) + delta;
           serverUpdates.value = Number(updates.current_amount);
         }
+      }
+
+      if (updates.color !== undefined) {
+        idbPatch.color = updates.color;
+        serverUpdates.color = updates.color;
       }
 
       await db.assets.update(id, idbPatch);

@@ -9,7 +9,7 @@ import { InlineEditableText } from "@/components/ui/InlineEditableText";
 import { InlineEditableNumber } from "@/components/ui/InlineEditableNumber";
 import EmojiPickerModal from "@/components/ui/EmojiPickerModal";
 import { ColorPicker } from "@/components/ui/ColorPicker";
-import type { CatKey } from "@/lib/theme/dataViz";
+import { resolveColor, softText, type CatKey } from "@/lib/theme/dataViz";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { ItemDetailSheet, NEW_ITEM_ID } from "@/components/budget/ItemDetailSheet";
 import { useHaptic } from "@/lib/hooks/useHaptic";
@@ -535,7 +535,7 @@ function CategoryDetailContent({
               </span>
               <div
                 className="text-[44px] md:text-[52px] leading-[0.95] tracking-[-0.025em] tabular-nums mt-1"
-                style={{ color: left < 0 ? "var(--neg)" : "var(--foreground)" }}
+                style={{ color: left < 0 ? "var(--neg)" : softText(resolveColor({ id: categoryId, color })) }}
               >
                 {left < 0 ? "−" : ""}
                 <CurrencyText value={Math.abs(left)} />

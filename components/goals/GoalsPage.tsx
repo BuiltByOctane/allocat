@@ -187,10 +187,10 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
         </div>
       </header>
 
-      <main className="pb-10 mt-20">
+      <main className="pb-10 mt-27">
         {/* Tabs */}
         <SegmentedControl
-          className="px-7 pt-4"
+          className="px-7 pt-2"
           options={[
             { label: "Active", value: "active", count: activeGoals.length },
             { label: "Achieved", value: "achieved", count: achievedGoals.length },
@@ -331,7 +331,7 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
                             <span
-                              className="size-1.5 rounded-full shrink-0"
+                              className="w-[3px] h-3.5 rounded-full shrink-0 self-center"
                               style={{ background: resolveColor({ id: goal.id, color: goal.color }) }}
                             />
                             <span className="font-mono text-[10px] text-muted-foreground shrink-0 tabular-nums">{num}</span>

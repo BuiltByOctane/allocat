@@ -327,7 +327,7 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
                         <div className="flex justify-between items-baseline gap-2">
                           <div className="flex items-baseline gap-2.5 min-w-0">
                             <span
-                              className="size-1.5 rounded-full shrink-0 self-center"
+                              className="w-[3px] h-3.5 rounded-full shrink-0 self-center"
                               style={{ background: resolveColor({ id: cat.id, color: cat.color }) }}
                             />
                             <span

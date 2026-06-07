@@ -384,7 +384,7 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
                       <div className="flex justify-between items-baseline gap-3">
                         <div className="flex items-baseline gap-2.5 min-w-0">
                           <span
-                            className="size-1.5 rounded-full shrink-0 self-center"
+                            className="w-[3px] h-3.5 rounded-full shrink-0 self-center"
                             style={{ background: resolveColor({ id: asset.id, color: asset.color }) }}
                           />
                           <span className="font-mono text-[10px] shrink-0" style={{ color: "var(--dimmer)" }}>

@@ -6,7 +6,7 @@ import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Progress } from "@/components/ui/Progress";
-import { resolveColor, softText } from "@/lib/theme/dataViz";
+import { resolveColor } from "@/lib/theme/dataViz";
 import {
   useAddDebt,
   useUpdateDebt,
@@ -417,7 +417,7 @@ const trendPct = trendData?.trendPct ?? 0;
                     <div className="flex justify-between items-baseline">
                       <div className="flex items-baseline gap-2.5">
                         <span
-                          className="w-[3px] h-3.5 rounded-full shrink-0 self-center"
+                          className="size-1.5 rounded-full shrink-0 self-center"
                           style={{ background: resolveColor({ id: debt.id, color: debt.color }) }}
                         />
                         <span className="font-mono text-[10px] text-foreground/30">
@@ -436,9 +436,7 @@ const trendPct = trendData?.trendPct ?? 0;
                         )}
                       </div>
                       <div className="font-mono text-[12px] text-right inline-flex items-baseline gap-1">
-                        <span style={{ color: softText(resolveColor({ id: debt.id, color: debt.color })) }}>
-                          <CurrencyText value={remaining} />
-                        </span>
+                        <CurrencyText value={remaining} className="text-foreground" />
                         {repayable !== debt.principal && (
                           <span className="text-muted-foreground inline-flex items-baseline gap-0.5">/ <CurrencyText value={repayable} className="text-muted-foreground" /></span>
                         )}

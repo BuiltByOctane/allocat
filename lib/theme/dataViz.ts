@@ -66,19 +66,3 @@ export function resolveColorKey(row: { id: string; color?: string | null }): Cat
 export function resolveColor(row: { id: string; color?: string | null }): string {
   return catVar(resolveColorKey(row));
 }
-
-/**
- * "Whisper" tints — keep color present but quiet so the editorial monochrome
- * survives. Both lean on color-mix so the single percentage here is the only
- * knob to dial intensity up/down globally.
- */
-
-/** Soften a color toward the foreground for tinting text/numbers (default 60%). */
-export function softText(color: string, mix = 60): string {
-  return `color-mix(in srgb, ${color} ${mix}%, var(--foreground))`;
-}
-
-/** A faint surface wash of a color over the card background (default 7%). */
-export function tintSurface(color: string, pct = 7): string {
-  return `color-mix(in srgb, ${color} ${pct}%, var(--card))`;
-}

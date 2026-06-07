@@ -7,7 +7,7 @@ import type { GoalFormData } from "./GoalDetailSheet";
 import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Progress } from "@/components/ui/Progress";
-import { resolveColor } from "@/lib/theme/dataViz";
+import { resolveColor, softText } from "@/lib/theme/dataViz";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { CurrencySymbol } from "@/components/ui/CurrencySymbol";
@@ -331,7 +331,7 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
                             <span
-                              className="size-1.5 rounded-full shrink-0"
+                              className="w-[3px] h-3.5 rounded-full shrink-0 self-center"
                               style={{ background: resolveColor({ id: goal.id, color: goal.color }) }}
                             />
                             <span className="font-mono text-[10px] text-muted-foreground shrink-0 tabular-nums">{num}</span>
@@ -346,7 +346,10 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
                             </div>
                           </div>
                           <div className="text-right shrink-0">
-                            <div className="font-mono text-[11px] tabular-nums text-foreground">{pctDisplay}%</div>
+                            <div
+                              className="font-mono text-[11px] tabular-nums"
+                              style={{ color: softText(resolveColor({ id: goal.id, color: goal.color })) }}
+                            >{pctDisplay}%</div>
                             <div className="font-mono text-[9px] text-muted-foreground tabular-nums mt-0.5">
                               <CurrencyText value={current} /> / <CurrencyText value={target} />
                             </div>

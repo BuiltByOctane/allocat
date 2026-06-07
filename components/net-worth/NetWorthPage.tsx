@@ -5,7 +5,7 @@ import { CurrencyText } from "@/components/ui/CurrencyText";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { DonutChart } from "@/components/ui/charts/DonutChart";
 import { Progress } from "@/components/ui/Progress";
-import { resolveColor } from "@/lib/theme/dataViz";
+import { resolveColor, softText, tintSurface } from "@/lib/theme/dataViz";
 import NetWorthEmptyState from "./NetWorthEmptyState";
 import { AddAssetSheet } from "./AddAssetSheet";
 import { AssetDetailSheet, type AssetDetail } from "./AssetDetailSheet";
@@ -162,6 +162,13 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
   const totalAssets = assets.reduce((s, a) => s + a.value, 0);
   const netWorth = totalAssets - data.totalLiabilities;
   const history = data.netWorthHistory ?? [];
+  const nwValues = history.map((h) => Number(h.net_worth));
+  const nwTrendColor =
+    nwValues.length >= 2
+      ? nwValues[nwValues.length - 1] >= nwValues[0]
+        ? "var(--pos)"
+        : "var(--neg)"
+      : null;
 
   // Derive from live data so sheet always reflects latest values
   const selectedAsset = selectedAssetId
@@ -270,13 +277,17 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
       </div>
 
       {/* Hero — total net worth */}
-      <div id="net-worth-hero" className="px-7 pt-[26px] pb-[22px] mt-20">
+      <div
+        id="net-worth-hero"
+        className="px-7 pt-[26px] pb-[22px] mt-20"
+        style={nwTrendColor ? { background: tintSurface(nwTrendColor, 6) } : undefined}
+      >
         <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
           Total net worth
         </div>
         <div
-          className="font-display max-w-full leading-[0.95] tracking-[-0.025em] mt-2.5 text-foreground"
-          style={{ fontSize: 60 }}
+          className="font-display max-w-full leading-[0.95] tracking-[-0.025em] mt-2.5"
+          style={{ fontSize: 60, color: nwTrendColor ? softText(nwTrendColor, 35) : "var(--foreground)" }}
         >
           <CurrencyText value={netWorth} />
         </div>
@@ -384,7 +395,7 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
                       <div className="flex justify-between items-baseline gap-3">
                         <div className="flex items-baseline gap-2.5 min-w-0">
                           <span
-                            className="size-1.5 rounded-full shrink-0 self-center"
+                            className="w-[3px] h-3.5 rounded-full shrink-0 self-center"
                             style={{ background: resolveColor({ id: asset.id, color: asset.color }) }}
                           />
                           <span className="font-mono text-[10px] shrink-0" style={{ color: "var(--dimmer)" }}>
@@ -398,7 +409,10 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
                             · {asset.category_name}
                           </span>
                         </div>
-                        <div className="font-mono text-[12px] tabular-nums shrink-0 whitespace-nowrap text-foreground">
+                        <div
+                          className="font-mono text-[12px] tabular-nums shrink-0 whitespace-nowrap"
+                          style={{ color: softText(resolveColor({ id: asset.id, color: asset.color })) }}
+                        >
                           <CurrencyText value={asset.value} />
                           {asset.is_goal && asset.target_amount && asset.target_amount > 0 && (
                             <span className="text-muted-foreground">

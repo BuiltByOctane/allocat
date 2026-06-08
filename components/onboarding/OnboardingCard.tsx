@@ -52,10 +52,10 @@ export function OnboardingCard({
         <motion.div
           {...rise}
           transition={{ duration: 0.45, delay: 0.1 }}
-          className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.22em] text-white/40"
+          className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-accent-strong"
         >
           {icon ? (
-            <MaterialSymbol icon={icon} className="text-sm text-white/55" />
+            <MaterialSymbol icon={icon} className="text-sm text-accent-strong" />
           ) : null}
           {eyebrow}
         </motion.div>

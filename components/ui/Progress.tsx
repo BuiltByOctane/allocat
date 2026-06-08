@@ -25,9 +25,9 @@ interface ProgressProps {
 }
 
 const STATE_FILL: Record<ProgressState, string> = {
-  normal: "var(--foreground)",
+  normal: "var(--accent-strong)",
   warn: "var(--warn)",
-  over: "var(--neg)",
+  over: "var(--foreground)",
 };
 
 const EMPTY = "var(--progress-empty)";
@@ -80,17 +80,17 @@ export function Progress({
     );
   }
 
-  // solid
+  // solid — Neo rounded lime bar (height set via className, e.g. h-1.5)
   return (
     <div
-      className={`w-full overflow-hidden ${className}`}
-      style={{ height: 3, background: EMPTY }}
+      className={`w-full overflow-hidden rounded-full h-[7px] ${className}`}
+      style={{ background: EMPTY }}
       role="progressbar"
       aria-valuenow={Math.round(pct)}
       aria-valuemin={0}
       aria-valuemax={100}
     >
-      <div style={{ width: `${pct}%`, height: "100%", background: fill }} />
+      <div className="h-full rounded-full" style={{ width: `${pct}%`, background: fill }} />
     </div>
   );
 }

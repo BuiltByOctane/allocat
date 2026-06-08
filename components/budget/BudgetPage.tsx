@@ -12,6 +12,7 @@ import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { InlineEditableNumber } from "@/components/ui/InlineEditableNumber";
 import { Progress } from "@/components/ui/Progress";
+import { Card } from "@/components/ui/Card";
 import { resolveColor } from "@/lib/theme/dataViz";
 import BudgetEmptyState from "@/components/budget/BudgetEmptyState";
 import { BudgetSetupSheet } from "@/components/budget/BudgetSetupSheet";
@@ -46,33 +47,6 @@ interface BudgetPageProps {
   defaultYear: number;
 }
 
-// Thin wrappers over the shared <Progress/> primitive — preserve each call
-// site's spacing + input convention (TickRuler takes 0–100, SegBar takes 0–1).
-function TickRuler({ pct }: { pct: number }) {
-  return <Progress variant="ticks" value={pct} className="mt-[18px]" />;
-}
-
-function SegBar({
-  pct,
-  state,
-  color,
-}: {
-  pct: number;
-  state?: "normal" | "over";
-  color?: string;
-}) {
-  return (
-    <Progress
-      variant="segments"
-      segments={20}
-      value={pct * 100}
-      state={state}
-      color={state === "over" ? undefined : color}
-      className="mt-2.5"
-    />
-  );
-}
-
 export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPageProps) {
   const router = useRouter();
   const haptic = useHaptic();
@@ -89,8 +63,6 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
   const totalRemaining = totalAllocated - totalSpent;
   const unallocatedBudget = data.totalBudget - totalAllocated;
   const spentPct = totalAllocated > 0 ? Math.round((totalSpent / totalAllocated) * 100) : 0;
-  const volNum = String(defaultMonth).padStart(2, "0");
-  const monthName = MONTHS[defaultMonth - 1];
 
   function handleMonthChange(newMonthIndex: number) {
     router.push(`?month=${newMonthIndex + 1}&year=${defaultYear}`);
@@ -151,237 +123,154 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
 
   return (
     <>
-      <div className="md:grid md:grid-cols-[1fr_1.5fr] md:gap-x-0 ">
-        {/* Left column / mobile full */}
-        <div>
-          {/* Masthead */}
-          <div className="fixed w-full top-0 z-10 bg-background">
-            <div className="px-7 pt-6 pb-[18px] flex items-end justify-between">
-              <div>
-                <div className="font-display text-[32px] leading-none tracking-[-0.02em] text-foreground">
-                  AlloCat
-                </div>
-                <div className="mt-2 flex items-center gap-1">
-                  <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
-                    Vol. {volNum} ·
-                  </span>
-                  <BottomSheetSelect
-                    title="Select Month"
-                    options={MONTHS.map((m, i) => ({ value: String(i), label: `${m} ${defaultYear}` }))}
-                    value={String(defaultMonth - 1)}
-                    onChange={(val) => handleMonthChange(Number(val))}
-                    className="bg-transparent border-0 p-0 focus:outline-none inline-flex items-center font-mono text-[10px] tracking-[0.14em] uppercase"
-                  />
-                </div>
-              </div>
-            </div>
-            {/* Hairline */}
-            <div className="h-px bg-border mx-7" />
+      <div className="px-4 pt-4 flex flex-col gap-3">
+        {/* Header */}
+        <div className="flex items-center justify-between px-1 pt-1">
+          <div>
+            <h1 className="font-display text-[26px] font-bold leading-none tracking-[-0.03em] text-foreground">
+              Budget
+            </h1>
+            <p className="text-[11px] font-medium text-muted-foreground mt-1">
+              {data.categories.length} {data.categories.length === 1 ? "category" : "categories"}
+            </p>
           </div>
+          <BottomSheetSelect
+            title="Select Month"
+            options={MONTHS.map((m, i) => ({ value: String(i), label: `${m} ${defaultYear}` }))}
+            value={String(defaultMonth - 1)}
+            onChange={(val) => handleMonthChange(Number(val))}
+            className="flex items-center gap-1 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-bold text-foreground"
+          />
+        </div>
 
-          {/* Hero — Remaining */}
-          <div id="budget-hero-section" className="px-7 pt-7 mt-20 pb-[22px]">
-            <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
-              {totalRemaining < 0 ? "Over Budget" : "Remaining"} · {monthName.substring(0, 3)}
-            </div>
-            <div
-              className="text-[72px] md:text-[84px] leading-[0.95] tracking-[-0.025em] mt-2.5 tabular-nums"
-              style={{ color: totalRemaining < 0 ? "var(--neg)" : "var(--foreground)" }}
-            >
-              {totalRemaining < 0 ? "−" : ""}
-              <CurrencyText value={Math.abs(totalRemaining)} />
-            </div>
-            <div className="flex flex-wrap gap-x-[18px] gap-y-1 mt-3.5 font-mono text-[11px] text-muted-foreground">
-              <span>
-                ↳ allocated <CurrencyText value={totalAllocated} />
-              </span>
-              <span className="text-foreground">
-                · free <CurrencyText value={unallocatedBudget} />
-              </span>
-            </div>
-          </div>
-
-          {/* Hairline */}
-          <div className="h-px bg-border mx-7" />
-
-          {/* Spent + Budget + meter */}
-          <div id="budget-spend-meter" className="px-7 pt-[22px] pb-5 bg-card">
-            <div className="flex justify-between items-baseline">
+        {/* Summary card */}
+        <Card id="budget-hero-section">
+          <div id="budget-spend-meter">
+            <div className="flex justify-between items-end">
               <div>
-                <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
-                  Spent
+                <span className="t-label text-muted-foreground">Spent</span>
+                <div
+                  className="figure text-[32px] mt-1"
+                  style={{ color: totalRemaining < 0 ? "var(--neg)" : "var(--foreground)" }}
+                >
+                  <CurrencyText value={totalSpent} />
                 </div>
-                <CurrencyText
-                  value={totalSpent}
-                  className="text-[38px] tracking-[-0.02em] mt-1 text-foreground tabular-nums"
-                />
               </div>
               <div className="text-right">
-                <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
-                  Budget
-                </div>
-                <div className="text-[22px] tracking-[-0.02em] mt-1 text-muted-foreground tabular-nums">
-                  <InlineEditableNumber
-                    value={data.totalBudget}
-                    onSave={handleUpdateBudget}
-                  />
+                <span className="t-label text-muted-foreground">Budget</span>
+                <div className="figure text-[16px] mt-1 text-foreground">
+                  <InlineEditableNumber value={data.totalBudget} onSave={handleUpdateBudget} />
                 </div>
               </div>
             </div>
             {budgetTotalError && (
-              <p className="mt-2 font-mono text-[11px] text-neg text-right">{budgetTotalError}</p>
+              <p className="mt-2 text-[11px] text-neg text-right">{budgetTotalError}</p>
             )}
-            <div className="flex justify-end mt-3">
-              <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground tabular-nums">
-                {spentPct}% used
+            <div id="budget-tick-ruler" className="mt-3.5">
+              <Progress value={Math.min(spentPct, 100)} state={totalSpent > totalAllocated ? "over" : "normal"} />
+            </div>
+            <div className="text-[11px] font-semibold text-muted-foreground mt-2.5">
+              {spentPct}% used ·{" "}
+              <span className="text-foreground">
+                <CurrencyText value={Math.abs(unallocatedBudget)} />{" "}
+                {unallocatedBudget < 0 ? "over" : "still free"}
               </span>
             </div>
-            <div id="budget-tick-ruler">
-              <TickRuler pct={Math.min(spentPct, 100)} />
-            </div>
-            <div
-              className="flex justify-between mt-1.5 font-mono text-[9px] tracking-[0.08em]"
-              style={{ color: "var(--dimmer)" }}
-            >
-              <span>0</span>
-              <span>25%</span>
-              <span>50%</span>
-              <span>75%</span>
-              <span>100%</span>
-            </div>
           </div>
+        </Card>
 
-          {/* Hairline — only show on mobile before categories */}
-          <div className="h-px bg-border mx-7 md:hidden" />
-        </div>
-
-        {/* Right column / mobile bottom — Categories */}
-        <div>
-          {/* Categories header */}
-            <div className="md:border-l border-border">
-            <div id="budget-categories-header" className="px-7 pt-5 md:pt-[72px] pb-3 flex items-baseline justify-between border-b border-border">
-              <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground tabular-nums">
-                Categories · {data.categories.length}
-              </div>
-              <div className="flex items-center gap-4">
-                {data.categories.length === 0 && (
-                  <button
-                    type="button"
-                    onClick={() => { haptic.light(); setIsSetupOpen(true); }}
-                    className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground underline underline-offset-4"
-                  >
-                    Template
-                  </button>
-                )}
-                <button
-                  id="add-category-inline"
-                  type="button"
-                  onClick={openAddCategory}
-                  className="font-mono text-[10px] tracking-[0.14em] uppercase text-foreground underline underline-offset-4"
-                >
-                  + new
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Category rows */}
-          <div className="md:border-l border-border">
-            {data.categories.length === 0 ? (
-              <div className="px-7">
-                <BudgetEmptyState
-                  onSetup={() => { haptic.light(); setIsSetupOpen(true); }}
-                  onAddCategory={openAddCategory}
-                />
-              </div>
-            ) : (
-              <div className="px-7">
-                {data.categories.map((cat, i) => {
-                  const pct = cat.allocated > 0 ? cat.spent / cat.allocated : 0;
-                  const isOver = cat.spent > cat.allocated && cat.allocated > 0;
-                  const isPending = cat.id.startsWith("temp_");
-                  return (
-                    <Link
-                      key={cat.id}
-                      id={i === 0 ? "budget-category-row-0" : undefined}
-                      href={isPending ? "#" : `/budget/${cat.id}`}
-                      onClick={(e) => {
-                        if (isPending) {
-                          e.preventDefault();
-                          haptic.error();
-                          return;
-                        }
-                        haptic.selection();
-                      }}
-                      aria-disabled={isPending}
-                      className={`block ${isPending ? "opacity-60 cursor-progress" : ""}`}
-                    >
-                      <div
-                        style={{
-                          paddingTop: 14,
-                          paddingBottom: 14,
-                          borderTop: i === 0 ? "1px solid var(--border)" : "none",
-                          borderBottom: "1px solid var(--border)",
-                        }}
-                      >
-                        <div className="flex justify-between items-baseline gap-2">
-                          <div className="flex items-baseline gap-2.5 min-w-0">
-                            <span
-                              className="w-[3px] h-3.5 rounded-full shrink-0 self-center"
-                              style={{ background: resolveColor({ id: cat.id, color: cat.color }) }}
-                            />
-                            <span
-                              className="font-mono text-[10px] shrink-0"
-                              style={{ color: "var(--dimmer)" }}
-                            >
-                              {String(i + 1).padStart(2, "0")}
-                            </span>
-                            {cat.icon && (
-                              <span className="text-base leading-none shrink-0">
-                                {cat.icon}
-                              </span>
-                            )}
-                            <span className="text-[17px] font-medium tracking-[-0.01em] text-foreground truncate">
-                              {cat.name}
-                            </span>
-                            <span className="font-mono text-[10px] text-muted-foreground shrink-0">
-                              · {cat.subtitle}
-                            </span>
-                          </div>
-                          <div className="font-mono text-[12px] tabular-nums shrink-0">
-                            <span style={{ color: isOver ? "var(--neg)" : "var(--foreground)" }}>
-                              <CurrencyText value={cat.spent} />
-                            </span>
-                            <span className="text-muted-foreground">
-                              {" "} / <CurrencyText value={cat.allocated} />
-                            </span>
-                          </div>
-                        </div>
-                        <SegBar
-                          pct={Math.min(pct, 1)}
-                          state={isOver ? "over" : "normal"}
-                          color={resolveColor({ id: cat.id, color: cat.color })}
-                        />
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
+        {/* Categories header */}
+        <div id="budget-categories-header" className="flex items-center justify-between px-1 mt-1">
+          <span className="font-display text-[15px] font-bold text-foreground">
+            Categories · {data.categories.length}
+          </span>
+          <div className="flex items-center gap-4">
+            {data.categories.length === 0 && (
+              <button
+                type="button"
+                onClick={() => { haptic.light(); setIsSetupOpen(true); }}
+                className="text-[13px] font-bold text-muted-foreground"
+              >
+                Template
+              </button>
             )}
+            <button
+              id="add-category-inline"
+              type="button"
+              onClick={openAddCategory}
+              className="flex items-center gap-1 text-[13px] font-bold text-foreground"
+            >
+              <span className="text-accent-strong text-base leading-none">＋</span>New
+            </button>
           </div>
         </div>
+
+        {/* Category list */}
+        {data.categories.length === 0 ? (
+          <BudgetEmptyState
+            onSetup={() => { haptic.light(); setIsSetupOpen(true); }}
+            onAddCategory={openAddCategory}
+          />
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            {data.categories.map((cat, i) => {
+              const pct = cat.allocated > 0 ? cat.spent / cat.allocated : 0;
+              const isOver = cat.spent > cat.allocated && cat.allocated > 0;
+              const isPending = cat.id.startsWith("temp_");
+              return (
+                <Link
+                  key={cat.id}
+                  id={i === 0 ? "budget-category-row-0" : undefined}
+                  href={isPending ? "#" : `/budget/${cat.id}`}
+                  onClick={(e) => {
+                    if (isPending) { e.preventDefault(); haptic.error(); return; }
+                    haptic.selection();
+                  }}
+                  aria-disabled={isPending}
+                  className={`block active:scale-[0.99] transition-transform ${isPending ? "opacity-60 cursor-progress" : ""}`}
+                >
+                  <Card compact className="flex items-center gap-3">
+                    <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-tile text-[17px]">
+                      {cat.icon || "📁"}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-baseline gap-2">
+                        <span className="text-[14px] font-bold text-foreground truncate">
+                          {cat.name}
+                          <span className="text-[11px] font-medium text-muted-foreground"> · {cat.subtitle}</span>
+                        </span>
+                        <span className="figure text-[13px] shrink-0">
+                          <span style={{ color: isOver ? "var(--neg)" : "var(--foreground)" }}>
+                            <CurrencyText value={cat.spent} />
+                          </span>
+                          <span className="text-muted-foreground"> / <CurrencyText value={cat.allocated} /></span>
+                        </span>
+                      </div>
+                      <Progress
+                        className="mt-2 h-1.5"
+                        value={Math.min(pct, 1) * 100}
+                        state={isOver ? "over" : "normal"}
+                        color={isOver ? undefined : resolveColor({ id: cat.id, color: cat.color })}
+                      />
+                    </div>
+                  </Card>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Bottom spacer for mobile nav */}
       <div className="h-28 md:h-12" />
 
       {/* FAB */}
-      <div className="fixed bottom-24 right-6 z-40 md:hidden">
+      <div className="fixed bottom-28 right-5 z-40 md:hidden">
         <button
           id="budget-fab-add"
           type="button"
           onClick={openAddCategory}
-          className="flex size-14 items-center justify-center rounded-full bg-foreground text-background shadow-lg shadow-black/30 active:scale-95 transition-transform"
+          className="flex size-14 items-center justify-center rounded-full bg-[var(--pill)] text-[var(--pill-foreground)] shadow-lg shadow-black/20 active:scale-95 transition-transform"
         >
           <span className="material-symbols-outlined text-[28px]">add</span>
         </button>
@@ -409,31 +298,31 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
         }}
       >
         <Drawer.Portal>
-          <Drawer.Overlay className="fixed inset-0 bg-black/60 z-40" />
+          <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
           <Drawer.Content
             aria-describedby="add-category-description"
-            className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-2xl bg-card border-t border-border focus:outline-none"
+            className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none"
           >
             <div className="flex justify-center pt-3 pb-1 shrink-0">
-              <div className="w-10 h-1 bg-muted rounded-full" />
+              <div className="w-9 h-1 bg-border rounded-full" />
             </div>
 
-            <div className="px-6 py-4 border-b border-border">
-              <Drawer.Title className="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground">
-                Add Category
+            <div className="px-6 py-4">
+              <Drawer.Title className="font-display text-[20px] font-bold tracking-[-0.02em] text-foreground">
+                Add category
               </Drawer.Title>
-              <p id="add-category-description" className="mt-2 text-sm text-foreground">
+              <p id="add-category-description" className="mt-1 text-[13px] text-muted-foreground">
                 Start with a name. Set the icon, allocation, and items after.
               </p>
             </div>
 
-            <form onSubmit={handleCreateCategory} className="px-6 py-5 space-y-4 pb-10">
+            <form onSubmit={handleCreateCategory} className="px-6 py-2 space-y-4 pb-10">
               <div className="space-y-2">
                 <label
                   htmlFor="new-category-name"
-                  className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground"
+                  className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground"
                 >
-                  Category Name
+                  Category name
                 </label>
                 <input
                   ref={addCategoryInputRef}
@@ -442,26 +331,26 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
                   value={newCategoryName}
                   onChange={(e) => setNewCategoryName(e.target.value)}
                   placeholder="e.g. Groceries"
-                  className="w-full bg-background border border-border px-4 py-3 text-sm text-foreground outline-none transition-colors focus:border-foreground"
+                  className="w-full bg-card border border-border rounded-[13px] px-4 py-3 text-sm font-medium text-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
                 />
               </div>
 
               {addCategoryMutation.isError && (
-                <p className="font-mono text-[11px] text-neg">{addCategoryError}</p>
+                <p className="text-[11px] font-medium text-neg">{addCategoryError}</p>
               )}
 
               <div className="flex flex-col gap-3">
                 <button
                   type="submit"
                   disabled={!newCategoryName.trim() || addCategoryMutation.isPending}
-                  className="w-full border border-foreground px-4 py-3.5 font-mono text-[11px] tracking-[0.14em] uppercase text-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:bg-foreground hover:text-background transition-colors"
+                  className="w-full h-[48px] rounded-pill bg-[var(--pill)] text-[var(--pill-foreground)] text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98] transition-all"
                 >
-                  {addCategoryMutation.isPending ? "Creating..." : "Create Category"}
+                  {addCategoryMutation.isPending ? "Creating..." : "Create category"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsAddCategoryOpen(false)}
-                  className="w-full border border-border px-4 py-3.5 font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground"
+                  className="w-full h-[48px] rounded-pill bg-muted text-foreground text-sm font-semibold"
                 >
                   Cancel
                 </button>

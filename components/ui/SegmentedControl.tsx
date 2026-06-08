@@ -38,7 +38,7 @@ export function SegmentedControl<T extends string>({
     return (
       <div
         role="tablist"
-        className={`flex gap-2 ${scroll ? "overflow-x-auto no-scrollbar pb-1" : "flex-wrap"} ${className}`}
+        className={`flex gap-1.5 ${scroll ? "overflow-x-auto no-scrollbar pb-1" : ""} ${className}`}
       >
         {options.map((opt) => {
           const active = opt.value === value;
@@ -48,10 +48,10 @@ export function SegmentedControl<T extends string>({
               role="tab"
               aria-selected={active}
               onClick={() => select(opt.value)}
-              className={`shrink-0 px-3 py-1.5 t-label border transition-colors ${
+              className={`flex-1 shrink-0 px-3 py-2 rounded-xl text-[11.5px] font-semibold transition-colors ${
                 active
-                  ? "bg-foreground text-background border-foreground"
-                  : "bg-transparent text-muted-foreground border-border hover:border-foreground/40"
+                  ? "bg-[var(--pill)] text-[var(--pill-foreground)] border border-transparent"
+                  : "bg-card text-muted-foreground border border-border hover:text-foreground"
               }`}
             >
               {opt.label}
@@ -74,7 +74,7 @@ export function SegmentedControl<T extends string>({
             role="tab"
             aria-selected={active}
             onClick={() => select(opt.value)}
-            className={`relative -mb-px py-2.5 t-label transition-colors ${
+            className={`relative -mb-px py-2.5 text-[13px] font-semibold transition-colors ${
               active
                 ? "text-foreground border-b-2 border-foreground"
                 : "text-muted-foreground border-b-2 border-transparent hover:text-foreground/70"

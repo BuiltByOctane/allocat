@@ -5,6 +5,10 @@ import { Drawer } from "vaul";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { CurrencySymbol } from "@/components/ui/CurrencySymbol";
+import { Card } from "@/components/ui/Card";
+import { HeroCard } from "@/components/ui/HeroCard";
+import { Button } from "@/components/ui/Button";
+import { Progress } from "@/components/ui/Progress";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import {
   useAddDebt,
@@ -105,26 +109,31 @@ export function LentDetailSheet({
     onClose();
   }
 
+  const inputCls =
+    "w-full bg-card border border-border rounded-[13px] px-3.5 py-3 text-sm font-medium text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40";
+  const labelCls =
+    "block mb-1.5 text-[9px] font-bold uppercase tracking-wide text-muted-foreground";
+
   return (
     <Drawer.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <Drawer.Portal>
-        <Drawer.Overlay className="fixed inset-0 bg-black/60 z-40" />
+        <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
         <Drawer.Content
           aria-describedby="lent-sheet-desc"
-          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-2xl bg-card border-t border-border focus:outline-none max-h-[85dvh]"
+          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none max-h-[85dvh]"
         >
           <div className="flex justify-center pt-3 pb-1 shrink-0">
-            <div className="w-10 h-1 bg-muted rounded-full" />
+            <div className="mx-auto w-9 h-1 bg-border rounded-full" />
           </div>
           <div className="overflow-y-auto flex-1">
-            <div className="px-5 pt-2 pb-4 border-b border-border">
+            <div className="px-6 pt-2 pb-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <Drawer.Title className="text-[10px] font-mono font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                    {mode === "edit" ? "Edit Lend" : "New Lend"}
+                  <Drawer.Title className="font-display text-[20px] font-bold tracking-[-0.02em] text-foreground">
+                    {mode === "edit" ? "Edit lend" : "New lend"}
                   </Drawer.Title>
                   {mode === "edit" && lent && (
-                    <p className="text-base font-semibold text-foreground mt-0.5 tracking-tight">{lent.name}</p>
+                    <p className="text-[13px] font-medium text-muted-foreground mt-0.5">{lent.name}</p>
                   )}
                 </div>
                 <button
@@ -136,58 +145,58 @@ export function LentDetailSheet({
               </div>
               <p id="lent-sheet-desc" className="sr-only">Lend details</p>
             </div>
-            <div className="px-5 py-4 space-y-3">
+            <div className="px-6 py-2 space-y-3.5">
               <div>
-                <label className="text-[10px] font-mono uppercase tracking-[0.14em] text-muted-foreground block mb-1.5">Name</label>
+                <label className={labelCls}>Name</label>
                 <input
                   ref={nameRef}
                   type="text"
                   placeholder="Friend's name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  className={inputCls}
                 />
               </div>
               <div>
-                <label className="text-[10px] font-mono uppercase tracking-[0.14em] text-muted-foreground block mb-1.5">Amount Lent</label>
+                <label className={labelCls}>Amount Lent</label>
                 <input
                   type="number"
                   min="0"
                   placeholder="0"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-sm font-mono tabular-nums text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  className={`${inputCls} tabular-nums`}
                 />
               </div>
               <div>
-                <label className="text-[10px] font-mono uppercase tracking-[0.14em] text-muted-foreground block mb-1.5">
+                <label className={labelCls}>
                   Expected Back Date <span className="normal-case">(optional)</span>
                 </label>
                 <input
                   type="date"
                   value={expectedDate}
                   onChange={(e) => setExpectedDate(e.target.value)}
-                  className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  className={inputCls}
                 />
               </div>
-              {error && <p className="text-[11px] text-neg font-mono">{error}</p>}
+              {error && <p className="text-[11px] font-medium text-neg">{error}</p>}
             </div>
           </div>
-          <div className="px-5 pb-8 pt-3 border-t border-border shrink-0 space-y-2">
+          <div className="px-6 pb-8 pt-3 shrink-0 space-y-2.5">
             {mode === "edit" && lent && !lent.isClosed && (
               <div className="flex gap-2">
                 <button
                   onClick={handleSettle}
-                  className="flex-1 py-2.5 rounded-lg text-xs font-mono uppercase tracking-[0.1em] bg-muted text-foreground hover:bg-muted/80 transition-colors"
+                  className="flex-1 h-[44px] rounded-pill text-[13px] font-bold bg-muted text-foreground hover:bg-muted/70 transition-colors"
                 >
                   Mark Settled
                 </button>
                 <button
                   onClick={handleDelete}
-                  className={`px-4 py-2.5 rounded-lg text-xs font-mono uppercase tracking-[0.1em] transition-colors ${
+                  className={`px-5 h-[44px] rounded-pill text-[13px] font-bold transition-colors ${
                     confirmDelete
-                      ? "bg-destructive/20 text-destructive border border-destructive/30"
-                      : "bg-muted text-muted-foreground hover:text-destructive"
+                      ? "bg-[var(--neg-dim)] text-neg"
+                      : "bg-muted text-muted-foreground hover:text-neg"
                   }`}
                 >
                   {confirmDelete ? "Confirm" : "Delete"}
@@ -198,16 +207,16 @@ export function LentDetailSheet({
               <div className="flex gap-2">
                 <button
                   onClick={() => { if (lent && onSettle) { onSettle(lent.id); onClose(); }}}
-                  className="flex-1 py-2.5 rounded-lg text-xs font-mono uppercase tracking-[0.1em] bg-muted text-foreground hover:bg-muted/80 transition-colors"
+                  className="flex-1 h-[44px] rounded-pill text-[13px] font-bold bg-muted text-foreground hover:bg-muted/70 transition-colors"
                 >
                   Reopen
                 </button>
                 <button
                   onClick={handleDelete}
-                  className={`px-4 py-2.5 rounded-lg text-xs font-mono uppercase tracking-[0.1em] transition-colors ${
+                  className={`px-5 h-[44px] rounded-pill text-[13px] font-bold transition-colors ${
                     confirmDelete
-                      ? "bg-destructive/20 text-destructive border border-destructive/30"
-                      : "bg-muted text-muted-foreground hover:text-destructive"
+                      ? "bg-[var(--neg-dim)] text-neg"
+                      : "bg-muted text-muted-foreground hover:text-neg"
                   }`}
                 >
                   {confirmDelete ? "Confirm" : "Delete"}
@@ -218,14 +227,14 @@ export function LentDetailSheet({
               {mode === "add" && (
                 <button
                   onClick={onClose}
-                  className="flex-1 py-3 rounded-lg text-sm font-mono uppercase tracking-[0.1em] bg-muted text-foreground transition-colors"
+                  className="flex-1 h-[48px] rounded-pill text-sm font-semibold bg-muted text-foreground"
                 >
                   Cancel
                 </button>
               )}
               <button
                 onClick={handleSave}
-                className="flex-1 py-3 rounded-lg text-sm font-mono uppercase tracking-[0.1em] bg-primary text-primary-foreground transition-all active:scale-95"
+                className="flex-1 h-[48px] rounded-pill text-sm font-bold bg-[var(--pill)] text-[var(--pill-foreground)] active:scale-[0.98] transition-all"
               >
                 {mode === "edit" ? "Save Changes" : "Add Lend"}
               </button>
@@ -271,27 +280,27 @@ export function PaymentSheet({
   return (
     <Drawer.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <Drawer.Portal>
-        <Drawer.Overlay className="fixed inset-0 bg-black/60 z-40" />
+        <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
         <Drawer.Content
           aria-describedby="pay-sheet-desc"
-          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-2xl bg-card border-t border-border focus:outline-none"
+          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none"
         >
           <div className="flex justify-center pt-3 pb-1 shrink-0">
-            <div className="w-10 h-1 bg-muted rounded-full" />
+            <div className="mx-auto w-9 h-1 bg-border rounded-full" />
           </div>
-          <div className="px-5 pt-2 pb-4 border-b border-border">
-            <Drawer.Title className="text-[10px] font-mono font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              Log Payment
+          <div className="px-6 pt-2 pb-4">
+            <Drawer.Title className="font-display text-[20px] font-bold tracking-[-0.02em] text-foreground">
+              Log payment
             </Drawer.Title>
             {lent && (
-              <p className="text-base font-semibold text-foreground mt-0.5">{lent.name}</p>
+              <p className="text-[13px] font-medium text-muted-foreground mt-0.5">{lent.name}</p>
             )}
             <p id="pay-sheet-desc" className="sr-only">Record received payment</p>
           </div>
-          <div className="px-5 py-4">
-            <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mb-2">Amount</div>
-            <div className="flex items-baseline gap-1.5 py-3 border-t border-border border-b border-b-border">
-              <span className="currency-symbol font-sans text-foreground/30" style={{ fontSize: "calc(0.62 * 28px)" }}><CurrencySymbol /></span>
+          <div className="px-6 py-2">
+            <div className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mb-2">Amount</div>
+            <div className="flex items-baseline gap-1.5 rounded-[13px] border border-border bg-card px-3.5 py-3">
+              <span className="currency-symbol text-muted-foreground" style={{ fontSize: "20px" }}><CurrencySymbol /></span>
               <input
                 type="number"
                 min="0"
@@ -299,47 +308,28 @@ export function PaymentSheet({
                 onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
                 placeholder="0"
                 autoFocus
-                className="bg-transparent border-none outline-none font-display text-[28px] tracking-[-0.02em] text-foreground w-full p-0 tabular-nums placeholder:text-foreground/30"
+                className="figure bg-transparent border-none outline-none text-[24px] text-foreground w-full p-0 placeholder:text-muted-foreground"
               />
             </div>
           </div>
-          <div className="px-5 pb-8 pt-3 border-t border-border flex gap-2">
+          <div className="px-6 pb-8 pt-4 flex gap-2">
             <button
               onClick={onClose}
-              className="flex-1 py-3 rounded-lg text-sm font-mono uppercase tracking-[0.1em] bg-muted text-foreground"
+              className="flex-1 h-[48px] rounded-pill text-sm font-semibold bg-muted text-foreground"
             >
               Cancel
             </button>
             <button
               onClick={handlePay}
               disabled={!amount || parseFloat(amount) <= 0}
-              className="flex-1 py-3 rounded-lg text-sm font-mono uppercase tracking-[0.1em] bg-primary text-primary-foreground disabled:opacity-50 active:scale-95 transition-all"
+              className="flex-1 h-[48px] rounded-pill text-sm font-bold bg-[var(--pill)] text-[var(--pill-foreground)] disabled:opacity-40 active:scale-[0.98] transition-all"
             >
-              Log Payment →
+              Log payment →
             </button>
           </div>
         </Drawer.Content>
       </Drawer.Portal>
     </Drawer.Root>
-  );
-}
-
-// 20-segment dash bar
-function SegBar({ pct }: { pct: number }) {
-  const count = 20;
-  return (
-    <div className="flex gap-[2px] mt-2.5">
-      {Array.from({ length: count }).map((_, j) => (
-        <div
-          key={j}
-          className="flex-1"
-          style={{
-            height: 3,
-            background: j / count < pct ? "var(--foreground)" : "var(--progress-empty)",
-          }}
-        />
-      ))}
-    </div>
   );
 }
 
@@ -424,145 +414,134 @@ export default function LentListView({ lents, onBack }: { lents: Lent[]; onBack:
   const caption = `${now.toLocaleString("en-US", { month: "short" })} ${now.getFullYear()}`;
 
   return (
-    <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-      {/* ── Header ───────────────────────────────────────────────── */}
-      <header className="px-7 pt-14 pb-[18px] border-b border-border flex items-end justify-between">
+    <div className="px-4 pt-4 flex flex-col gap-3 animate-in fade-in slide-in-from-right-4 duration-300">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-1 pt-1">
+        <button
+          onClick={() => { haptic.light(); onBack(); }}
+          aria-label="Back"
+          className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground hover:text-foreground transition-colors active:scale-95"
+        >
+          <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+        </button>
         <div>
-          <button
-            onClick={() => { haptic.light(); onBack(); }}
-            className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 mb-3"
-          >
-            <span className="material-symbols-outlined text-sm">arrow_back</span>
-            Back
-          </button>
-          <div className="font-display text-[28px] leading-none tracking-[-0.02em] text-foreground">Money Out</div>
-          <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mt-2">
-            Friends &amp; Lending · {caption}
-          </div>
+          <h1 className="font-display text-[26px] font-bold leading-none tracking-[-0.03em] text-foreground">Money Out</h1>
+          <p className="text-[11px] font-medium text-muted-foreground mt-1">
+            Friends &amp; lending · {caption}
+          </p>
         </div>
-      </header>
+      </div>
 
-      <main className="pb-10">
-        {/* ── Hero ─────────────────────────────────────────────────── */}
-        <div className="px-7 pt-7 pb-6">
-          <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mb-2">
-            Total Outstanding
-          </div>
-          <CurrencyText value={totalActive} className="font-display text-[44px] leading-[0.95] tracking-[-0.025em] text-foreground" />
-          <div className="font-mono text-[11px] text-muted-foreground mt-2">
-            ↳ {activeLents.length} active {activeLents.length === 1 ? "lend" : "lends"}
-          </div>
+      {/* Lime hero */}
+      <HeroCard
+        label="Total outstanding"
+        value={<CurrencyText value={totalActive} />}
+      >
+        <div className="text-[11px] font-semibold text-[var(--accent-ink)]">
+          {activeLents.length} active {activeLents.length === 1 ? "lend" : "lends"}
+          {closedLents.length > 0 && ` · ${closedLents.length} settled`}
         </div>
+      </HeroCard>
 
-        <div className="h-px bg-border mx-7" />
+      {/* Active lends header */}
+      <div className="flex items-center justify-between px-1 mt-1">
+        <span className="font-display text-[15px] font-bold text-foreground">
+          Active lends · {activeLents.length}
+        </span>
+        <button
+          onClick={openAdd}
+          className="flex items-center gap-1 text-[13px] font-bold text-foreground"
+        >
+          <span className="text-accent-strong text-base leading-none">＋</span>New
+        </button>
+      </div>
 
-        {/* ── Active Lends header ───────────────────────────────────── */}
-        <div className="px-7 pt-4 pb-2 flex justify-between items-baseline">
-          <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
-            Active Lends · {activeLents.length}
-          </span>
-          <button
-            onClick={openAdd}
-            className="font-mono text-[10px] tracking-[0.14em] uppercase text-foreground underline underline-offset-2 decoration-foreground/30 hover:decoration-foreground transition-all"
-          >
-            + New
-          </button>
-        </div>
+      {activeLents.length === 0 && (
+        <Card compact>
+          <p className="py-4 text-center text-[12px] font-medium text-muted-foreground">No active lends.</p>
+        </Card>
+      )}
 
-        {activeLents.length === 0 && (
-          <div className="px-7 py-8 text-center">
-            <p className="font-mono text-[11px] text-muted-foreground">No active lends.</p>
-          </div>
-        )}
-
-        <div className="px-7">
-          {activeLents.map((lent, i) => {
-            const remaining = Math.max(0, lent.principal - lent.totalPaid);
-            const paidPct = lent.principal > 0 ? lent.totalPaid / lent.principal : 0;
-            return (
-              <div key={lent.id} className="py-3.5 border-t border-border last:border-b last:border-b-border">
-                <div className="flex justify-between items-start">
-                  <button
-                    onClick={() => openEdit(lent)}
-                    className="flex items-baseline gap-2.5 flex-1 text-left"
-                  >
-                    <span className="font-mono text-[10px] text-foreground/30 shrink-0">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <div>
-                      <span className="text-[17px] font-semibold tracking-tight text-foreground leading-none">
-                        {lent.name}
-                      </span>
-                      {lent.expectedPayoffDate && (
-                        <div className="font-mono text-[9px] text-muted-foreground mt-1 tracking-[0.08em] uppercase">
-                          Due {new Date(lent.expectedPayoffDate).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                        </div>
-                      )}
-                    </div>
-                  </button>
-                  <div className="text-right shrink-0 ml-4">
-                    <CurrencyText value={remaining} className="font-mono text-[13px] text-foreground" />
-                    <div className="font-mono text-[9px] text-muted-foreground tracking-[0.08em] uppercase">remaining</div>
-                  </div>
-                </div>
-                {lent.totalPaid > 0 && <SegBar pct={paidPct} />}
-                {lent.totalPaid > 0 && (
-                  <div className="flex justify-between mt-1.5">
-                    <span className="font-mono text-[9px] text-muted-foreground tracking-[0.08em] uppercase">
-                      {Math.round(paidPct * 100)}% returned
-                    </span>
-                    <span className="font-mono text-[9px] text-muted-foreground tracking-[0.08em] uppercase inline-flex items-baseline gap-1">
-                      of <CurrencyText value={lent.principal} />
-                    </span>
-                  </div>
-                )}
+      <div className="flex flex-col gap-2.5">
+        {activeLents.map((lent) => {
+          const remaining = Math.max(0, lent.principal - lent.totalPaid);
+          const paidPct = lent.principal > 0 ? lent.totalPaid / lent.principal : 0;
+          return (
+            <Card key={lent.id} compact>
+              <div className="flex items-center gap-3">
                 <button
-                  onClick={() => openPay(lent)}
-                  className="mt-3 w-full py-3 bg-foreground text-background font-mono text-[10px] tracking-[0.14em] uppercase active:scale-[0.98] transition-all"
-                >
-                  Log Payment →
-                </button>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* ── Settled ───────────────────────────────────────────────── */}
-        {closedLents.length > 0 && (
-          <>
-            <div className="h-px bg-border mx-7 mt-4" />
-            <div className="px-7 pt-4 pb-2">
-              <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
-                Settled · {closedLents.length}
-              </span>
-            </div>
-            <div className="px-7">
-              {closedLents.map((lent, i) => (
-                <button
-                  key={lent.id}
                   onClick={() => openEdit(lent)}
-                  className="w-full text-left py-3.5 border-t border-border last:border-b last:border-b-border opacity-40 hover:opacity-60 transition-opacity"
+                  className="flex items-center gap-3 flex-1 min-w-0 text-left"
                 >
-                  <div className="flex justify-between items-baseline">
-                    <div className="flex items-baseline gap-2.5">
-                      <span className="font-mono text-[10px] text-foreground/30">
-                        {String(i + 1).padStart(2, "0")}
-                      </span>
-                      <span className="text-[15px] font-semibold tracking-tight text-foreground">
-                        {lent.name}
-                      </span>
+                  <span className="flex size-[38px] shrink-0 items-center justify-center rounded-[11px] bg-tile text-[14px] font-bold text-muted-foreground uppercase">
+                    {lent.name.charAt(0)}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-[13.5px] font-bold text-foreground truncate">
+                      {lent.name}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-[9px] text-muted-foreground tracking-[0.08em] uppercase">✓ Settled</span>
-                      <CurrencyText value={lent.principal} className="font-mono text-[11px] text-muted-foreground" />
+                    <div className="text-[10.5px] font-semibold text-muted-foreground">
+                      {lent.expectedPayoffDate
+                        ? `Due ${new Date(lent.expectedPayoffDate).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
+                        : "No due date"}
                     </div>
                   </div>
                 </button>
-              ))}
-            </div>
-          </>
-        )}
-      </main>
+                <div className="text-right shrink-0">
+                  <div className="figure text-[15px] text-foreground"><CurrencyText value={remaining} /></div>
+                  <div className="text-[9.5px] font-semibold text-muted-foreground">remaining</div>
+                </div>
+                <Button size="sm" variant="primary" onClick={() => openPay(lent)}>
+                  Log
+                </Button>
+              </div>
+              {lent.totalPaid > 0 && (
+                <>
+                  <Progress className="mt-2.5 h-1.5" value={Math.min(paidPct, 1) * 100} />
+                  <div className="flex justify-between mt-1.5 text-[9.5px] font-semibold text-muted-foreground">
+                    <span>{Math.round(paidPct * 100)}% returned</span>
+                    <span className="inline-flex items-baseline gap-1">of <CurrencyText value={lent.principal} /></span>
+                  </div>
+                </>
+              )}
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Settled */}
+      {closedLents.length > 0 && (
+        <>
+          <div className="px-1 mt-1">
+            <span className="font-display text-[15px] font-bold text-foreground">
+              Settled · {closedLents.length}
+            </span>
+          </div>
+          <div className="flex flex-col gap-2.5">
+            {closedLents.map((lent) => (
+              <button
+                key={lent.id}
+                onClick={() => openEdit(lent)}
+                className="w-full text-left active:scale-[0.99] transition-transform"
+              >
+                <Card compact className="flex items-center gap-3 opacity-60">
+                  <span className="flex size-[26px] shrink-0 items-center justify-center rounded-full bg-accent-strong text-[var(--accent-ink)]">
+                    <span className="material-symbols-outlined text-[15px]">check</span>
+                  </span>
+                  <span className="flex-1 min-w-0 text-[13.5px] font-bold text-foreground truncate">{lent.name}</span>
+                  <div className="text-[11px] font-semibold text-muted-foreground inline-flex items-baseline gap-1.5">
+                    Settled
+                    <CurrencyText value={lent.principal} />
+                  </div>
+                </Card>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Bottom spacer for mobile nav */}
+      <div className="h-28 md:h-12" />
 
       {/* ── Sheets ────────────────────────────────────────────────── */}
       <LentDetailSheet

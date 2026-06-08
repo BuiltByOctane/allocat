@@ -50,7 +50,7 @@ export function OAuthButtons() {
   return (
     <div className="flex flex-col gap-4">
       {errorMsg && (
-        <div className="border border-neg/30 bg-neg/5 px-4 py-3 text-neg text-sm font-mono tracking-wide">
+        <div className="rounded-[13px] border border-neg/30 bg-neg/5 px-4 py-3 text-neg text-sm font-medium">
           {errorMsg}
         </div>
       )}
@@ -58,7 +58,7 @@ export function OAuthButtons() {
         type="button"
         disabled={isPending}
         onClick={handleGoogleLogin}
-        className="flex items-center justify-center gap-3 h-12 bg-card border border-border hover:border-foreground transition-colors text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
+        className="flex items-center justify-center gap-3 h-[48px] rounded-pill bg-card border border-border font-bold text-sm text-foreground hover:border-foreground/40 active:scale-[0.98] transition-all disabled:opacity-40 disabled:pointer-events-none"
       >
         <svg
           width="18"
@@ -84,7 +84,7 @@ export function OAuthButtons() {
             d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"
           />
         </svg>
-        <span className="font-mono text-[11px] tracking-[0.16em] uppercase">
+        <span>
           {isPending ? "Connecting…" : "Continue with Google"}
         </span>
       </button>

@@ -29,8 +29,8 @@ export function FieldError({ children }: { children: ReactNode }) {
 }
 
 export const inputClasses =
-  "w-full min-h-[44px] bg-background border border-border rounded-lg px-3 text-sm text-foreground " +
-  "placeholder:text-muted-foreground focus:outline-none focus:border-foreground focus:ring-1 focus:ring-info " +
+  "w-full min-h-[46px] bg-card border border-border rounded-[13px] px-3.5 text-sm font-medium text-foreground " +
+  "placeholder:text-muted-foreground placeholder:font-normal focus:outline-none focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40 " +
   "disabled:opacity-40 transition-colors";
 
 export const Input = forwardRef<

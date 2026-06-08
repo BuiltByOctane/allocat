@@ -2,9 +2,11 @@
 
 import { Drawer } from "vaul";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Check } from "lucide-react";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { CurrencySymbol } from "@/components/ui/CurrencySymbol";
 import { useFormatCurrency } from "@/lib/hooks/useFormatCurrency";
+import { Progress } from "@/components/ui/Progress";
 import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { suggestLink } from "@/lib/utils/link-suggest";
@@ -248,56 +250,58 @@ export function ItemDetailSheet({
       }}
     >
       <Drawer.Portal>
-        <Drawer.Overlay className="fixed inset-0 bg-black/60 z-40" />
+        <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
         <Drawer.Content
           aria-describedby="item-sheet-description"
-          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-2xl bg-card border-t border-border focus:outline-none max-h-[90dvh]"
+          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none max-h-[90dvh]"
         >
           <div className="flex justify-center pt-3 pb-1 shrink-0">
-            <div className="w-10 h-1 bg-muted rounded-full" />
+            <div className="mx-auto w-9 h-1 bg-border rounded-full" />
           </div>
 
           <div className="overflow-y-auto flex-1">
-            {/* ── Category budget context ───────────────────────── */}
-            <div className="px-5 pt-3 pb-5 border-b border-border">
-              <div className="flex items-center gap-2 mb-4">
+            {/* ── Header ──────────────────────────────────────── */}
+            <div className="px-6 pt-2 pb-3">
+              <div className="flex items-center gap-2">
                 {category.icon ? (
                   <span className="text-base leading-none">
                     {category.icon}
                   </span>
                 ) : null}
-                <Drawer.Title className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+                <Drawer.Title className="font-display text-[20px] font-bold tracking-[-0.02em] text-foreground truncate">
                   {isNew ? `New item · ${category.name}` : category.name}
                 </Drawer.Title>
               </div>
+            </div>
 
+            {/* ── Category budget context ───────────────────────── */}
+            <div className="px-6 pb-3">
               {hasCategoryBudget ? (
-                <>
-                  {/* Allocation breakdown rows */}
-                  <div className="space-y-2 mb-4">
+                <div className="rounded-tile bg-tile p-3.5">
+                  <div className="space-y-1.5">
                     <div className="flex justify-between items-center">
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs font-medium text-muted-foreground">
                         Category budget
                       </span>
-                      <span className="text-xs font-semibold tabular-nums text-foreground">
+                      <span className="text-xs font-bold tabular-nums text-foreground">
                         <CurrencyText value={category.allocation} />
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs font-medium text-muted-foreground">
                         Used by other items
                       </span>
-                      <span className="text-xs tabular-nums text-muted-foreground">
+                      <span className="text-xs font-medium tabular-nums text-muted-foreground">
                         − <CurrencyText value={category.otherItemsPlanned} />
                       </span>
                     </div>
-                    <div className="border-t border-border/60 pt-2 flex justify-between items-center">
-                      <span className="text-xs font-semibold text-foreground">
+                    <div className="pt-1.5 flex justify-between items-center">
+                      <span className="text-xs font-bold text-foreground">
                         Available for this item
                       </span>
                       <span
                         className={`text-xs font-bold tabular-nums ${
-                          isOverAllocation ? "text-neg" : "text-primary"
+                          isOverAllocation ? "text-neg" : "text-foreground"
                         }`}
                       >
                         {isOverAllocation
@@ -312,35 +316,32 @@ export function ItemDetailSheet({
                   </div>
 
                   {/* Progress bar */}
-                  <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-200 ${
-                        isOverAllocation ? "bg-neg" : "bg-primary"
-                      }`}
-                      style={{ width: `${usedPct}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between mt-1.5 text-[10px] tabular-nums text-muted-foreground">
+                  <Progress
+                    className="mt-2.5 h-1.5"
+                    value={usedPct}
+                    state={isOverAllocation ? "over" : "normal"}
+                  />
+                  <div className="flex justify-between mt-1.5 text-[10px] font-medium tabular-nums text-muted-foreground">
                     <span>
                       <CurrencyText value={category.otherItemsPlanned + plannedNum} />{" "}
                       allocated
                     </span>
                     <span>{usedPct}% of budget</span>
                   </div>
-                </>
+                </div>
               ) : (
                 /* No category budget set */
-                <div className="flex items-start gap-3 rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3">
-                  <span className="material-symbols-outlined text-amber-500 text-base mt-0.5 shrink-0">
+                <div className="flex items-start gap-3 rounded-tile bg-[var(--warn)]/10 border border-[var(--warn)]/20 px-4 py-3">
+                  <span className="material-symbols-outlined text-[var(--warn)] text-base mt-0.5 shrink-0">
                     warning
                   </span>
                   <div>
-                    <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+                    <p className="text-xs font-bold text-foreground">
                       No category budget set
                     </p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                    <p className="text-[11px] font-medium text-muted-foreground mt-0.5">
                       Set the &ldquo;Budget&rdquo; for{" "}
-                      <span className="font-medium">{category.name}</span> first.
+                      <span className="font-bold">{category.name}</span> first.
                       Item amounts can only be allocated once a category budget
                       exists.
                     </p>
@@ -353,10 +354,10 @@ export function ItemDetailSheet({
             <p id="item-sheet-description" className="sr-only">
               {isNew ? "Add a new budget item" : "Edit budget item details"}
             </p>
-            <div className="px-5 pt-5 pb-6 space-y-5">
+            <div className="px-6 pt-2 pb-6 space-y-4">
               {/* Name */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              <div className="space-y-2">
+                <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground block">
                   Item Name
                 </label>
                 <input
@@ -367,16 +368,16 @@ export function ItemDetailSheet({
                   onKeyDown={(e) => {
                     if (e.key === "Enter") handleSave();
                   }}
-                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition-colors focus:border-primary"
+                  className="w-full rounded-[13px] border border-border bg-card px-3.5 py-3 text-sm font-medium text-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
                   placeholder="e.g. Electricity bill"
                 />
               </div>
 
               {/* Planned + Actual */}
               <div className={hideActual ? "" : "grid grid-cols-2 gap-3"}>
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <label
-                    className={`text-[10px] font-bold uppercase tracking-widest ${
+                    className={`text-[9px] font-bold uppercase tracking-wide block ${
                       hasCategoryBudget
                         ? "text-muted-foreground"
                         : "text-muted-foreground/40"
@@ -394,34 +395,34 @@ export function ItemDetailSheet({
                         setError("");
                       }}
                       disabled={!hasCategoryBudget}
-                      className={`w-full rounded-xl border bg-background px-4 py-3 text-sm text-foreground outline-none transition-colors ${
+                      className={`w-full rounded-[13px] border bg-card px-3.5 py-3 text-sm font-medium tabular-nums text-foreground outline-none transition-colors ${
                         !hasCategoryBudget
                           ? "opacity-40 cursor-not-allowed border-border"
                           : isOverAllocation
                           ? "border-neg focus:border-neg"
-                          : "border-border focus:border-primary"
+                          : "border-border focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
                       }`}
                       placeholder={hasCategoryBudget ? "0" : "—"}
                       min="0"
                     />
                   </div>
                   {!hasCategoryBudget ? (
-                    <p className="text-[10px] text-muted-foreground/60">
+                    <p className="text-[10px] font-medium text-muted-foreground/60">
                       Set category budget first
                     </p>
                   ) : isOverAllocation ? (
-                    <p className="text-[10px] text-neg">
+                    <p className="text-[10px] font-medium text-neg">
                       Over by <CurrencyText value={Math.abs(remaining!)} />
                     </p>
                   ) : remaining !== null && plannedNum > 0 ? (
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-[10px] font-medium text-muted-foreground">
                       <CurrencyText value={remaining} /> still available
                     </p>
                   ) : null}
                 </div>
                 {!hideActual && (
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground block">
                       Spent <CurrencySymbol className="currency-symbol" />
                     </label>
                     <input
@@ -429,7 +430,7 @@ export function ItemDetailSheet({
                       inputMode="decimal"
                       value={actual}
                       onChange={(e) => setActual(e.target.value)}
-                      className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition-colors focus:border-primary"
+                      className="w-full rounded-[13px] border border-border bg-card px-3.5 py-3 text-sm font-medium tabular-nums text-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
                       placeholder="0"
                       min="0"
                     />
@@ -444,25 +445,22 @@ export function ItemDetailSheet({
                   haptic.selection();
                   setIsCompleted((v) => !v);
                 }}
-                className={`flex items-center gap-3 w-full rounded-xl border px-4 py-3 transition-colors ${
+                className={`flex items-center gap-3 w-full rounded-[13px] border px-3.5 py-3 transition-colors ${
                   isCompleted
-                    ? "border-primary/30 bg-primary/10"
-                    : "border-border bg-background"
+                    ? "border-[var(--accent-strong)]/40 bg-accent/15"
+                    : "border-border bg-card"
                 }`}
               >
                 <span
-                  className={`material-symbols-outlined text-xl ${
-                    isCompleted ? "text-primary" : "text-muted-foreground"
+                  className={`flex size-[22px] items-center justify-center rounded-full ${
+                    isCompleted ? "bg-accent-strong text-white" : "border border-border text-muted-foreground"
                   }`}
-                  style={{
-                    fontVariationSettings: isCompleted ? "'FILL' 1" : "'FILL' 0",
-                  }}
                 >
-                  check_circle
+                  <Check size={13} strokeWidth={2.4} />
                 </span>
                 <span
-                  className={`text-sm font-medium ${
-                    isCompleted ? "text-primary" : "text-foreground"
+                  className={`text-sm font-bold ${
+                    isCompleted ? "text-foreground" : "text-foreground"
                   }`}
                 >
                   {isCompleted ? "Marked as done" : "Mark as done"}
@@ -470,8 +468,8 @@ export function ItemDetailSheet({
               </button>
 
               {/* Link to (cross-section) */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              <div className="space-y-2">
+                <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground block">
                   Link to
                 </label>
                 <BottomSheetSelect<"none" | LinkType>
@@ -487,6 +485,7 @@ export function ItemDetailSheet({
                     { value: "asset", label: "Asset / Goal", description: "Investment, savings, or goal" },
                     { value: "debt", label: "Debt", description: "Loan repayment" },
                   ]}
+                  className="flex w-full items-center justify-between rounded-[13px] border border-border bg-card px-3.5 py-3 text-sm font-medium text-foreground"
                 />
                 {linkType !== "none" && (
                   <BottomSheetSelect
@@ -504,54 +503,47 @@ export function ItemDetailSheet({
                       label: t.name,
                       icon: t.icon ?? undefined,
                     }))}
+                    className="flex w-full items-center justify-between rounded-[13px] border border-border bg-card px-3.5 py-3 text-sm font-medium text-foreground"
                   />
                 )}
                 {!userTouchedLink &&
                   isNew &&
                   suggestion.link_type &&
                   linkType === suggestion.link_type && (
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-[10px] font-medium text-muted-foreground">
                       Suggested · {suggestion.reason}
                     </p>
                   )}
                 {linkType !== "none" && linkId && (
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-[10px] font-medium text-muted-foreground">
                     Spend on this item also flows to the linked {linkType}.
                   </p>
                 )}
               </div>
 
               {/* Notes */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              <div className="space-y-2">
+                <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground block">
                   Notes
                 </label>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={2}
-                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition-colors focus:border-primary resize-none"
+                  className="w-full rounded-[13px] border border-border bg-card px-3.5 py-3 text-sm font-medium text-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40 resize-none"
                   placeholder="Optional note…"
                 />
               </div>
 
-              {error ? <p className="text-xs text-neg">{error}</p> : null}
+              {error ? <p className="text-xs font-medium text-neg">{error}</p> : null}
 
               {/* Actions */}
-              <div className="flex flex-col gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={isSaving}
-                  className="w-full rounded-xl bg-primary px-4 py-3.5 text-sm font-bold text-primary-foreground disabled:opacity-50 active:scale-[0.98] transition-all"
-                >
-                  {isSaving ? "Saving…" : isNew ? "Add Item" : "Save"}
-                </button>
+              <div className="flex gap-3 pt-1">
                 {isNew ? (
                   <button
                     type="button"
                     onClick={onClose}
-                    className="w-full py-3.5 rounded-xl text-sm font-medium bg-muted text-foreground active:scale-[0.98] transition-all"
+                    className="flex-1 h-[48px] rounded-pill bg-muted text-foreground text-sm font-semibold active:scale-[0.98] transition-all"
                   >
                     Cancel
                   </button>
@@ -559,15 +551,23 @@ export function ItemDetailSheet({
                   <button
                     type="button"
                     onClick={handleDelete}
-                    className={`w-full py-3.5 rounded-xl text-sm font-medium active:scale-[0.98] transition-all ${
+                    className={`flex-1 h-[48px] rounded-pill text-sm font-bold active:scale-[0.98] transition-all ${
                       confirmDelete
-                        ? "bg-destructive/10 text-destructive font-bold"
-                        : "bg-muted text-muted-foreground"
+                        ? "bg-[var(--neg-dim)] text-neg"
+                        : "border border-border bg-card text-neg"
                     }`}
                   >
-                    {confirmDelete ? "Tap again to confirm delete" : "Delete item"}
+                    {confirmDelete ? "Confirm delete" : "Delete"}
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="flex-[2] h-[48px] rounded-pill bg-[var(--pill)] text-[var(--pill-foreground)] text-sm font-bold disabled:opacity-50 active:scale-[0.98] transition-all"
+                >
+                  {isSaving ? "Saving…" : isNew ? "Add Item" : "Save"}
+                </button>
               </div>
             </div>
           </div>

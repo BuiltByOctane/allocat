@@ -44,10 +44,10 @@ export function OnboardingDeck({ slides }: { slides: DeckSlide[] }) {
 
   return (
     <div className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-[#0a0a0a] text-white">
-      {/* Ambient glow */}
+      {/* Ambient lime glow */}
       <div
         aria-hidden
-        className="pointer-events-none absolute left-1/2 top-[-12%] h-[55%] w-[130%] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.07),transparent_70%)]"
+        className="pointer-events-none absolute left-1/2 top-[-12%] h-[55%] w-[130%] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(182,232,74,0.14),transparent_70%)]"
       />
 
       {/* Skip — jumps to the final budget step (which has its own skip). */}
@@ -119,7 +119,9 @@ export function OnboardingDeck({ slides }: { slides: DeckSlide[] }) {
               className="py-2"
             >
               <motion.span
-                className="block h-[6px] rounded-full bg-white"
+                className={`block h-[6px] rounded-full ${
+                  i === current ? "bg-accent-strong" : "bg-white"
+                }`}
                 animate={{
                   width: i === current ? 24 : 6,
                   opacity: i === current ? 1 : 0.3,
@@ -137,7 +139,7 @@ export function OnboardingDeck({ slides }: { slides: DeckSlide[] }) {
             type="button"
             onClick={() => paginate(1)}
             aria-label="Next"
-            className="flex size-11 items-center justify-center rounded-full bg-white text-black transition active:scale-95"
+            className="flex size-11 items-center justify-center rounded-full bg-accent text-[var(--accent-ink)] transition active:scale-95"
           >
             <span className="material-symbols-outlined text-lg">arrow_forward</span>
           </button>

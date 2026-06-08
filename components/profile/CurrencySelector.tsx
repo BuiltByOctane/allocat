@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { MaterialSymbol } from "@/components/ui/MaterialSymbol";
+import { Wallet, ChevronDown, ChevronUp, Check } from "lucide-react";
+import { Card } from "@/components/ui/Card";
 import { CURRENCIES, DEFAULT_CURRENCY } from "@/lib/currency/catalog";
 import { useCurrency } from "@/lib/providers/CurrencyProvider";
 import { useUpdateCurrency } from "@/lib/hooks/useUpdateCurrency";
@@ -15,27 +16,26 @@ export default function CurrencySelector() {
   const activeDef = CURRENCIES.find((c) => c.code === active) ?? CURRENCIES[0];
 
   return (
-    <div className="bg-card border border-border">
+    <Card compact className="p-0 overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex justify-between items-center p-5 hover:bg-muted transition-colors"
+        className="w-full flex items-center gap-3 p-3.5 text-left"
       >
-        <div className="flex items-center gap-4">
-          <MaterialSymbol icon="payments" className="text-muted-foreground" />
-          <div className="text-left">
-            <span className="font-bold tracking-tight text-foreground block">
-              Currency
-            </span>
-            <span className="font-mono text-[10px] tracking-[0.1em] uppercase text-muted-foreground">
-              Display preference · {activeDef.code} {activeDef.symbol}
-            </span>
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-tile text-muted-foreground">
+          <Wallet size={18} strokeWidth={1.7} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-[13.5px] font-bold text-foreground">Currency</div>
+          <div className="text-[10.5px] font-medium text-muted-foreground mt-0.5">
+            Display preference · {activeDef.code} {activeDef.symbol}
           </div>
         </div>
-        <MaterialSymbol
-          icon={open ? "expand_less" : "expand_more"}
-          className="text-muted-foreground"
-        />
+        {open ? (
+          <ChevronUp size={18} strokeWidth={1.7} className="text-muted-foreground" />
+        ) : (
+          <ChevronDown size={18} strokeWidth={1.7} className="text-muted-foreground" />
+        )}
       </button>
 
       {open && (
@@ -48,27 +48,17 @@ export default function CurrencySelector() {
                 type="button"
                 disabled={update.isPending}
                 onClick={() => update.mutate(c.code)}
-                className={`w-full flex justify-between items-center px-5 py-3 border-b border-border last:border-0 transition-colors ${
+                className={`w-full flex justify-between items-center px-3.5 py-3 border-b border-border last:border-0 transition-colors ${
                   selected ? "bg-muted" : "hover:bg-muted/50"
                 } disabled:opacity-50`}
               >
                 <div className="flex items-center gap-3 text-left">
-                  <span className="font-mono text-sm w-12 text-foreground">
-                    {c.code}
-                  </span>
-                  <span className="text-sm text-foreground">{c.label}</span>
+                  <span className="figure text-sm w-12 text-foreground">{c.code}</span>
+                  <span className="text-sm font-medium text-foreground">{c.label}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {c.symbol}
-                  </span>
-                  {selected && (
-                    <MaterialSymbol
-                      icon="check"
-                      size={18}
-                      className="text-foreground"
-                    />
-                  )}
+                  <span className="figure text-xs text-muted-foreground">{c.symbol}</span>
+                  {selected && <Check size={18} strokeWidth={2} className="text-foreground" />}
                 </div>
               </button>
             );
@@ -77,10 +67,10 @@ export default function CurrencySelector() {
       )}
 
       {update.isError && (
-        <div className="px-5 py-2 text-[11px] text-neg border-t border-border">
+        <div className="px-3.5 py-2 text-[11px] text-neg border-t border-border">
           {(update.error as Error).message}
         </div>
       )}
-    </div>
+    </Card>
   );
 }

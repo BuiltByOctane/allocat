@@ -15,6 +15,23 @@
   --font-display: var(--font-display);
   --font-mono: var(--font-mono);
 
+  /* Neo · Lime accent + surfaces */
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-ink: var(--accent-ink);
+  --color-tile: var(--tile);
+  --color-chip: var(--chip);
+  --color-pill: var(--pill);
+  --color-pill-foreground: var(--pill-foreground);
+
+  /* Radii */
+  --radius-card: 26px;
+  --radius-stat: 24px;
+  --radius-sheet: 28px;
+  --radius-pill: 999px;
+  --radius-tile: 11px;
+  --radius-nav: 30px;
+
   /* Semantic financial colors — NEVER routed through ThemeProvider.
      Negative must always read negative, regardless of the user's hue. */
   --color-pos: var(--pos);
@@ -38,27 +55,42 @@
 }
 
 @layer base {
+  /* ===== Neo · Lime — Light (default) ===== */
   :root, .light {
-    --background: #f5f3ed;
-    --foreground: #0a0a0a;
-    --card: #eeece6;
-    --card-foreground: #0a0a0a;
-    --border: rgba(10, 10, 10, 0.1);
-    --muted: rgba(10, 10, 10, 0.05);
-    --muted-foreground: rgba(10, 10, 10, 0.5);
-    --primary: #0a0a0a;
-    --primary-foreground: #f5f3ed;
-    --dimmer: rgba(10, 10, 10, 0.28);
-    --progress-empty: rgba(10, 10, 10, 0.15);
+    --background: #efeff0;
+    --foreground: #111113;
+    --card: #ffffff;
+    --card-foreground: #111113;
+    --border: #ececec;
+    --muted: #f3f3f4;
+    --muted-foreground: #8e8e94;
+    --primary: #111113;
+    --primary-foreground: #ffffff;
+    --dimmer: rgba(17, 17, 19, 0.28);
+    --progress-empty: #ededed;
 
-    /* Semantic — darkened for AA on warm paper (#f5f3ed) */
+    /* Neo accent + surfaces */
+    --accent: #c6ee4d;
+    --accent-strong: #a7d62e;
+    --accent-ink: #37420a;
+    --tile: #f3f3f4;
+    --chip: #ffffff;
+    --pill: #111113;
+    --pill-foreground: #ffffff;
+    --navpill: #111113;
+    --navpill-foreground: #ffffff;
+    --nav-circle: #ffffff;
+    --nav-circle-foreground: #7e7e86;
+    --dock: rgba(232, 232, 236, 0.82);
+
+    /* Semantic */
     --pos: #3f7a5c;
-    --neg: #b04a4a;
+    --neg: #e5604a;
     --warn: #9a7320;
     --info: #4e6a85;
-    --destructive: #b03b34;
+    --destructive: #e5604a;
     --pos-dim: rgba(63, 122, 92, 0.14);
-    --neg-dim: rgba(176, 74, 74, 0.14);
+    --neg-dim: rgba(229, 96, 74, 0.14);
     --warn-dim: rgba(154, 115, 32, 0.14);
 
     /* Categorical — darker variants for light mode */
@@ -72,27 +104,42 @@
     --cat-8: #6a7140;
   }
 
+  /* ===== Neo · Lime — Dark (token swap) ===== */
   .dark {
-    --background: #0a0a0a;
-    --foreground: #f2f0ea;
-    --card: #111111;
-    --card-foreground: #f2f0ea;
-    --border: rgba(242, 240, 234, 0.12);
-    --muted: rgba(242, 240, 234, 0.06);
-    --muted-foreground: rgba(242, 240, 234, 0.5);
-    --primary: #f2f0ea;
-    --primary-foreground: #0a0a0a;
-    --dimmer: rgba(242, 240, 234, 0.28);
-    --progress-empty: rgba(242, 240, 234, 0.28);
+    --background: #0f0f12;
+    --foreground: #f2f2f5;
+    --card: #1a1a1f;
+    --card-foreground: #f2f2f5;
+    --border: rgba(255, 255, 255, 0.10);
+    --muted: rgba(255, 255, 255, 0.07);
+    --muted-foreground: #8c8c95;
+    --primary: #0a0a0c;
+    --primary-foreground: #ffffff;
+    --dimmer: rgba(242, 242, 245, 0.28);
+    --progress-empty: rgba(255, 255, 255, 0.10);
 
-    /* Semantic — desaturated "tinted graphite" on #0a0a0a */
+    /* Neo accent + surfaces */
+    --accent: #c6ee4d;
+    --accent-strong: #b6e84a;
+    --accent-ink: #1b210a;
+    --tile: rgba(255, 255, 255, 0.07);
+    --chip: rgba(255, 255, 255, 0.08);
+    --pill: #0a0a0c;
+    --pill-foreground: #ffffff;
+    --navpill: #c6ee4d;
+    --navpill-foreground: #15170a;
+    --nav-circle: #26262c;
+    --nav-circle-foreground: #a2a2aa;
+    --dock: rgba(36, 36, 42, 0.85);
+
+    /* Semantic */
     --pos: #6fae8f;
-    --neg: #d98b8b;
+    --neg: #ff7e66;
     --warn: #d6b072;
     --info: #8aa6c0;
-    --destructive: #c2554f;
+    --destructive: #ff7e66;
     --pos-dim: rgba(111, 174, 143, 0.14);
-    --neg-dim: rgba(217, 139, 139, 0.14);
+    --neg-dim: rgba(255, 126, 102, 0.14);
     --warn-dim: rgba(214, 176, 114, 0.14);
 
     /* Categorical — distinguished by hue */
@@ -142,9 +189,18 @@ body {
 }
 
 /* ===== Utilities ===== */
+/* Figures: solid sans, tabular, tight — the Neo "bold black numeral" look */
 .tabular-nums {
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-sans), system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
+}
+
+.figure {
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  line-height: 0.95;
 }
 
 .currency-symbol {
@@ -158,56 +214,68 @@ input[type="number"],
 input[inputmode="decimal"],
 input[inputmode="numeric"],
 input[type="date"] {
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-sans), system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
 }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* Glassy floating-dock surface + shadow (bottom nav) */
+.glass-dock {
+  background: var(--dock);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+/* Faint repeating "AlloCat" wordmark watermark for the lime hero card */
+.wordmark-watermark {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='46'%3E%3Ctext x='0' y='32' font-family='Arial,sans-serif' font-size='24' font-weight='800' fill='rgba(0,0,0,0.06)'%3EAlloCat%3C/text%3E%3C/svg%3E");
+}
+
 /* ===== Type scale =====
-   Named composite styles. Replaces ad-hoc text-[Npx] sprawl. */
-.t-display-hero { font-family: var(--font-display); font-size: clamp(48px, 14vw, 72px); line-height: 0.95; letter-spacing: -0.025em; font-weight: 600; }
-.t-display-lg   { font-family: var(--font-display); font-size: 48px; line-height: 1;    letter-spacing: -0.02em;  font-weight: 600; }
-.t-display-md   { font-family: var(--font-display); font-size: 36px; line-height: 1.05; letter-spacing: -0.02em;  font-weight: 600; }
-.t-title        { font-family: var(--font-display); font-size: 28px; line-height: 1.1;  letter-spacing: -0.015em; font-weight: 600; }
-.t-heading      { font-family: var(--font-sans);    font-size: 17px; line-height: 1.3;  letter-spacing: -0.01em;  font-weight: 600; }
+   Named composite styles. Headings = Bricolage; body/labels = sans (Hanken). */
+.t-display-hero { font-family: var(--font-display); font-size: clamp(44px, 13vw, 64px); line-height: 0.95; letter-spacing: -0.03em; font-weight: 700; }
+.t-display-lg   { font-family: var(--font-display); font-size: 44px; line-height: 1;    letter-spacing: -0.025em; font-weight: 700; }
+.t-display-md   { font-family: var(--font-display); font-size: 34px; line-height: 1.05; letter-spacing: -0.02em;  font-weight: 700; }
+.t-title        { font-family: var(--font-display); font-size: 22px; line-height: 1.1;  letter-spacing: -0.027em; font-weight: 700; }
+.t-heading      { font-family: var(--font-sans);    font-size: 17px; line-height: 1.3;  letter-spacing: -0.01em;  font-weight: 700; }
 .t-body         { font-family: var(--font-sans);    font-size: 14px; line-height: 1.55; }
 .t-body-sm      { font-family: var(--font-sans);    font-size: 13px; line-height: 1.5; }
-.t-label        { font-family: var(--font-mono); font-size: 10px; line-height: 1; letter-spacing: 0.14em; text-transform: uppercase; }
-.t-label-sm     { font-family: var(--font-mono); font-size: 9px;  line-height: 1; letter-spacing: 0.1em;  text-transform: uppercase; }
-.t-micro        { font-family: var(--font-mono); font-size: 8px;  line-height: 1; letter-spacing: 0.1em;  text-transform: uppercase; }
+.t-label        { font-family: var(--font-sans); font-size: 10px; line-height: 1; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; }
+.t-label-sm     { font-family: var(--font-sans); font-size: 9px;  line-height: 1; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 700; }
+.t-micro        { font-family: var(--font-sans); font-size: 8px;  line-height: 1; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; }
 
 /* ===== Focus visibility ===== */
 @layer base {
   :where(a, button, [role="button"], [tabindex], input, select, textarea):focus-visible {
-    outline: 2px solid var(--info);
+    outline: 2px solid var(--accent-strong);
     outline-offset: 2px;
-    border-radius: 2px;
+    border-radius: 6px;
   }
 }
 
 /* ===== Driver.js Tour Overrides ===== */
 
 .allocat-tour-popover {
-  background: var(--background) !important;
-  border: 1px solid var(--foreground) !important;
-  border-radius: 0 !important;
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 18px !important;
   padding: 20px 20px 16px !important;
-  box-shadow: 0 0 0 1px var(--border), 0 8px 32px rgba(0,0,0,0.4) !important;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.18) !important;
   min-width: 260px !important;
   max-width: 320px !important;
 }
 
 .allocat-tour-popover .driver-popover-title {
-  font-family: var(--font-mono), ui-monospace, monospace !important;
-  font-size: 10px !important;
-  letter-spacing: 0.14em !important;
-  text-transform: uppercase !important;
+  font-family: var(--font-display), sans-serif !important;
+  font-size: 16px !important;
+  letter-spacing: -0.02em !important;
   color: var(--foreground) !important;
-  font-weight: 600 !important;
+  font-weight: 700 !important;
   margin-bottom: 8px !important;
-  line-height: 1.4 !important;
+  line-height: 1.25 !important;
 }
 
 .allocat-tour-popover .driver-popover-description {
@@ -219,10 +287,11 @@ input[type="date"] {
 }
 
 .allocat-tour-popover .driver-popover-progress-text {
-  font-family: var(--font-mono), ui-monospace, monospace !important;
+  font-family: var(--font-sans), sans-serif !important;
   font-size: 9px !important;
-  letter-spacing: 0.1em !important;
+  letter-spacing: 0.06em !important;
   text-transform: uppercase !important;
+  font-weight: 700 !important;
   color: var(--muted-foreground) !important;
 }
 
@@ -242,12 +311,12 @@ input[type="date"] {
 }
 
 .allocat-tour-popover button {
-  font-family: var(--font-mono), ui-monospace, monospace !important;
-  font-size: 9px !important;
-  letter-spacing: 0.14em !important;
-  text-transform: uppercase !important;
-  padding: 8px 14px !important;
-  border-radius: 0 !important;
+  font-family: var(--font-sans), sans-serif !important;
+  font-size: 12px !important;
+  letter-spacing: 0 !important;
+  font-weight: 600 !important;
+  padding: 9px 16px !important;
+  border-radius: 999px !important;
   border: 1px solid var(--border) !important;
   background: transparent !important;
   color: var(--muted-foreground) !important;
@@ -261,9 +330,9 @@ input[type="date"] {
 }
 
 .allocat-tour-popover .driver-popover-next-btn {
-  background: var(--foreground) !important;
-  color: var(--background) !important;
-  border-color: var(--foreground) !important;
+  background: var(--pill) !important;
+  color: var(--pill-foreground) !important;
+  border-color: var(--pill) !important;
 }
 
 .allocat-tour-popover .driver-popover-next-btn:hover {
@@ -288,6 +357,7 @@ input[type="date"] {
 
 /* Highlight ring instead of default */
 .driver-active-element {
-  outline: 2px solid var(--foreground) !important;
+  outline: 2px solid var(--accent-strong) !important;
   outline-offset: 3px !important;
+  border-radius: 14px !important;
 }

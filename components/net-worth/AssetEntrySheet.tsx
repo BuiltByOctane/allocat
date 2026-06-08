@@ -101,28 +101,28 @@ export function AssetEntrySheet({ open, entryType, currentValue, onClose, onSave
   return (
     <Drawer.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <Drawer.Portal>
-        <Drawer.Overlay className="fixed inset-0 bg-black/60 z-50" />
+        <Drawer.Overlay className="fixed inset-0 bg-black/50 z-50" />
         <Drawer.Content
           aria-describedby="asset-entry-description"
-          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-2xl bg-card border-t border-border focus:outline-none max-h-[80dvh]"
+          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none max-h-[80dvh]"
         >
           <div className="flex justify-center pt-3 pb-1 shrink-0">
-            <div className="w-10 h-1 bg-muted rounded-full" />
+            <div className="mx-auto w-9 h-1 bg-border rounded-full" />
           </div>
 
-          <div className="overflow-y-auto flex-1 px-5 pt-4 pb-8 space-y-5">
+          <div className="overflow-y-auto flex-1 px-6 pt-4 pb-8 space-y-5">
             <div>
-              <Drawer.Title className="text-base font-bold text-foreground">{config.title}</Drawer.Title>
-              <p id="asset-entry-description" className="text-sm text-muted-foreground mt-0.5">
+              <Drawer.Title className="font-display text-[20px] font-bold tracking-[-0.02em] text-foreground">{config.title}</Drawer.Title>
+              <p id="asset-entry-description" className="text-[13px] text-muted-foreground mt-1">
                 Current value:{" "}
-                <span className="font-mono tabular-nums">
+                <span className="figure tabular-nums">
                   <CurrencyText value={currentValue} />
                 </span>
               </p>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+              <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
                 {config.label}
               </label>
               <input
@@ -133,17 +133,17 @@ export function AssetEntrySheet({ open, entryType, currentValue, onClose, onSave
                 placeholder={config.placeholder}
                 value={amount}
                 onChange={(e) => { setAmount(e.target.value); setError(""); }}
-                className="w-full bg-background border border-border rounded-xl px-4 py-3 text-lg font-semibold text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-foreground"
+                className="w-full bg-card border border-border rounded-[13px] px-3.5 py-3 text-lg font-semibold text-foreground placeholder:text-muted-foreground/50 outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
               />
               {numAmount > 0 && (
-                <p className="text-xs text-muted-foreground px-1 font-mono tabular-nums">
+                <p className="text-xs text-muted-foreground px-1 tabular-nums">
                   {config.hint(previewValue, fmt)}
                 </p>
               )}
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+              <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
                 Date
               </label>
               <input
@@ -151,12 +151,12 @@ export function AssetEntrySheet({ open, entryType, currentValue, onClose, onSave
                 value={entryDate}
                 max={new Date().toISOString().split("T")[0]}
                 onChange={(e) => setEntryDate(e.target.value)}
-                className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-foreground"
+                className="w-full bg-card border border-border rounded-[13px] px-3.5 py-3 text-sm font-medium text-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+              <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
                 Note (optional)
               </label>
               <input
@@ -164,7 +164,7 @@ export function AssetEntrySheet({ open, entryType, currentValue, onClose, onSave
                 placeholder="e.g. Monthly SIP, Bonus invested…"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-foreground"
+                className="w-full bg-card border border-border rounded-[13px] px-3.5 py-3 text-sm font-medium text-foreground placeholder:text-muted-foreground/50 outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
               />
             </div>
 
@@ -172,17 +172,17 @@ export function AssetEntrySheet({ open, entryType, currentValue, onClose, onSave
               <p className="text-xs text-neg font-medium">{error}</p>
             )}
 
-            <div className="flex gap-3 pt-1">
+            <div className="flex flex-col gap-3 pt-1">
               <button
                 onClick={handleSave}
                 disabled={isSaving}
-                className="flex-1 py-3.5 bg-foreground text-background rounded-xl font-bold text-sm active:scale-95 transition-transform disabled:opacity-50"
+                className="w-full h-[48px] rounded-pill bg-[var(--pill)] text-[var(--pill-foreground)] text-sm font-bold active:scale-[0.98] transition-all disabled:opacity-50"
               >
                 {isSaving ? "Saving…" : "Save"}
               </button>
               <button
                 onClick={onClose}
-                className="flex-1 py-3.5 bg-background text-foreground rounded-xl font-medium text-sm border border-border hover:bg-muted transition-colors"
+                className="w-full h-[48px] rounded-pill bg-muted text-foreground text-sm font-semibold"
               >
                 Cancel
               </button>

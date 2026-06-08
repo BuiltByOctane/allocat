@@ -1,7 +1,7 @@
 "use client";
 
 import { type ReactNode } from "react";
-import { MaterialSymbol } from "@/components/ui/MaterialSymbol";
+import { Clock } from "lucide-react";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import {
   Drawer,
@@ -54,12 +54,12 @@ function MetadataRow({
 }) {
   return (
     <div className="flex justify-between items-start py-3 border-b border-border last:border-0">
-      <span className="text-xs uppercase tracking-widest text-muted-foreground font-bold">
+      <span className="t-label text-muted-foreground">
         {label}
       </span>
       <span
         className={`text-sm font-semibold text-foreground text-right max-w-[60%] ${
-          isNumeric ? "font-mono tabular-nums" : ""
+          isNumeric ? "figure" : ""
         }`}
       >
         {value}
@@ -143,10 +143,10 @@ export default function ActivityDetailSheet({
         {log && (
           <>
             <DrawerHeader className="text-left px-5 pt-2 pb-0">
-              <p className="text-[0.6rem] uppercase tracking-[0.2em] text-muted-foreground font-bold mb-1">
+              <p className="t-label text-muted-foreground mb-1">
                 {categoryLabel(log.category)}
               </p>
-              <DrawerTitle className="text-xl font-extrabold tracking-tight text-foreground leading-tight">
+              <DrawerTitle className="font-display text-[20px] font-bold tracking-[-0.02em] text-foreground leading-tight">
                 {log.title}
               </DrawerTitle>
               {log.description !== log.title && (
@@ -158,7 +158,7 @@ export default function ActivityDetailSheet({
 
             <div className="overflow-y-auto flex-1 px-5 pb-10 pt-4">
               {metadataEntries.length > 0 && (
-                <div className="border border-border rounded-lg px-4 mb-6">
+                <div className="bg-tile rounded-2xl px-4 mb-6">
                   {metadataEntries.map(([key, value]) => {
                     const formatted = formatValue(key, value);
                     return (
@@ -174,10 +174,8 @@ export default function ActivityDetailSheet({
               )}
 
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <MaterialSymbol icon="schedule" size={14} />
-                <span className="font-mono tabular-nums">
-                  {formatDateTime(log.created_at)}
-                </span>
+                <Clock size={14} strokeWidth={1.8} />
+                <span className="figure">{formatDateTime(log.created_at)}</span>
               </div>
             </div>
           </>

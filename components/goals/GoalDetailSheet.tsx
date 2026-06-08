@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import EmojiPickerModal from "@/components/ui/EmojiPickerModal";
 import { ColorPicker } from "@/components/ui/ColorPicker";
+import { Progress } from "@/components/ui/Progress";
 import type { CatKey } from "@/lib/theme/dataViz";
 
 export interface GoalFormData {
@@ -149,39 +150,38 @@ export function GoalDetailSheet({
         onOpenChange={(o) => { if (!o) onClose(); }}
       >
         <Drawer.Portal>
-          <Drawer.Overlay className="fixed inset-0 bg-black/60 z-40" />
+          <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
           <Drawer.Content
             aria-describedby="goal-sheet-desc"
-            className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-2xl bg-card border-t border-border focus:outline-none max-h-[92dvh]"
+            className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none max-h-[92dvh]"
           >
             <div className="flex justify-center pt-3 pb-1 shrink-0">
-              <div className="w-10 h-1 bg-muted rounded-full" />
+              <div className="mx-auto w-9 h-1 bg-border rounded-full" />
             </div>
 
             <div className="overflow-y-auto flex-1">
               {/* Header */}
-              <div className="px-5 pt-2 pb-4 border-b border-border shrink-0">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setShowEmojiPicker(true)}
-                      className="text-2xl transition-all"
-                      title="Change icon"
-                    >
-                      {icon || "🎯"}
-                    </button>
-                    <div>
-                      <Drawer.Title className="text-[10px] font-mono font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                        {isEdit ? "Edit Goal" : "New Goal"}
-                      </Drawer.Title>
-                      {isEdit && goal && (
-                        <p className="text-base font-semibold text-foreground mt-0.5 tracking-tight">{goal.name}</p>
-                      )}
+              <div className="px-6 pt-2 pb-4 shrink-0">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setShowEmojiPicker(true)}
+                    className="flex h-[44px] w-[44px] items-center justify-center rounded-[13px] bg-tile text-2xl transition-all"
+                    title="Change icon"
+                  >
+                    {icon || "🎯"}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
+                      {isEdit ? "Edit Goal" : "New Goal"}
                     </div>
+                    <Drawer.Title className="font-display text-[20px] font-bold tracking-[-0.02em] text-foreground truncate">
+                      {isEdit && goal ? goal.name : "New Goal"}
+                    </Drawer.Title>
                   </div>
                   <button
                     onClick={onClose}
                     className="size-8 flex items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label="Close"
                   >
                     <span className="material-symbols-outlined text-sm">close</span>
                   </button>
@@ -190,104 +190,94 @@ export function GoalDetailSheet({
                   {isEdit ? "Edit goal details" : "Add a new savings goal"}
                 </p>
                 {isEdit && goal && (
-                  <div className="mt-3 flex gap-[2px]">
-                    {Array.from({ length: 20 }).map((_, j) => (
-                      <div
-                        key={j}
-                        className="flex-1"
-                        style={{
-                          height: 2,
-                          background: j / 20 < pct ? "var(--foreground)" : "var(--progress-empty)",
-                        }}
-                      />
-                    ))}
+                  <div className="mt-3">
+                    <Progress value={pct * 100} className="h-1.5" />
                   </div>
                 )}
               </div>
 
               {/* Form */}
-              <div className="px-5 py-4 space-y-3">
-                <div>
-                  <label className="text-[10px] font-mono uppercase tracking-[0.14em] text-muted-foreground block mb-1.5">Name</label>
+              <div className="px-6 py-2 space-y-4">
+                <div className="space-y-2">
+                  <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground block">Name</label>
                   <input
                     ref={nameRef}
                     type="text"
                     placeholder="e.g. Emergency Fund"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full bg-card border border-border rounded-[13px] px-3.5 py-3 text-sm font-medium text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
                   />
                 </div>
 
-                <div>
-                  <label className="text-[10px] font-mono uppercase tracking-[0.14em] text-muted-foreground block mb-1.5">Color</label>
+                <div className="space-y-2">
+                  <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground block">Color</label>
                   <ColorPicker value={color} onChange={setColor} />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-mono uppercase tracking-[0.14em] text-muted-foreground block mb-1.5">Target</label>
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground block">Target</label>
                     <input
                       type="number"
                       min="0"
                       placeholder="0"
                       value={targetAmount}
                       onChange={(e) => setTargetAmount(e.target.value)}
-                      className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-sm font-mono tabular-nums text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      className="w-full bg-card border border-border rounded-[13px] px-3.5 py-3 text-sm font-medium tabular-nums text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
                     />
                   </div>
-                  <div>
-                    <label className="text-[10px] font-mono uppercase tracking-[0.14em] text-muted-foreground block mb-1.5">Current</label>
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground block">Current</label>
                     <input
                       type="number"
                       min="0"
                       placeholder="0"
                       value={currentAmount}
                       onChange={(e) => setCurrentAmount(e.target.value)}
-                      className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-sm font-mono tabular-nums text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      className="w-full bg-card border border-border rounded-[13px] px-3.5 py-3 text-sm font-medium tabular-nums text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
                     />
-                    <p className="text-[10px] text-muted-foreground mt-1">
-                      Tracked as an asset in Net Worth.
-                    </p>
                   </div>
                 </div>
+                <p className="text-[11px] font-medium text-muted-foreground -mt-2">
+                  Tracked as an asset in Net Worth.
+                </p>
 
-                <div>
-                  <label className="text-[10px] font-mono uppercase tracking-[0.14em] text-muted-foreground block mb-1.5">Notes <span className="normal-case">(optional)</span></label>
+                <div className="space-y-2">
+                  <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground block">Notes <span className="normal-case">(optional)</span></label>
                   <textarea
                     placeholder="Any notes about this goal…"
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     rows={2}
-                    className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+                    className="w-full bg-card border border-border rounded-[13px] px-3.5 py-3 text-sm font-medium text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40 resize-none"
                   />
                 </div>
 
                 {error && (
-                  <p className="text-[11px] text-neg font-mono">{error}</p>
+                  <p className="text-[11px] font-medium text-neg">{error}</p>
                 )}
               </div>
             </div>
 
             {/* Footer */}
-            <div className="px-5 pb-8 pt-3 border-t border-border shrink-0 space-y-2">
-              {isEdit && goal && onDelete && (
-                <button
-                  onClick={handleDelete}
-                  className={`w-full py-2.5 rounded-lg text-xs font-mono uppercase tracking-[0.1em] transition-colors ${
-                    confirmDelete
-                      ? "bg-destructive/20 text-destructive border border-destructive/30"
-                      : "bg-muted text-muted-foreground hover:text-destructive"
-                  }`}
-                >
-                  {confirmDelete ? "Confirm Delete" : "Delete Goal"}
-                </button>
-              )}
-              <div className="flex gap-2">
-                {!isEdit && (
+            <div className="px-6 pb-8 pt-3 shrink-0">
+              <div className="flex gap-3">
+                {isEdit && goal && onDelete ? (
+                  <button
+                    onClick={handleDelete}
+                    className={`flex-1 h-[48px] rounded-pill text-sm font-bold transition-colors ${
+                      confirmDelete
+                        ? "bg-[var(--neg-dim)] text-neg"
+                        : "border border-border bg-card text-neg"
+                    }`}
+                  >
+                    {confirmDelete ? "Confirm Delete" : "Delete"}
+                  </button>
+                ) : (
                   <button
                     onClick={onClose}
-                    className="flex-1 py-3 rounded-lg text-sm font-mono uppercase tracking-[0.1em] bg-muted text-foreground transition-colors"
+                    className="flex-1 h-[48px] rounded-pill bg-muted text-foreground text-sm font-semibold"
                   >
                     Cancel
                   </button>
@@ -295,7 +285,7 @@ export function GoalDetailSheet({
                 <button
                   onClick={handleSave}
                   disabled={isSaving}
-                  className="flex-1 py-3 rounded-lg text-sm font-mono uppercase tracking-[0.1em] bg-primary text-primary-foreground disabled:opacity-50 transition-all active:scale-95"
+                  className="flex-[2] h-[48px] rounded-pill bg-[var(--pill)] text-[var(--pill-foreground)] text-sm font-bold disabled:opacity-50 active:scale-[0.98] transition-all"
                 >
                   {isSaving ? "Saving…" : isEdit ? "Save Changes" : "Add Goal"}
                 </button>

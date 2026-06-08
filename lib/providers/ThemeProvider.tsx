@@ -31,15 +31,23 @@ export function useCustomTheme() {
   return context;
 }
 
+/* Neo · Lime "Canvas base" tints. Lime stays the fixed accent and the primary
+   (ink) pill is constant across all hues — the canvas only re-tints the
+   background/card surfaces, matching the redesign's "Canvas base" swatches. */
+const NEO_INK_LIGHT = "#111113";
+const NEO_INK_DARK = "#0a0a0c";
+const NEO_BORDER_LIGHT = "#ececec";
+const NEO_BORDER_DARK = "rgba(255,255,255,0.10)";
+
 const colorPalettes = {
-  zinc: { light: { bg: "#f5f3ed", card: "#eeece6", primary: "#18181b", border: "rgba(10,10,10,0.1)" }, dark: { bg: "#000000", card: "#18181b", primary: "#fafafa", border: "rgba(255,255,255,0.05)" } },
-  slate: { light: { bg: "#f1ede2", card: "#e8e3d5", primary: "#0f172a", border: "rgba(10,10,10,0.1)" }, dark: { bg: "#020617", card: "#0f172a", primary: "#f8fafc", border: "rgba(255,255,255,0.05)" } },
-  stone: { light: { bg: "#f5f0e3", card: "#ede6d4", primary: "#1c1917", border: "rgba(28,25,23,0.1)" }, dark: { bg: "#0c0a09", card: "#1c1917", primary: "#fafaf9", border: "rgba(255,255,255,0.05)" } },
-  blue: { light: { bg: "#eff6ff", card: "#ffffff", primary: "#2563eb", border: "rgba(37,99,235,0.1)" }, dark: { bg: "#020817", card: "#0f172a", primary: "#3b82f6", border: "rgba(59,130,246,0.1)" } },
-  emerald: { light: { bg: "#ecfdf5", card: "#ffffff", primary: "#10b981", border: "rgba(16,185,129,0.1)" }, dark: { bg: "#022c22", card: "#064e3b", primary: "#34d399", border: "rgba(52,211,153,0.1)" } },
-  rose: { light: { bg: "#fff1f2", card: "#ffffff", primary: "#e11d48", border: "rgba(225,29,72,0.1)" }, dark: { bg: "#4c0519", card: "#881337", primary: "#fb7185", border: "rgba(251,113,133,0.1)" } },
-  indigo: { light: { bg: "#eef2ff", card: "#ffffff", primary: "#4f46e5", border: "rgba(79,70,229,0.1)" }, dark: { bg: "#1e1b4b", card: "#312e81", primary: "#818cf8", border: "rgba(129,140,248,0.1)" } },
-  orange: { light: { bg: "#fff7ed", card: "#ffffff", primary: "#ea580c", border: "rgba(234,88,12,0.1)" }, dark: { bg: "#431407", card: "#7c2d12", primary: "#fdba74", border: "rgba(253,186,116,0.1)" } },
+  zinc:    { light: { bg: "#efeff0", card: "#ffffff", primary: NEO_INK_LIGHT, border: NEO_BORDER_LIGHT }, dark: { bg: "#0f0f12", card: "#1a1a1f", primary: NEO_INK_DARK, border: NEO_BORDER_DARK } },
+  slate:   { light: { bg: "#eef0f2", card: "#ffffff", primary: NEO_INK_LIGHT, border: NEO_BORDER_LIGHT }, dark: { bg: "#0e0f12", card: "#181a1f", primary: NEO_INK_DARK, border: NEO_BORDER_DARK } },
+  stone:   { light: { bg: "#f1efeb", card: "#ffffff", primary: NEO_INK_LIGHT, border: NEO_BORDER_LIGHT }, dark: { bg: "#100f0e", card: "#1b1a18", primary: NEO_INK_DARK, border: NEO_BORDER_DARK } },
+  blue:    { light: { bg: "#eef2f8", card: "#ffffff", primary: NEO_INK_LIGHT, border: NEO_BORDER_LIGHT }, dark: { bg: "#0d0f14", card: "#171a21", primary: NEO_INK_DARK, border: NEO_BORDER_DARK } },
+  emerald: { light: { bg: "#edf3ef", card: "#ffffff", primary: NEO_INK_LIGHT, border: NEO_BORDER_LIGHT }, dark: { bg: "#0d110f", card: "#171c19", primary: NEO_INK_DARK, border: NEO_BORDER_DARK } },
+  rose:    { light: { bg: "#f6eef0", card: "#ffffff", primary: NEO_INK_LIGHT, border: NEO_BORDER_LIGHT }, dark: { bg: "#120e10", card: "#1d181a", primary: NEO_INK_DARK, border: NEO_BORDER_DARK } },
+  indigo:  { light: { bg: "#eeeef7", card: "#ffffff", primary: NEO_INK_LIGHT, border: NEO_BORDER_LIGHT }, dark: { bg: "#0e0e14", card: "#181821", primary: NEO_INK_DARK, border: NEO_BORDER_DARK } },
+  orange:  { light: { bg: "#f5efe8", card: "#ffffff", primary: NEO_INK_LIGHT, border: NEO_BORDER_LIGHT }, dark: { bg: "#120f0c", card: "#1c1815", primary: NEO_INK_DARK, border: NEO_BORDER_DARK } },
 };
 
 /**

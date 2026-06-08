@@ -53,7 +53,7 @@ export function BottomSheetSelect<T extends string = string>({
           disabled={disabled}
           className={
             className ??
-            "w-full flex items-center justify-between bg-background border border-border rounded-lg px-3 py-2.5 text-sm text-foreground focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
+            "w-full flex items-center justify-between bg-card border border-border rounded-[13px] px-3.5 py-3 text-sm font-medium text-foreground focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
           }
         >
           <span
@@ -78,18 +78,18 @@ export function BottomSheetSelect<T extends string = string>({
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 bg-black/60 z-40" />
 
-        <Drawer.Content 
+        <Drawer.Content
           aria-describedby={undefined}
-          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-2xl bg-card border-t border-border max-h-[80vh] focus:outline-none"
+          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card max-h-[80vh] focus:outline-none"
         >
           {/* Drag handle */}
           <div className="flex justify-center pt-3 pb-1 shrink-0">
-            <div className="w-10 h-1 bg-muted rounded-full" />
+            <div className="w-9 h-1 bg-border rounded-full" />
           </div>
 
           {/* Title */}
-          <div className="px-5 py-3 border-b border-border shrink-0">
-            <Drawer.Title className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground m-0">
+          <div className="px-5 py-3 shrink-0">
+            <Drawer.Title className="font-display text-[18px] font-bold tracking-[-0.02em] text-foreground m-0">
               {title}
             </Drawer.Title>
           </div>

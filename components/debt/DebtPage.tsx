@@ -6,6 +6,10 @@ import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Progress } from "@/components/ui/Progress";
+import { Card } from "@/components/ui/Card";
+import { StatCard } from "@/components/ui/StatCard";
+import { Chip } from "@/components/ui/Chip";
+import { Button } from "@/components/ui/Button";
 import { resolveColor } from "@/lib/theme/dataViz";
 import {
   useAddDebt,
@@ -41,36 +45,9 @@ type Debt = {
 };
 
 
-function MonthCaption() {
+function monthCaption() {
   const now = new Date();
-  return (
-    <span>
-      {now.toLocaleString("en-US", { month: "short" })} {now.getFullYear()}
-    </span>
-  );
-}
-
-// 41-tick ruler over the shared <Progress/> primitive (pct is 0–1 here).
-function TickRuler({ pct }: { pct: number }) {
-  return (
-    <div>
-      <Progress variant="ticks" value={pct * 100} />
-      <div className="flex justify-between mt-1.5">
-        {["0", "25%", "50%", "75%", "paid"].map((l) => (
-          <span key={l} className="font-mono text-[9px] text-foreground/30 tracking-[0.08em]">
-            {l}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// 20-segment dash bar per debt (pct is 0–1).
-function SegBar({ pct, color }: { pct: number; color?: string }) {
-  return (
-    <Progress variant="segments" segments={20} value={pct * 100} color={color} className="mt-2.5" />
-  );
+  return `${now.toLocaleString("en-US", { month: "short" })} ${now.getFullYear()}`;
 }
 
 export default function DebtPage({ data }: { data: Debt[] }) {
@@ -199,7 +176,7 @@ export default function DebtPage({ data }: { data: Debt[] }) {
   }
 
 
-const trendPct = trendData?.trendPct ?? 0;
+  const trendPct = trendData?.trendPct ?? 0;
   const trendLabel = trendPct === 0
     ? "—"
     : `${trendPct >= 0 ? "↘" : "↗"} ${Math.abs(trendPct).toFixed(1)}%`;
@@ -216,15 +193,18 @@ const trendPct = trendData?.trendPct ?? 0;
   if (!hasDebts && !hasLents) {
     return (
       <>
-        <header className="sticky top-0 z-10 bg-background px-7 pt-6 pb-[18px] border-b border-border">
-          <div className="font-display text-[32px] leading-none tracking-[-0.02em] text-foreground">Debt</div>
-          <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mt-2">
-            Liability Tracker · <MonthCaption />
+        <div className="px-4 pt-4 flex flex-col gap-3">
+          <div className="px-1 pt-1">
+            <h1 className="font-display text-[26px] font-bold leading-none tracking-[-0.03em] text-foreground">
+              Debt
+            </h1>
+            <p className="text-[11px] font-medium text-muted-foreground mt-1">
+              Liability tracker · {monthCaption()}
+            </p>
           </div>
-        </header>
-        <main className="px-4 pb-6">
           <DebtEmptyState onAddDebt={openAddSheet} />
-        </main>
+        </div>
+        <div className="h-28 md:h-12" />
         <DebtDetailSheet
           mode="add"
           open={sheetOpen}
@@ -237,140 +217,141 @@ const trendPct = trendData?.trendPct ?? 0;
 
   return (
     <>
-      {/* ── Masthead ─────────────────────────────────────────────── */}
-      <header className="fixed w-full top-0 z-10 bg-background px-7 pt-6 pb-[18px] border-b border-border">
-        <div className="font-display text-[32px] leading-none tracking-[-0.02em] text-foreground">Debt</div>
-        <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mt-2">
-          Liability Tracker · <MonthCaption />
-        </div>
-      </header>
-
-      <main className="pb-10 mt-20">
-        {/* ── Hero ─────────────────────────────────────────────────── */}
-        <div id="debt-hero-section" className="px-7 pt-7 pb-6">
-          <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mb-2">
-            Total Outstanding · <MonthCaption />
+      <div className="px-4 pt-4 flex flex-col gap-3">
+        {/* Header */}
+        <div className="flex items-center justify-between px-1 pt-1">
+          <div>
+            <h1 className="font-display text-[26px] font-bold leading-none tracking-[-0.03em] text-foreground">
+              Debt
+            </h1>
+            <p className="text-[11px] font-medium text-muted-foreground mt-1">
+              Liability tracker · {monthCaption()}
+            </p>
           </div>
-          <CurrencyText value={totalOutstanding} className="font-display text-[52px] leading-[0.95] tracking-[-0.025em] text-foreground" />
-          <div className="flex items-baseline gap-4 mt-3">
-            <span className="font-mono text-[11px] text-muted-foreground">
-              ↳ {allActiveDebts.length} active {allActiveDebts.length === 1 ? "liability" : "liabilities"}
+        </div>
+
+        {/* Total outstanding hero (white card) */}
+        <Card id="debt-hero-section">
+          <div className="flex justify-between items-start">
+            <span className="t-label text-muted-foreground">Total outstanding</span>
+            {totalRepayableAll > 0 && (
+              <Chip tone="good">{overallPct >= 1 ? "Cleared" : "Paying down"}</Chip>
+            )}
+          </div>
+          <div className="figure text-[38px] mt-1.5 mb-3">
+            <CurrencyText value={totalOutstanding} />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-semibold text-muted-foreground">
+              {allActiveDebts.length} active {allActiveDebts.length === 1 ? "liability" : "liabilities"}
             </span>
             {(hasLents || totalLent > 0) && (
               <button
                 onClick={() => { haptic.light(); setShowLentList(true); }}
-                className="font-mono text-[11px] text-foreground underline underline-offset-2 decoration-foreground/30 hover:decoration-foreground transition-all inline-flex items-baseline gap-1"
+                className="ml-auto inline-flex items-center gap-1.5 rounded-pill bg-tile px-3 py-1.5 text-[11.5px] font-semibold text-foreground active:scale-[0.97] transition-transform"
               >
-                · money out <CurrencyText value={totalLent} /> →
+                <CurrencyText value={totalLent} /> lent out
+                <span className="text-muted-foreground">→</span>
               </button>
             )}
           </div>
-        </div>
-
-        <div className="h-px bg-border mx-7" />
-
-        {/* ── Sub-stats ─────────────────────────────────────────────── */}
-        <div className="px-7 py-5 flex justify-between items-baseline bg-card">
-          <div>
-            <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mb-1">Avg Interest</div>
-            <div className="font-display text-[34px] leading-none tracking-[-0.02em] tabular-nums text-foreground">
-              {avgInterest.toFixed(1)}<span className="text-[20px] text-muted-foreground">%</span>
+          {totalRepayableAll > 0 && (
+            <div id="debt-progress-ruler" className="mt-3.5">
+              <Progress value={overallPct * 100} />
             </div>
-          </div>
-          <div className="text-right">
-            <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mb-1">Payoff Trend</div>
-            <div className="font-mono text-[14px] tabular-nums text-foreground">{trendLabel}</div>
-            <div className="font-mono text-[9px] text-muted-foreground mt-0.5">30-day · vs outstanding</div>
-          </div>
+          )}
+        </Card>
+
+        {/* Stat pair: Avg interest (light) + Payoff trend (dark) */}
+        <div className="flex gap-3">
+          <StatCard
+            tone="light"
+            className="flex-1"
+            icon={<span className="material-symbols-outlined text-[18px]">percent</span>}
+            label="Avg interest"
+            value={`${avgInterest.toFixed(1)}%`}
+          />
+          <StatCard
+            tone="dark"
+            className="flex-1"
+            icon={<span className="material-symbols-outlined text-[18px]">trending_down</span>}
+            chip={<Chip tone="onDark">30-day</Chip>}
+            label="Payoff trend"
+            value={trendLabel}
+          />
         </div>
 
-        {/* Tick ruler */}
-        {totalRepayableAll > 0 && (
-          <div id="debt-progress-ruler" className="px-7 pb-6 bg-card">
-            <TickRuler pct={overallPct} />
-          </div>
-        )}
-
-        <div className="h-px bg-border mx-7" />
-
-        {/* ── Quick Payment ─────────────────────────────────────────── */}
+        {/* Quick payment */}
         {quickPayDebts.length > 0 && (
-          <div className="bg-card">
-            <div id="debt-quick-section" className="px-7 pt-5 pb-1 flex justify-between items-baseline bg-card">
-              <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
-                Quick Payment
-              </span>
-              <span className="font-mono text-[10px] text-muted-foreground">Select debt</span>
+          <Card id="debt-quick-section">
+            <div className="flex justify-between items-center">
+              <span className="t-label text-muted-foreground">Quick payment</span>
+              <span className="text-[11px] font-semibold text-muted-foreground">Select debt</span>
             </div>
 
-            <div className="px-7">
-              {/* Debt picker */}
-              <div className="py-2 border-t border-border">
-                <BottomSheetSelect
-                  title="Select Debt"
-                  options={quickPayDebts.map((d) => {
-                    const repayable = d.totalRepayable > 0 ? d.totalRepayable : d.principal;
-                    const remaining = Math.max(0, repayable - d.totalPaid);
-                    return {
-                      value: d.id,
-                      label: d.name,
-                      description: fmtCurrency(remaining) + " remaining",
-                      icon: d.icon ?? undefined,
-                    };
-                  })}
-                  value={paymentDebtId}
-                  onChange={setPaymentDebtId}
+            {/* Debt picker */}
+            <div className="mt-3">
+              <BottomSheetSelect
+                title="Select Debt"
+                options={quickPayDebts.map((d) => {
+                  const repayable = d.totalRepayable > 0 ? d.totalRepayable : d.principal;
+                  const remaining = Math.max(0, repayable - d.totalPaid);
+                  return {
+                    value: d.id,
+                    label: d.name,
+                    description: fmtCurrency(remaining) + " remaining",
+                    icon: d.icon ?? undefined,
+                  };
+                })}
+                value={paymentDebtId}
+                onChange={setPaymentDebtId}
+                className="flex items-center justify-between rounded-[13px] border border-border bg-card px-3.5 py-3 text-sm font-semibold text-foreground"
+              />
+            </div>
+
+            {/* Selected debt remaining */}
+            {(() => {
+              const sel = quickPayDebts.find((d) => d.id === paymentDebtId);
+              if (!sel) return null;
+              const repayable = sel.totalRepayable > 0 ? sel.totalRepayable : sel.principal;
+              const remaining = Math.max(0, repayable - sel.totalPaid);
+              const paidPct = repayable > 0 ? sel.totalPaid / repayable : 0;
+              return (
+                <div className="mt-2.5 text-[11px] font-semibold text-muted-foreground">
+                  {Math.round(paidPct * 100)}% paid · remaining{" "}
+                  <span className="text-foreground"><CurrencyText value={remaining} /></span>
+                </div>
+              );
+            })()}
+
+            {/* Amount + action */}
+            <div className="mt-3 flex items-center gap-2.5">
+              <div className="flex flex-1 items-baseline gap-1.5 rounded-[13px] border border-border bg-card px-3.5 py-3">
+                <span className="currency-symbol text-muted-foreground" style={{ fontSize: "18px" }}><CurrencySymbol /></span>
+                <input
+                  type="number"
+                  min="0"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+                  placeholder="0"
+                  className="figure w-full bg-transparent border-none outline-none text-[20px] text-foreground p-0 placeholder:text-muted-foreground"
                 />
               </div>
-
-              {/* Selected debt remaining */}
-              {(() => {
-                const sel = quickPayDebts.find((d) => d.id === paymentDebtId);
-                if (!sel) return null;
-                const repayable = sel.totalRepayable > 0 ? sel.totalRepayable : sel.principal;
-                const remaining = Math.max(0, repayable - sel.totalPaid);
-                const paidPct = repayable > 0 ? sel.totalPaid / repayable : 0;
-                return (
-                  <div className="py-2 border-t border-border flex items-baseline justify-between">
-                    <span className="font-mono text-[10px] tracking-[0.08em] uppercase text-muted-foreground">
-                      {Math.round(paidPct * 100)}% paid · remaining
-                    </span>
-                    <CurrencyText value={remaining} className="font-mono text-[13px] text-foreground" />
-                  </div>
-                );
-              })()}
-
-              {/* Amount + action */}
-              <div className="flex items-baseline justify-between py-4 border-t border-border border-b border-b-border">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="currency-symbol font-sans text-foreground/30" style={{ fontSize: "calc(0.62 * 28px)" }}><CurrencySymbol /></span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(e.target.value.replace(/[^0-9.]/g, ""))}
-                    placeholder="0"
-                    className="bg-transparent border-none outline-none font-display text-[28px] tracking-[-0.02em] text-foreground w-36 p-0 tabular-nums placeholder:text-foreground/30"
-                  />
-                </div>
-                <button
-                  onClick={handleMakePayment}
-                  disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
-                  className="px-4 py-3 bg-foreground text-background font-mono text-[10px] tracking-[0.14em] uppercase disabled:opacity-30 active:scale-95 transition-all"
-                >
-                  Mark Paid →
-                </button>
-              </div>
+              <Button
+                variant="primary"
+                onClick={handleMakePayment}
+                disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
+              >
+                Mark paid →
+              </Button>
             </div>
-
-            <div className="h-px bg-border mx-7 mt-1" />
-          </div>
+          </Card>
         )}
 
-        {/* ── Tabs ─────────────────────────────────────────────────── */}
+        {/* Tabs */}
         <div id="debt-tabs">
           <SegmentedControl
-            className="px-7 pt-5"
+            variant="pill"
             options={[
               { label: "Internal", value: "internal", count: allActiveDebts.filter((d) => d.type === "internal").length },
               { label: "External", value: "external", count: allActiveDebts.filter((d) => d.type === "external").length },
@@ -381,156 +362,161 @@ const trendPct = trendData?.trendPct ?? 0;
           />
         </div>
 
-        {/* ── Active Debts ──────────────────────────────────────────── */}
+        {/* Active / Closed list */}
         {activeTab !== "closed" ? (
           <>
-            <div className="px-7 pt-4 pb-2 flex justify-between items-baseline">
-              <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
-                Active Debts · {activeDebts.length}
+            <div className="flex items-center justify-between px-1">
+              <span className="font-display text-[15px] font-bold text-foreground">
+                Active debts · {activeDebts.length}
               </span>
               <button
                 onClick={openAddSheet}
-                className="font-mono text-[10px] tracking-[0.14em] uppercase text-foreground underline underline-offset-2 decoration-foreground/30 hover:decoration-foreground transition-all"
+                className="flex items-center gap-1 text-[13px] font-bold text-foreground"
               >
-                + New
+                <span className="text-accent-strong text-base leading-none">＋</span>New
               </button>
             </div>
 
-            <div className="px-7">
-              {activeDebts.length === 0 && (
-                <div className="py-8 text-center">
-                  <p className="font-mono text-[11px] text-muted-foreground">No {activeTab} debts.</p>
-                </div>
-              )}
+            {activeDebts.length === 0 && (
+              <Card compact>
+                <p className="py-4 text-center text-[12px] font-medium text-muted-foreground">
+                  No {activeTab} debts.
+                </p>
+              </Card>
+            )}
 
+            <div className="flex flex-col gap-2.5">
               {activeDebts.map((debt, i) => {
                 const repayable = debt.totalRepayable > 0 ? debt.totalRepayable : debt.principal;
                 const remaining = Math.max(0, repayable - debt.totalPaid);
                 const paidPct = repayable > 0 ? debt.totalPaid / repayable : 0;
+                const accent = resolveColor({ id: debt.id, color: debt.color });
                 return (
-                  <button
+                  <Card
                     key={debt.id}
                     id={i === 0 ? "debt-row-0" : undefined}
-                    onClick={() => openEditSheet(debt)}
-                    className="w-full text-left py-3.5 border-t border-border last:border-b last:border-b-border group"
+                    compact
                   >
-                    <div className="flex justify-between items-baseline">
-                      <div className="flex items-baseline gap-2.5">
-                        <span
-                          className="w-[3px] h-3.5 rounded-full shrink-0 self-center"
-                          style={{ background: resolveColor({ id: debt.id, color: debt.color }) }}
+                    <div className="flex items-start gap-2.5">
+                      <span
+                        className="mt-1 w-[3px] h-9 rounded-full shrink-0"
+                        style={{ background: accent }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <button
+                          onClick={() => openEditSheet(debt)}
+                          className="w-full text-left"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                {debt.icon && <span className="text-sm leading-none">{debt.icon}</span>}
+                                <span className="text-[14.5px] font-bold text-foreground truncate">
+                                  {debt.name}
+                                </span>
+                                {debt.interestRate > 0 && (
+                                  <span className="rounded-[10px] bg-tile px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                    {debt.interestRate}%
+                                  </span>
+                                )}
+                              </div>
+                              <div className="mt-1 text-[10.5px] font-semibold text-muted-foreground inline-flex items-baseline gap-1 flex-wrap">
+                                <span>{Math.round(paidPct * 100)}% paid off</span>
+                                {debt.monthlyMin > 0 && <><span>·</span> <span>min</span> <CurrencyText value={debt.monthlyMin} /></>}
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div className="figure text-[16px] inline-flex items-baseline gap-1">
+                                <CurrencyText value={remaining} className="text-foreground" />
+                                {repayable !== debt.principal && (
+                                  <span className="text-muted-foreground text-[11px] inline-flex items-baseline gap-0.5">/ <CurrencyText value={repayable} className="text-muted-foreground" /></span>
+                                )}
+                              </div>
+                              <div className="text-[9.5px] font-semibold text-muted-foreground">remaining</div>
+                            </div>
+                          </div>
+                        </button>
+                        <Progress
+                          className="mt-2.5 h-1.5"
+                          value={Math.min(paidPct, 1) * 100}
+                          color={accent}
                         />
-                        <span className="font-mono text-[10px] text-foreground/30">
-                          {String(i + 1).padStart(2, "0")}
-                        </span>
-                        {debt.icon && (
-                          <span className="text-sm leading-none">{debt.icon}</span>
-                        )}
-                        <span className="text-[17px] font-semibold tracking-tight text-foreground leading-none">
-                          {debt.name}
-                        </span>
-                        {debt.interestRate > 0 && (
-                          <span className="font-mono text-[10px] text-muted-foreground">
-                            · {debt.interestRate}%
-                          </span>
-                        )}
-                      </div>
-                      <div className="font-mono text-[12px] text-right inline-flex items-baseline gap-1">
-                        <CurrencyText value={remaining} className="text-foreground" />
-                        {repayable !== debt.principal && (
-                          <span className="text-muted-foreground inline-flex items-baseline gap-0.5">/ <CurrencyText value={repayable} className="text-muted-foreground" /></span>
-                        )}
                       </div>
                     </div>
-                    <SegBar pct={paidPct} color={resolveColor({ id: debt.id, color: debt.color })} />
-                    <div className="flex justify-between mt-1.5">
-                      <span className="font-mono text-[9px] text-muted-foreground tracking-[0.08em] uppercase">
-                        {Math.round(paidPct * 100)}% paid off
-                      </span>
-                      <span className="font-mono text-[9px] text-muted-foreground tracking-[0.08em] uppercase inline-flex items-baseline gap-1 flex-wrap">
-                        {debt.monthlyMin > 0 && <><span>min</span> <CurrencyText value={debt.monthlyMin} /> <span>·</span></>}
-                        <span>remaining</span> <CurrencyText value={remaining} />
-                      </span>
-                    </div>
-                  </button>
+                  </Card>
                 );
               })}
             </div>
 
-            <div className="px-7 pt-4 pb-2">
-              <button
-                onClick={openAddSheet}
-                className="w-full py-3.5 bg-foreground text-background font-mono text-[10px] tracking-[0.14em] uppercase active:scale-[0.98] transition-all"
-              >
-                + New Debt
-              </button>
-            </div>
+            <Button variant="dashed" block onClick={openAddSheet}>
+              <span className="text-[17px] leading-none">＋</span>New debt
+            </Button>
           </>
         ) : (
           <>
-            <div className="px-7 pt-4 pb-2">
-              <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
-                Closed Liabilities · {closedDebts.length}
+            <div className="px-1">
+              <span className="font-display text-[15px] font-bold text-foreground">
+                Closed liabilities · {closedDebts.length}
               </span>
             </div>
-            <div className="px-7">
-              {closedDebts.length === 0 && (
-                <div className="py-8 text-center">
-                  <p className="font-mono text-[11px] text-muted-foreground">No closed liabilities.</p>
-                </div>
-              )}
-              {closedDebts.map((debt, i) => (
+            {closedDebts.length === 0 && (
+              <Card compact>
+                <p className="py-4 text-center text-[12px] font-medium text-muted-foreground">
+                  No closed liabilities.
+                </p>
+              </Card>
+            )}
+            <div className="flex flex-col gap-2.5">
+              {closedDebts.map((debt) => (
                 <button
                   key={debt.id}
                   onClick={() => openEditSheet(debt)}
-                  className="w-full text-left py-3.5 border-t border-border last:border-b last:border-b-border opacity-40 hover:opacity-60 transition-opacity"
+                  className="w-full text-left active:scale-[0.99] transition-transform"
                 >
-                  <div className="flex justify-between items-baseline">
-                    <div className="flex items-baseline gap-2.5">
-                      <span className="font-mono text-[10px] text-foreground/30">
-                        {String(i + 1).padStart(2, "0")}
-                      </span>
-                      {debt.icon && (
-                        <span className="text-sm leading-none">{debt.icon}</span>
-                      )}
-                      <span className="text-[15px] font-semibold tracking-tight text-foreground">
-                        {debt.name}
-                      </span>
+                  <Card compact className="flex items-center gap-3 opacity-60">
+                    <span className="flex size-[26px] shrink-0 items-center justify-center rounded-full bg-accent-strong text-[var(--accent-ink)]">
+                      <span className="material-symbols-outlined text-[15px]">check</span>
+                    </span>
+                    <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                      {debt.icon && <span className="text-sm leading-none">{debt.icon}</span>}
+                      <span className="text-[13.5px] font-bold text-foreground truncate">{debt.name}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-[9px] text-muted-foreground tracking-[0.08em] uppercase">✓ Paid Off</span>
-                      <CurrencyText value={debt.totalRepayable > 0 ? debt.totalRepayable : debt.principal} className="font-mono text-[11px] text-muted-foreground" />
+                    <div className="text-[11px] font-semibold text-muted-foreground inline-flex items-baseline gap-1.5">
+                      Paid off
+                      <CurrencyText value={debt.totalRepayable > 0 ? debt.totalRepayable : debt.principal} />
                     </div>
-                  </div>
+                  </Card>
                 </button>
               ))}
             </div>
           </>
         )}
 
-        {/* ── Out to Friends nav ──────────────────────────────────────── */}
-        <div className="h-px bg-border mx-7 mt-4" />
-        <div className="px-7 pt-4 pb-6">
-          <button
-            onClick={() => { haptic.light(); setShowLentList(true); }}
-            className="w-full py-4 border border-border flex items-center justify-between px-5 active:scale-[0.98] transition-all"
-          >
-            <div className="text-left">
-              <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mb-0.5">Out to Friends</div>
-              <div className="font-display text-[22px] leading-none tracking-[-0.02em] text-foreground">
+        {/* Out to friends nav */}
+        <button
+          onClick={() => { haptic.light(); setShowLentList(true); }}
+          className="w-full text-left active:scale-[0.99] transition-transform"
+        >
+          <Card className="flex items-center justify-between">
+            <div>
+              <div className="t-label text-muted-foreground">Out to friends</div>
+              <div className="figure text-[20px] mt-1 text-foreground">
                 {totalLent > 0 ? (
                   <CurrencyText value={totalLent} />
                 ) : (
-                  <span className="font-mono text-[13px] text-muted-foreground">No active lends</span>
+                  <span className="text-[13px] font-semibold text-muted-foreground">No active lends</span>
                 )}
               </div>
             </div>
-            <span className="font-mono text-[11px] text-muted-foreground">→</span>
-          </button>
-        </div>
-      </main>
+            <span className="text-muted-foreground text-lg">→</span>
+          </Card>
+        </button>
+      </div>
 
-      {/* ── Sheets & Modals ───────────────────────────────────────── */}
+      {/* Bottom spacer for mobile nav */}
+      <div className="h-28 md:h-12" />
+
+      {/* Sheets & Modals */}
       <DebtDetailSheet
         mode={sheetMode}
         debt={sheetDebt}

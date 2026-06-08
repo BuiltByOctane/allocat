@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { ChevronLeft } from "lucide-react";
 import { GoalDetailSheet } from "./GoalDetailSheet";
 import type { GoalFormData } from "./GoalDetailSheet";
 import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Progress } from "@/components/ui/Progress";
+import { Card } from "@/components/ui/Card";
 import { resolveColor } from "@/lib/theme/dataViz";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { CurrencyText } from "@/components/ui/CurrencyText";
@@ -39,15 +41,13 @@ type GoalRow = {
 
 function SegBar({
   pct,
-  segments = 20,
   color,
 }: {
   pct: number;
-  segments?: number;
   color?: string;
 }) {
   return (
-    <Progress variant="segments" segments={segments} value={pct * 100} color={color} className="mt-2.5" />
+    <Progress value={pct * 100} color={color} className="mt-2.5 h-1.5" />
   );
 }
 
@@ -169,28 +169,27 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
 
   return (
     <>
-      {/* Header */}
-      <header className="fixed w-full top-0 z-10 bg-background px-7 pt-6 pb-[18px] border-b border-border">
-        <div className="flex items-center gap-2">
+      <div className="px-4 pt-4 flex flex-col gap-3">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-1 pt-1">
           <button
             onClick={() => { haptic.light(); router.back(); }}
-            className="text-muted-foreground hover:text-foreground transition-colors mr-1"
+            className="flex size-9 items-center justify-center rounded-xl border border-border bg-card text-foreground"
+            aria-label="Back"
           >
-            <span className="material-symbols-outlined text-[20px]">arrow_back</span>
+            <ChevronLeft size={18} strokeWidth={1.9} />
           </button>
           <div>
-            <div className="font-display text-[32px] leading-none tracking-[-0.02em] text-foreground">Goals</div>
-            <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mt-2">
+            <h1 className="font-display text-[26px] font-bold leading-none tracking-[-0.03em] text-foreground">Goals</h1>
+            <p className="text-[11px] font-medium text-muted-foreground mt-1">
               Tracked in Net Worth · {activeGoals.length} active · {achievedGoals.length} achieved
-            </div>
+            </p>
           </div>
         </div>
-      </header>
 
-      <main className="pb-10 mt-27">
         {/* Tabs */}
         <SegmentedControl
-          className="px-7 pt-2"
+          variant="pill"
           options={[
             { label: "Active", value: "active", count: activeGoals.length },
             { label: "Achieved", value: "achieved", count: achievedGoals.length },
@@ -201,180 +200,155 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
 
         {/* Quick Update — Active only */}
         {tab === "active" && activeGoals.length > 0 && (
-          <>
-            <div id="goals-quick-section" className="px-7 pt-5 pb-1 flex justify-between items-baseline">
-              <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
+          <Card id="goals-quick-section">
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
                 Quick Update
               </span>
-              <span className="font-mono text-[10px] text-muted-foreground">Select goal</span>
+              <span className="text-[11px] font-medium text-muted-foreground">Select goal</span>
             </div>
 
-            <div className="px-7">
-              <div className="py-2 border-t border-border">
-                <BottomSheetSelect
-                  title="Select Goal"
-                  options={activeGoals.map((g) => {
-                    const pct = Math.round(
-                      Math.min(100, (Number(g.current_amount) / (Number(g.target_amount) || 1)) * 100)
-                    );
-                    return {
-                      value: g.id,
-                      label: g.name,
-                      description: `${pct}% complete`,
-                      icon: g.icon ?? undefined,
-                    };
-                  })}
-                  value={quickGoalId}
-                  onChange={setQuickGoalId}
+            <div className="mt-2.5">
+              <BottomSheetSelect
+                title="Select Goal"
+                options={activeGoals.map((g) => {
+                  const pct = Math.round(
+                    Math.min(100, (Number(g.current_amount) / (Number(g.target_amount) || 1)) * 100)
+                  );
+                  return {
+                    value: g.id,
+                    label: g.name,
+                    description: `${pct}% complete`,
+                    icon: g.icon ?? undefined,
+                  };
+                })}
+                value={quickGoalId}
+                onChange={setQuickGoalId}
+                className="flex w-full items-center justify-between rounded-[13px] border border-border bg-card px-3.5 py-3 text-sm font-bold text-foreground"
+              />
+            </div>
+
+            {selectedGoal && (
+              <div className="mt-2.5 flex items-baseline justify-between text-[11px] font-medium text-muted-foreground">
+                <span>{Math.round(selectedPct * 100)}% complete · remaining</span>
+                <CurrencyText value={selectedRemaining} className="text-foreground font-bold" />
+              </div>
+            )}
+
+            <div className="mt-2.5 flex items-center gap-2.5">
+              <div className="flex flex-1 items-baseline gap-1.5 rounded-[13px] border border-border bg-card px-3.5 py-3">
+                <span className="currency-symbol text-muted-foreground text-base"><CurrencySymbol /></span>
+                <input
+                  type="number"
+                  min="0"
+                  value={quickAmount}
+                  onChange={(e) => setQuickAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+                  placeholder="Add amount"
+                  className="bg-transparent border-none outline-none text-base font-bold text-foreground w-full p-0 tabular-nums placeholder:text-muted-foreground placeholder:font-medium"
                 />
               </div>
-
-              {selectedGoal && (
-                <div className="py-2 border-t border-border flex items-baseline justify-between">
-                  <span className="font-mono text-[10px] tracking-[0.08em] uppercase text-muted-foreground">
-                    {Math.round(selectedPct * 100)}% complete · remaining
-                  </span>
-                  <CurrencyText value={selectedRemaining} className="font-mono text-[13px] text-foreground" />
-                </div>
-              )}
-
-              <div className="flex items-baseline justify-between py-4 border-t border-border border-b border-b-border">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="currency-symbol font-sans text-foreground/30" style={{ fontSize: "calc(0.62 * 28px)" }}><CurrencySymbol /></span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={quickAmount}
-                    onChange={(e) => setQuickAmount(e.target.value.replace(/[^0-9.]/g, ""))}
-                    placeholder="0"
-                    className="bg-transparent border-none outline-none font-display text-[28px] tracking-[-0.02em] text-foreground w-36 p-0 tabular-nums placeholder:text-foreground/30"
-                  />
-                </div>
-                <button
-                  onClick={handleQuickUpdate}
-                  disabled={!quickAmount || parseFloat(quickAmount) < 0}
-                  className="px-4 py-3 bg-foreground text-background font-mono text-[10px] tracking-[0.14em] uppercase disabled:opacity-30 active:scale-95 transition-all"
-                >
-                  Update →
-                </button>
-              </div>
+              <button
+                onClick={handleQuickUpdate}
+                disabled={!quickAmount || parseFloat(quickAmount) < 0}
+                className="h-[46px] shrink-0 rounded-pill bg-[var(--pill)] px-5 text-sm font-bold text-[var(--pill-foreground)] disabled:opacity-30 active:scale-95 transition-all"
+              >
+                Update
+              </button>
             </div>
-
-            <div className="h-px bg-border mx-7 mt-1" />
-          </>
+          </Card>
         )}
 
         {/* List header */}
-        <div id="goals-list-header" className="px-7 pt-5 pb-1 flex justify-between items-baseline">
-          <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
+        <div id="goals-list-header" className="flex items-center justify-between px-1 mt-1">
+          <span className="font-display text-[15px] font-bold text-foreground">
             {tab === "active" ? `All Goals · ${activeGoals.length}` : `Achieved · ${achievedGoals.length}`}
           </span>
           {tab === "active" && (
             <button
               id="goals-add-btn"
               onClick={() => { haptic.light(); openAddSheet(); }}
-              className="font-mono text-[10px] tracking-[0.14em] uppercase text-foreground underline underline-offset-2 decoration-foreground/30 hover:decoration-foreground transition-all"
+              className="flex items-center gap-1 text-[13px] font-bold text-foreground"
             >
-              + New
+              <span className="text-accent-strong text-base leading-none">＋</span>New
             </button>
           )}
         </div>
 
-        <div className="px-7">
-          {isLoading ? (
-            <div className="py-12 flex justify-center">
-              <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
-                Loading…
-              </div>
+        {isLoading ? (
+          <div className="py-12 flex justify-center">
+            <div className="text-[11px] font-medium text-muted-foreground">Loading…</div>
+          </div>
+        ) : list.length === 0 ? (
+          <Card className="py-10 text-center">
+            <div className="text-[13px] font-medium text-muted-foreground mb-3">
+              {tab === "active" ? "No active goals" : "No achieved goals yet"}
             </div>
-          ) : list.length === 0 ? (
-            <div className="border border-border border-t-0 py-12 text-center">
-              <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mb-3">
-                {tab === "active" ? "No active goals" : "No achieved goals yet"}
-              </div>
-              {tab === "active" && (
-                <button
-                  onClick={() => { haptic.light(); openAddSheet(); }}
-                  className="font-mono text-[10px] tracking-[0.14em] uppercase text-foreground underline underline-offset-2"
-                >
-                  Add your first goal →
-                </button>
-              )}
-            </div>
-          ) : (
-            <div>
-              {list.map((goal, i) => {
-                const current = Number(goal.current_amount);
-                const target = Number(goal.target_amount);
-                const pct = target > 0 ? Math.min(1, current / target) : 0;
-                const pctDisplay = Math.round(pct * 100);
-                const num = String(i + 1).padStart(2, "0");
-                const isAchieved = Boolean(goal.achieved_at);
+            {tab === "active" && (
+              <button
+                onClick={() => { haptic.light(); openAddSheet(); }}
+                className="text-[13px] font-bold text-foreground"
+              >
+                Add your first goal →
+              </button>
+            )}
+          </Card>
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            {list.map((goal, i) => {
+              const current = Number(goal.current_amount);
+              const target = Number(goal.target_amount);
+              const pct = target > 0 ? Math.min(1, current / target) : 0;
+              const pctDisplay = Math.round(pct * 100);
+              const isAchieved = Boolean(goal.achieved_at);
 
-                return (
-                  <div
-                    key={goal.id}
+              return (
+                <Card key={goal.id} compact>
+                  <button
+                    type="button"
+                    id={i === 0 ? "goals-goal-row-0" : undefined}
+                    onClick={() => { haptic.light(); openEditSheet(goal); }}
                     className="w-full text-left"
-                    style={{
-                      borderTop: i === 0 ? "1px solid var(--border)" : "none",
-                      borderBottom: "1px solid var(--border)",
-                    }}
+                    disabled={isAchieved}
                   >
-                    <button
-                      type="button"
-                      id={i === 0 ? "goals-goal-row-0" : undefined}
-                      onClick={() => { haptic.light(); openEditSheet(goal); }}
-                      className="w-full text-left"
-                      disabled={isAchieved}
-                    >
-                      <div className="py-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <span
-                              className="w-[3px] h-3.5 rounded-full shrink-0 self-center"
-                              style={{ background: resolveColor({ id: goal.id, color: goal.color }) }}
-                            />
-                            <span className="font-mono text-[10px] text-muted-foreground shrink-0 tabular-nums">{num}</span>
-                            <span className="text-lg shrink-0">{goal.icon || "🎯"}</span>
-                            <div className="min-w-0">
-                              <div className="text-sm font-medium text-foreground truncate">{goal.name}</div>
-                              {isAchieved && goal.achieved_at && (
-                                <div className="font-mono text-[10px] text-muted-foreground truncate mt-0.5">
-                                  Achieved {new Date(goal.achieved_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <div className="font-mono text-[11px] tabular-nums text-foreground">{pctDisplay}%</div>
-                            <div className="font-mono text-[9px] text-muted-foreground tabular-nums mt-0.5">
-                              <CurrencyText value={current} /> / <CurrencyText value={target} />
-                            </div>
-                          </div>
-                        </div>
-                        <SegBar pct={pct} color={resolveColor({ id: goal.id, color: goal.color })} />
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-tile text-[17px]">
+                        {goal.icon || "🎯"}
                       </div>
-                    </button>
-                    {!isAchieved && (
-                      <div className="pb-3 -mt-1 flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => { haptic.heavy(); setConfirmAchieveId(goal.id); }}
-                          className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          Mark Achieved →
-                        </button>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[14px] font-bold text-foreground truncate">{goal.name}</div>
+                        {isAchieved && goal.achieved_at ? (
+                          <div className="text-[10.5px] font-medium text-muted-foreground truncate mt-0.5">
+                            Achieved {new Date(goal.achieved_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                          </div>
+                        ) : (
+                          <div className="text-[10.5px] font-medium text-muted-foreground tabular-nums mt-0.5">
+                            <CurrencyText value={current} /> of <CurrencyText value={target} />
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                      <div className="figure text-[16px] shrink-0">{pctDisplay}%</div>
+                    </div>
+                    <SegBar pct={pct} color={resolveColor({ id: goal.id, color: goal.color })} />
+                  </button>
+                  {!isAchieved && (
+                    <div className="mt-2.5 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => { haptic.heavy(); setConfirmAchieveId(goal.id); }}
+                        className="text-[12px] font-bold text-foreground"
+                      >
+                        Mark Achieved →
+                      </button>
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
+        )}
 
-        <div className="h-28 md:h-8" />
-      </main>
+        <div className="h-28 md:h-12" />
+      </div>
 
       <GoalDetailSheet
         mode={sheetMode}

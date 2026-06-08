@@ -1,15 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import { Inter_Tight, Bricolage_Grotesque, JetBrains_Mono } from "next/font/google";
+import { Hanken_Grotesk, Bricolage_Grotesque, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import QueryProvider from "@/lib/providers/QueryProvider";
 import { ThemeProvider } from "@/lib/providers/ThemeProvider";
 import RegisterPWA from "@/components/ui/RegisterPWA";
 import { NativeShell } from "@/components/pwa/NativeShell";
 
-const interTight = Inter_Tight({
+const hankenGrotesque = Hanken_Grotesk({
   subsets: ["latin"],
   variable: "--font-sans",
-  weight: ["300", "400", "500", "600"],
+  weight: ["400", "500", "600", "700"],
 });
 
 const bricolageGrotesque = Bricolage_Grotesque({
@@ -144,7 +144,10 @@ const jsonLd = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0a0a0a",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#efeff0" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f0f12" },
+  ],
 };
 
 export default function RootLayout({
@@ -168,11 +171,11 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${interTight.variable} ${bricolageGrotesque.variable} ${jetbrainsMono.variable} font-sans antialiased text-foreground bg-background`}
+        className={`${hankenGrotesque.variable} ${bricolageGrotesque.variable} ${jetbrainsMono.variable} font-sans antialiased text-foreground bg-background`}
       >
         <ThemeProvider
           attribute="class"
-          defaultTheme="dark"
+          defaultTheme="light"
           enableSystem
           disableTransitionOnChange
         >

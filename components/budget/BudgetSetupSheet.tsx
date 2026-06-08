@@ -417,25 +417,25 @@ export function BudgetSetupSheet({
       }}
     >
       <Drawer.Portal>
-        <Drawer.Overlay className="fixed inset-0 bg-black/60 z-40" />
+        <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
         <Drawer.Content
           aria-describedby="setup-description"
-          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-2xl bg-card border-t border-border focus:outline-none max-h-[92dvh]"
+          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none max-h-[92dvh]"
         >
           <div className="flex justify-center pt-3 pb-1 shrink-0">
-            <div className="w-10 h-1 bg-muted rounded-full" />
+            <div className="mx-auto w-9 h-1 bg-border rounded-full" />
           </div>
 
           {/* ── Step 1: Template picker ──────────────────────── */}
           {step === 1 && (
             <div className="flex flex-col flex-1 overflow-hidden">
-              <div className="px-5 pt-3 pb-4 border-b border-border shrink-0">
-                <Drawer.Title className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
-                  Set Up Budget
+              <div className="px-5 pt-3 pb-4 shrink-0">
+                <Drawer.Title className="font-display text-[20px] font-bold tracking-[-0.02em] text-foreground">
+                  Set up budget
                 </Drawer.Title>
                 <p
                   id="setup-description"
-                  className="mt-1 text-sm text-foreground font-medium"
+                  className="mt-1 text-sm text-muted-foreground"
                 >
                   Pick a template to get started
                 </p>
@@ -449,7 +449,7 @@ export function BudgetSetupSheet({
                       key={t.id}
                       type="button"
                       onClick={() => pickTemplate(t)}
-                      className="text-left rounded-xl border border-border bg-background p-4 active:bg-muted/60 transition-colors"
+                      className="text-left rounded-2xl bg-tile p-4 ring-1 ring-transparent active:ring-2 active:ring-[var(--accent-strong)] transition-all"
                     >
                       <p className="text-sm font-bold text-foreground mb-1">
                         {t.name}
@@ -462,7 +462,7 @@ export function BudgetSetupSheet({
                           {t.preview.slice(0, 3).map((p) => (
                             <span
                               key={p}
-                              className="text-[10px] bg-muted rounded-full px-2 py-0.5 text-muted-foreground"
+                              className="text-[10px] bg-chip rounded-full px-2 py-0.5 text-muted-foreground"
                             >
                               {p}
                             </span>
@@ -480,14 +480,14 @@ export function BudgetSetupSheet({
                 {/* User saved templates */}
                 {userTemplates.length > 0 && (
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
+                    <p className="t-label text-muted-foreground mb-3">
                       My Templates
                     </p>
                     <div className="space-y-2">
                       {userTemplates.map((t) => (
                         <div
                           key={t.id}
-                          className="flex items-center gap-3 rounded-xl border border-border bg-background px-4 py-3"
+                          className="flex items-center gap-3 rounded-2xl bg-tile px-4 py-3"
                         >
                           <button
                             type="button"
@@ -501,7 +501,7 @@ export function BudgetSetupSheet({
                               {t.preview.slice(0, 4).map((p) => (
                                 <span
                                   key={p}
-                                  className="text-[10px] bg-muted rounded-full px-2 py-0.5 text-muted-foreground"
+                                  className="text-[10px] bg-chip rounded-full px-2 py-0.5 text-muted-foreground"
                                 >
                                   {p}
                                 </span>
@@ -530,18 +530,18 @@ export function BudgetSetupSheet({
           {step === 2 && (
             <div className="flex flex-col flex-1 overflow-hidden">
               {/* Header */}
-              <div className="px-5 pt-3 pb-4 border-b border-border shrink-0 flex items-center gap-3">
+              <div className="px-5 pt-3 pb-4 shrink-0 flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => setStep(1)}
-                  className="flex items-center justify-center size-8 rounded-full border border-border active:bg-muted transition-colors shrink-0"
+                  className="flex items-center justify-center size-9 rounded-full bg-tile active:bg-muted transition-colors shrink-0"
                 >
                   <span className="material-symbols-outlined text-base">
                     arrow_back
                   </span>
                 </button>
                 <div>
-                  <Drawer.Title className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+                  <Drawer.Title className="font-display text-[20px] font-bold tracking-[-0.02em] text-foreground">
                     {selectedTemplate?.name ?? "Custom Setup"}
                   </Drawer.Title>
                   <p id="setup-description" className="sr-only">
@@ -553,7 +553,7 @@ export function BudgetSetupSheet({
               <div className="overflow-y-auto flex-1 px-5 py-5 space-y-5 pb-8">
                 {/* Total Budget */}
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  <label className="t-label text-muted-foreground">
                     Total Budget <CurrencySymbol className="currency-symbol" />
                   </label>
                   <input
@@ -563,7 +563,7 @@ export function BudgetSetupSheet({
                     value={totalBudget}
                     onChange={(e) => handleTotalBudgetChange(e.target.value)}
                     placeholder="e.g. 50000"
-                    className="mt-2 w-full rounded-xl border border-border bg-background px-4 py-3 text-lg font-bold text-foreground outline-none transition-colors focus:border-primary"
+                    className="mt-2 w-full rounded-[13px] border border-border bg-card px-4 py-3 text-lg font-bold text-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
                     min="0"
                   />
 
@@ -573,7 +573,7 @@ export function BudgetSetupSheet({
                       <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full transition-all duration-200 ${
-                            isOverAllocated ? "bg-neg" : "bg-primary"
+                            isOverAllocated ? "bg-neg" : "bg-accent-strong"
                           }`}
                           style={{ width: `${allocPct}%` }}
                         />
@@ -586,7 +586,7 @@ export function BudgetSetupSheet({
                           className={
                             isOverAllocated
                               ? "text-neg font-semibold"
-                              : "text-primary font-semibold"
+                              : "text-accent-strong font-semibold"
                           }
                         >
                           {isOverAllocated
@@ -609,7 +609,7 @@ export function BudgetSetupSheet({
 
                 {/* Category list */}
                 <div className="space-y-3">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  <p className="t-label text-muted-foreground">
                     Categories
                   </p>
 
@@ -636,7 +636,7 @@ export function BudgetSetupSheet({
                   ))}
 
                   {/* Add category row */}
-                  <div className="flex items-center gap-2 rounded-xl border border-dashed border-border px-4 py-3">
+                  <div className="flex items-center gap-2 rounded-2xl border-[1.5px] border-dashed border-border px-4 py-3">
                     <input
                       type="text"
                       value={newCatName}
@@ -651,7 +651,7 @@ export function BudgetSetupSheet({
                       type="button"
                       onClick={addCategory}
                       disabled={!newCatName.trim()}
-                      className="text-muted-foreground hover:text-primary disabled:opacity-30 transition-colors"
+                      className="text-muted-foreground hover:text-accent-strong disabled:opacity-30 transition-colors"
                     >
                       <span className="material-symbols-outlined text-lg">
                         add_circle
@@ -668,15 +668,17 @@ export function BudgetSetupSheet({
                       haptic.selection();
                       setSaveAsTemplate((v) => !v);
                     }}
-                    className={`flex items-center gap-3 w-full rounded-xl border px-4 py-3 transition-colors ${
+                    className={`flex items-center gap-3 w-full rounded-2xl px-4 py-3 transition-all ${
                       saveAsTemplate
-                        ? "border-primary/30 bg-primary/10"
-                        : "border-border bg-background"
+                        ? "bg-accent ring-2 ring-[var(--accent-strong)]"
+                        : "bg-tile"
                     }`}
                   >
                     <span
                       className={`material-symbols-outlined text-xl ${
-                        saveAsTemplate ? "text-primary" : "text-muted-foreground"
+                        saveAsTemplate
+                          ? "text-[var(--accent-ink)]"
+                          : "text-muted-foreground"
                       }`}
                       style={{
                         fontVariationSettings: saveAsTemplate
@@ -687,8 +689,8 @@ export function BudgetSetupSheet({
                       bookmark
                     </span>
                     <span
-                      className={`text-sm font-medium ${
-                        saveAsTemplate ? "text-primary" : "text-foreground"
+                      className={`text-sm font-semibold ${
+                        saveAsTemplate ? "text-[var(--accent-ink)]" : "text-foreground"
                       }`}
                     >
                       Save as template
@@ -701,7 +703,7 @@ export function BudgetSetupSheet({
                       value={templateName}
                       onChange={(e) => setTemplateName(e.target.value)}
                       placeholder="Template name…"
-                      className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition-colors focus:border-primary"
+                      className="w-full rounded-[13px] border border-border bg-card px-4 py-3 text-sm text-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
                     />
                   )}
                 </div>
@@ -715,7 +717,7 @@ export function BudgetSetupSheet({
                   type="button"
                   onClick={handleCreate}
                   disabled={isCreating || categories.length === 0}
-                  className="w-full rounded-xl bg-primary px-4 py-3.5 text-sm font-bold text-primary-foreground disabled:opacity-50 active:scale-[0.98] transition-all"
+                  className="w-full h-[48px] rounded-pill bg-[var(--pill)] px-4 text-sm font-bold text-[var(--pill-foreground)] disabled:opacity-50 active:scale-[0.98] transition-all"
                 >
                   {isCreating ? "Creating…" : "Create Budget"}
                 </button>
@@ -768,7 +770,7 @@ function CategoryCard({
     category.allocation > 0 && itemsTotal > category.allocation;
 
   return (
-    <div className="rounded-xl border border-border bg-background p-4 space-y-3">
+    <div className="rounded-2xl bg-tile p-4 space-y-3">
       {/* Name + allocation + delete */}
       <div className="flex items-center gap-2">
         {category.icon ? (
@@ -808,7 +810,7 @@ function CategoryCard({
           {category.items.map((item) => (
             <div
               key={item.id}
-              className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-1.5"
+              className="flex items-center gap-2 rounded-tile bg-chip px-3 py-1.5"
             >
               <input
                 type="text"
@@ -858,7 +860,7 @@ function CategoryCard({
       )}
 
       {/* Add item inline (name + amount) */}
-      <div className="flex items-center gap-2 border-t border-border/60 pt-2">
+      <div className="flex items-center gap-2 border-t border-border pt-2">
         <input
           type="text"
           value={newItemName}
@@ -888,7 +890,7 @@ function CategoryCard({
           type="button"
           onClick={submitItem}
           disabled={!newItemName.trim()}
-          className="text-muted-foreground hover:text-primary disabled:opacity-30 transition-colors shrink-0"
+          className="text-muted-foreground hover:text-accent-strong disabled:opacity-30 transition-colors shrink-0"
         >
           <span className="material-symbols-outlined text-base">add</span>
         </button>

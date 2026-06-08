@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { MaterialSymbol } from "@/components/ui/MaterialSymbol";
+import { ChevronLeft, History } from "lucide-react";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import ActivityLogItem from "./ActivityLogItem";
 import ActivityDetailSheet from "./ActivityDetailSheet";
@@ -53,22 +53,25 @@ export default function ActivityPage({ overrideLogs }: ActivityPageProps) {
   const groups = groupLogsByDate(logs);
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border px-5 py-4 flex items-center gap-4">
-        <Link href="/profile" className="text-muted-foreground hover:text-foreground transition-colors">
-          <MaterialSymbol icon="arrow_back" size={24} />
+    <div className="px-4 pt-4 flex flex-col gap-3">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-1 pt-1">
+        <Link
+          href="/profile"
+          aria-label="Back"
+          className="flex size-9 items-center justify-center rounded-xl border border-border bg-card text-foreground"
+        >
+          <ChevronLeft size={18} strokeWidth={2} />
         </Link>
         <div>
-          <h1 className="font-display text-xl leading-none tracking-[-0.02em] text-foreground">
+          <h1 className="font-display text-[26px] font-bold leading-none tracking-[-0.03em] text-foreground">
             Activity
           </h1>
-          <p className="font-mono text-[9px] tracking-[0.14em] uppercase text-muted-foreground mt-0.5">
-            Action History
-          </p>
+          <p className="text-[11px] font-medium text-muted-foreground mt-1">Action history</p>
         </div>
-      </header>
+      </div>
 
-      <div className="px-5 pt-4 space-y-2">
+      <div className="space-y-2">
         <div id="activity-category-chips">
           <SegmentedControl
             variant="pill"
@@ -101,13 +104,13 @@ export default function ActivityPage({ overrideLogs }: ActivityPageProps) {
         )}
       </div>
 
-      <div id="activity-log-list" className="px-5 pt-6 pb-32 space-y-6">
+      <div id="activity-log-list" className="pt-2 space-y-5">
         {isLoading && (
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {[...Array(5)].map((_, i) => (
               <div
                 key={i}
-                className="h-[68px] bg-muted/50 animate-pulse rounded"
+                className="h-[64px] bg-muted/50 animate-pulse rounded-card"
               />
             ))}
           </div>
@@ -115,11 +118,9 @@ export default function ActivityPage({ overrideLogs }: ActivityPageProps) {
 
         {!isLoading && groups.length === 0 && (
           <div className="flex flex-col items-center justify-center py-24 text-center">
-            <MaterialSymbol
-              icon="history"
-              size={48}
-              className="text-muted-foreground mb-4"
-            />
+            <div className="flex size-12 items-center justify-center rounded-[14px] bg-tile text-muted-foreground mb-4">
+              <History size={24} strokeWidth={1.7} />
+            </div>
             <p className="font-bold text-foreground">No activity yet</p>
             <p className="text-sm text-muted-foreground mt-1">
               Actions you take will appear here
@@ -129,10 +130,10 @@ export default function ActivityPage({ overrideLogs }: ActivityPageProps) {
 
         {groups.map(({ label, items }, gi) => (
           <div key={label} id={gi === 0 ? "activity-first-group" : undefined}>
-            <p className="text-[0.6rem] font-bold uppercase tracking-[0.2em] text-muted-foreground mb-2">
+            <p className="t-label text-muted-foreground mb-2 ml-1">
               {label}
             </p>
-            <div className="space-y-1">
+            <div className="space-y-2.5">
               {items.map((log, li) => (
                 <div key={log.id} id={gi === 0 && li === 0 ? "activity-first-item" : undefined}>
                   <ActivityLogItem
@@ -145,6 +146,8 @@ export default function ActivityPage({ overrideLogs }: ActivityPageProps) {
           </div>
         ))}
       </div>
+
+      <div className="h-28 md:h-12" />
 
       <ActivityDetailSheet
         log={selectedLog}

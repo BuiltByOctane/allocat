@@ -38,13 +38,13 @@ function AllocationStatus({ result }: { result: SpendResult }) {
   const statusLabel = isOver ? "Over Budget" : isCritical ? "Almost Empty" : isWarning ? "Running Low" : "Logged";
 
   return (
-    <div className="border-t border-border pt-4 space-y-2">
+    <div className="border-t border-border pt-4 mt-1 space-y-2">
       <div className="flex items-baseline justify-between">
-        <span className="font-mono text-[9px] tracking-[0.14em] uppercase text-muted-foreground">
+        <span className="text-[11px] font-bold text-foreground">
           {statusLabel}
         </span>
         <span
-          className="font-mono text-[11px] tabular-nums"
+          className="text-[12px] font-bold tabular-nums"
           style={{ color: isOver || isCritical ? "var(--neg)" : isWarning ? "var(--warn)" : "var(--foreground)" }}
         >
           {isOver ? (
@@ -58,27 +58,19 @@ function AllocationStatus({ result }: { result: SpendResult }) {
           )}
         </span>
       </div>
-      <p className="font-mono text-[10px] text-muted-foreground truncate">
-        <span className="text-foreground">{itemName}</span>
+      <p className="text-[11px] font-medium text-muted-foreground truncate">
+        <span className="text-foreground font-semibold">{itemName}</span>
         {" "}— <CurrencyText value={result.actual} /> of{" "}
         <CurrencyText value={planned} />
       </p>
-      <div className="flex gap-[2px]">
-        {Array.from({ length: 20 }).map((_, j) => (
-          <div
-            key={j}
-            className="flex-1"
-            style={{
-              height: 2,
-              background:
-                isOver
-                  ? j < 20 ? "var(--neg)" : "var(--progress-empty)"
-                  : j / 20 < barPct / 100
-                  ? "var(--foreground)"
-                  : "var(--progress-empty)",
-            }}
-          />
-        ))}
+      <div className="h-1.5 rounded-full bg-[var(--progress-empty)] overflow-hidden">
+        <div
+          className="h-full rounded-full"
+          style={{
+            width: isOver ? "100%" : `${barPct}%`,
+            background: isOver ? "var(--neg)" : "var(--accent-strong)",
+          }}
+        />
       </div>
     </div>
   );
@@ -192,125 +184,123 @@ export default function QuickSpendInput({ categories }: QuickSpendInputProps) {
 
   return (
     <section ref={sectionRef}>
-      <div className="border border-border bg-card p-6">
-        <p className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mb-5">
-          Quick Logger
-        </p>
+      <p className="text-[13px] font-bold text-foreground mb-4">
+        Quick log
+      </p>
 
-        {sharedNote && (
-          <div className="mb-4 border border-border bg-background/60 px-3 py-2 flex items-start gap-2">
-            <span
-              className="material-symbols-outlined text-muted-foreground"
-              style={{ fontSize: "14px", marginTop: "1px" }}
-            >
-              ios_share
-            </span>
-            <div className="flex-1 min-w-0">
-              <p className="font-mono text-[9px] tracking-[0.14em] uppercase text-muted-foreground">
-                Shared
-              </p>
-              <p className="font-mono text-[11px] text-foreground truncate">
-                {sharedNote}
-              </p>
-            </div>
-            <button
-              onClick={() => setSharedNote("")}
-              className="text-muted-foreground hover:text-foreground"
-              aria-label="Dismiss"
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>
-                close
-              </span>
-            </button>
-          </div>
-        )}
-
-        <div className="space-y-4">
-          {/* Category + Item row */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="font-mono text-[9px] tracking-[0.14em] uppercase text-muted-foreground mb-1.5 block">
-                Category
-              </label>
-              <BottomSheetSelect
-                title="Select Category"
-                placeholder="Category…"
-                options={categoryOptions}
-                value={selectedCategoryId}
-                onChange={handleCategoryChange}
-              />
-            </div>
-            <div>
-              <label className="font-mono text-[9px] tracking-[0.14em] uppercase text-muted-foreground mb-1.5 block">
-                Item
-              </label>
-              <BottomSheetSelect
-                title="Select Item"
-                placeholder={
-                  itemsLoading ? "Loading…" :
-                  !selectedCategoryId ? "Pick category" :
-                  items.length === 0 ? "No items" : "Item…"
-                }
-                options={itemOptions}
-                value={selectedItemId}
-                onChange={(val) => { setSelectedItemId(val); setLastResult(null); setValidationError(""); }}
-                disabled={!selectedCategoryId || itemsLoading || items.length === 0}
-              />
-            </div>
-          </div>
-
-          {/* Remaining hint */}
-          {selectedItem && !lastResult && (
-            <p className="font-mono text-[10px] tabular-nums text-muted-foreground">
-              {selectedItem.remaining > 0
-                ? (
-                    <>
-                      <CurrencyText value={selectedItem.remaining} /> remaining
-                      {" "}of <CurrencyText value={selectedItem.planned} />
-                    </>
-                  )
-                : selectedItem.planned === 0
-                ? "No allocation set"
-                : (
-                    <>
-                      Over budget by{" "}
-                      <CurrencyText value={Math.abs(selectedItem.remaining)} />
-                    </>
-                  )}
+      {sharedNote && (
+        <div className="mb-4 rounded-2xl bg-tile px-3 py-2.5 flex items-start gap-2">
+          <span
+            className="material-symbols-outlined text-muted-foreground"
+            style={{ fontSize: "16px", marginTop: "1px" }}
+          >
+            ios_share
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
+              Shared
             </p>
-          )}
+            <p className="text-[12px] font-medium text-foreground truncate">
+              {sharedNote}
+            </p>
+          </div>
+          <button
+            onClick={() => setSharedNote("")}
+            className="text-muted-foreground hover:text-foreground"
+            aria-label="Dismiss"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>
+              close
+            </span>
+          </button>
+        </div>
+      )}
 
-          {/* Amount */}
+      <div className="space-y-3.5">
+        {/* Category + Item row */}
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="font-mono text-[9px] tracking-[0.14em] uppercase text-muted-foreground mb-1.5 block">
-              Amount (<CurrencySymbol className="currency-symbol" />)
+            <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mb-1.5 block">
+              Category
             </label>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              placeholder="0"
-              value={amount}
-              onChange={(e) => { setAmount(e.target.value); setValidationError(""); setLastResult(null); }}
-              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-              className="w-full bg-background border border-border px-3 py-2.5 font-mono text-sm text-foreground tabular-nums focus:outline-none focus:border-foreground transition-colors"
+            <BottomSheetSelect
+              title="Select Category"
+              placeholder="Category…"
+              options={categoryOptions}
+              value={selectedCategoryId}
+              onChange={handleCategoryChange}
             />
           </div>
-
-          {validationError && (
-            <p className="font-mono text-[10px] text-neg">{validationError}</p>
-          )}
-
-          <button
-            onClick={handleSubmit}
-            disabled={spendMutation.isPending}
-            className="w-full py-3 border border-foreground font-mono text-[10px] tracking-[0.14em] uppercase text-foreground hover:bg-foreground hover:text-background active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {spendMutation.isPending ? "Logging…" : "Log Spend →"}
-          </button>
-
-          {lastResult && <AllocationStatus result={lastResult} />}
+          <div>
+            <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mb-1.5 block">
+              Item
+            </label>
+            <BottomSheetSelect
+              title="Select Item"
+              placeholder={
+                itemsLoading ? "Loading…" :
+                !selectedCategoryId ? "Pick category" :
+                items.length === 0 ? "No items" : "Item…"
+              }
+              options={itemOptions}
+              value={selectedItemId}
+              onChange={(val) => { setSelectedItemId(val); setLastResult(null); setValidationError(""); }}
+              disabled={!selectedCategoryId || itemsLoading || items.length === 0}
+            />
+          </div>
         </div>
+
+        {/* Remaining hint */}
+        {selectedItem && !lastResult && (
+          <p className="text-[11px] font-medium tabular-nums text-muted-foreground">
+            {selectedItem.remaining > 0
+              ? (
+                  <>
+                    <CurrencyText value={selectedItem.remaining} /> remaining
+                    {" "}of <CurrencyText value={selectedItem.planned} />
+                  </>
+                )
+              : selectedItem.planned === 0
+              ? "No allocation set"
+              : (
+                  <>
+                    Over budget by{" "}
+                    <CurrencyText value={Math.abs(selectedItem.remaining)} />
+                  </>
+                )}
+          </p>
+        )}
+
+        {/* Amount */}
+        <div>
+          <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mb-1.5 block">
+            Amount (<CurrencySymbol className="currency-symbol" />)
+          </label>
+          <input
+            type="number"
+            inputMode="decimal"
+            min="0"
+            placeholder="0"
+            value={amount}
+            onChange={(e) => { setAmount(e.target.value); setValidationError(""); setLastResult(null); }}
+            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+            className="w-full bg-card border border-border rounded-[13px] px-3.5 py-3 text-sm font-semibold text-foreground tabular-nums focus:outline-none focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40 transition-colors"
+          />
+        </div>
+
+        {validationError && (
+          <p className="text-[11px] font-medium text-neg">{validationError}</p>
+        )}
+
+        <button
+          onClick={handleSubmit}
+          disabled={spendMutation.isPending}
+          className="w-full h-[46px] rounded-pill bg-[var(--pill)] text-[var(--pill-foreground)] text-sm font-bold active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {spendMutation.isPending ? "Logging…" : "Log spend"}
+        </button>
+
+        {lastResult && <AllocationStatus result={lastResult} />}
       </div>
     </section>
   );

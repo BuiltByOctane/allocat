@@ -10,6 +10,7 @@ import { NativeSetup } from "@/components/pwa/NativeSetup";
 import { TourPrompt } from "@/components/tour/TourPrompt";
 import { TourProvider } from "@/lib/tour/TourContext";
 import { CurrencyProvider } from "@/lib/providers/CurrencyProvider";
+import { PullToRefresh } from "@/components/PullToRefresh";
 
 export default async function AppLayout({
   children,
@@ -27,9 +28,11 @@ export default async function AppLayout({
         </div>
         <SidebarNav />
         <main className="flex-1 overflow-y-auto pb-28 md:pb-0 no-scrollbar md:h-screen w-full relative">
-          <div className="md:max-w-5xl md:mx-auto w-full pb-10">
-            {children}
-          </div>
+          <PullToRefresh>
+            <div className="md:max-w-5xl md:mx-auto w-full pb-10">
+              {children}
+            </div>
+          </PullToRefresh>
         </main>
         <InstallPrompt />
         <SmsBridge />

@@ -20,7 +20,12 @@ export async function getNetWorthFromIDB() {
     if (debtCount === 0) return null;
   }
 
-  const categories = await db.asset_categories.toArray();
+  // Independent reads — batch in parallel.
+  const [categories, debts, history] = await Promise.all([
+    db.asset_categories.toArray(),
+    db.debts.toArray(),
+    db.asset_value_history.toArray(),
+  ]);
   const catMap = new Map(categories.map((c) => [c.id, c]));
 
   const normalizedAssets = assets.map((a) => {
@@ -44,7 +49,6 @@ export async function getNetWorthFromIDB() {
     };
   });
 
-  const debts = await db.debts.toArray();
   const totalLiabilities = debts
     .filter((d) => !d.is_closed && d.type !== "lent")
     .reduce((sum, d) => sum + (Number(d.principal) - Number(d.total_paid)), 0);
@@ -52,11 +56,7 @@ export async function getNetWorthFromIDB() {
   return {
     assets: normalizedAssets,
     totalLiabilities,
-    netWorthHistory: computeMonthlyHistory(
-      await db.asset_value_history.toArray(),
-      totalLiabilities,
-      12
-    ),
+    netWorthHistory: computeMonthlyHistory(history, totalLiabilities, 12),
   };
 }
 

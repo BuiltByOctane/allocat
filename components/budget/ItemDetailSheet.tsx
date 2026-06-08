@@ -43,6 +43,10 @@ interface ItemDetailSheetProps {
     assets: LinkTarget[];
     debts: LinkTarget[];
   };
+  /** Hide the "Spent" field and force actual_amount to 0 on create.
+   *  Used by the SMS allocate flow, where the spend is applied separately
+   *  via categorize (which also cascades to a linked asset/debt). */
+  hideActual?: boolean;
   onClose: () => void;
   onSave: (
     itemId: string,
@@ -72,6 +76,7 @@ export function ItemDetailSheet({
   item,
   category,
   linkTargets,
+  hideActual = false,
   onClose,
   onSave,
   onCreate,
@@ -96,7 +101,7 @@ export function ItemDetailSheet({
 
   useEffect(() => {
     if (item) {
-      setName(isNew ? "" : item.name);
+      setName(item.name ?? "");
       setPlanned(item.planned > 0 ? String(item.planned) : "");
       setActual(item.actual > 0 ? String(item.actual) : "");
       setIsCompleted(isNew ? false : item.is_completed);
@@ -194,7 +199,7 @@ export function ItemDetailSheet({
         await onCreate({
           name: name.trim(),
           planned_amount: plannedVal,
-          actual_amount: actualVal,
+          actual_amount: hideActual ? 0 : actualVal,
           is_completed: isCompleted,
           notes: notesVal,
           link_type: finalLinkType,
@@ -368,7 +373,7 @@ export function ItemDetailSheet({
               </div>
 
               {/* Planned + Actual */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className={hideActual ? "" : "grid grid-cols-2 gap-3"}>
                 <div className="space-y-1.5">
                   <label
                     className={`text-[10px] font-bold uppercase tracking-widest ${
@@ -414,20 +419,22 @@ export function ItemDetailSheet({
                     </p>
                   ) : null}
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                    Spent <CurrencySymbol className="currency-symbol" />
-                  </label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    value={actual}
-                    onChange={(e) => setActual(e.target.value)}
-                    className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition-colors focus:border-primary"
-                    placeholder="0"
-                    min="0"
-                  />
-                </div>
+                {!hideActual && (
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                      Spent <CurrencySymbol className="currency-symbol" />
+                    </label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={actual}
+                      onChange={(e) => setActual(e.target.value)}
+                      className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition-colors focus:border-primary"
+                      placeholder="0"
+                      min="0"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Completion toggle */}

@@ -31,7 +31,7 @@ const config: CapacitorConfig = {
     // calls SplashScreen.hide() once it mounts (see NativeShell).
     SplashScreen: {
       launchAutoHide: false,
-      backgroundColor: "#ffffff",
+      backgroundColor: "#000000",
       androidScaleType: "CENTER_INSIDE",
       showSpinner: false,
       splashFullScreen: true,

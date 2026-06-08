@@ -8,9 +8,8 @@
       is only used pre-12; on 12+ this split is the closest match the OS allows.
     -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
-        <item name="android:windowSplashScreenBackground">@android:color/white</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_paw</item>
-        <item name="android:windowSplashScreenBrandingImage">@drawable/splash_wordmark</item>
+        <item name="android:windowSplashScreenBackground">@android:color/black</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon_v31</item>
         <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
     </style>
 

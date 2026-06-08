@@ -152,38 +152,6 @@ export const PREDEFINED_TEMPLATES: BudgetTemplate[] = [
   },
 ];
 
-// ─── User-saved templates (localStorage) ────────────────────────────────────
-
-const STORAGE_KEY = "allocat_user_templates";
-
-export function getUserTemplates(): BudgetTemplate[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as BudgetTemplate[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function saveUserTemplate(
-  template: Pick<BudgetTemplate, "name" | "description" | "preview" | "categories">
-): BudgetTemplate {
-  const saved: BudgetTemplate = {
-    ...template,
-    id: `custom_${Date.now()}`,
-    isCustom: true,
-    savedAt: new Date().toISOString(),
-  };
-  const existing = getUserTemplates();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify([saved, ...existing]));
-  return saved;
-}
-
-export function deleteUserTemplate(id: string): void {
-  const existing = getUserTemplates();
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify(existing.filter((t) => t.id !== id))
-  );
-}
+// ─── User-saved templates ────────────────────────────────────────────────────
+// Custom templates now persist to Supabase via lib/actions/budget-templates.ts
+// (getBudgetTemplates / saveBudgetTemplate / deleteBudgetTemplate).

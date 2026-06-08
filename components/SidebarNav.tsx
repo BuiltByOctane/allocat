@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -13,6 +13,39 @@ const navItems = [
   { label: "Debt", href: "/debt", icon: "credit_card" },
   { label: "Profile", href: "/profile", icon: "person" },
 ];
+
+// Child of <Link> — surfaces pending nav state instantly on click.
+function NavItemContent({
+  icon,
+  label,
+  isActive,
+}: {
+  icon: string;
+  label: string;
+  isActive: boolean;
+}) {
+  const { pending } = useLinkStatus();
+  const lit = isActive || pending;
+  return (
+    <>
+      <span
+        className={`material-symbols-outlined text-[18px] transition-transform ${
+          pending ? "scale-110" : ""
+        }`}
+        style={
+          lit
+            ? { fontVariationSettings: "'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24" }
+            : {}
+        }
+      >
+        {icon}
+      </span>
+      <span className="font-mono text-[10px] tracking-[0.12em] uppercase">
+        {label}
+      </span>
+    </>
+  );
+}
 
 export default function SidebarNav() {
   const pathname = usePathname();
@@ -60,19 +93,11 @@ export default function SidebarNav() {
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              <span
-                className="material-symbols-outlined text-[18px]"
-                style={
-                  isActive
-                    ? { fontVariationSettings: "'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24" }
-                    : {}
-                }
-              >
-                {item.icon}
-              </span>
-              <span className="font-mono text-[10px] tracking-[0.12em] uppercase">
-                {item.label}
-              </span>
+              <NavItemContent
+                icon={item.icon}
+                label={item.label}
+                isActive={isActive}
+              />
             </Link>
           );
         })}

@@ -67,6 +67,36 @@ export type Database = {
         }
         Relationships: []
       }
+      budget_templates: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          description: string | null
+          preview: string[]
+          categories: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          description?: string | null
+          preview?: string[]
+          categories?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          name?: string
+          description?: string | null
+          preview?: string[]
+          categories?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           id: string

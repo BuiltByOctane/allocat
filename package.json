@@ -20,6 +20,7 @@
     "@capacitor/haptics": "^8.0.2",
     "@capacitor/local-notifications": "^8.2.0",
     "@capacitor/splash-screen": "^8.0.1",
+    "@lottiefiles/dotlottie-react": "^0.19.4",
     "@serwist/next": "^9.5.11",
     "@serwist/window": "^9.5.11",
     "@supabase/ssr": "^0.10.2",

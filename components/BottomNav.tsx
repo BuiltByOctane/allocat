@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useHaptic } from "@/lib/hooks/useHaptic";
@@ -12,6 +12,40 @@ const navItems = [
   { label: "Debt", href: "/debt", icon: "credit_card" },
   { label: "Profile", href: "/profile", icon: "person" },
 ];
+
+// Child of <Link> — useLinkStatus reads the nearest Link's pending state, so a
+// tap shows instant feedback before the route commits.
+function NavItemContent({
+  icon,
+  label,
+  isActive,
+}: {
+  icon: string;
+  label: string;
+  isActive: boolean;
+}) {
+  const { pending } = useLinkStatus();
+  const lit = isActive || pending;
+  return (
+    <>
+      <span
+        className={`material-symbols-outlined text-[22px] text-foreground transition-transform ${
+          pending ? "scale-110" : ""
+        }`}
+        style={
+          lit
+            ? { fontVariationSettings: "'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24" }
+            : {}
+        }
+      >
+        {icon}
+      </span>
+      <span className="font-mono text-[8px] tracking-[0.12em] uppercase text-foreground">
+        {label}
+      </span>
+    </>
+  );
+}
 
 export default function BottomNav() {
   const pathname = usePathname();
@@ -38,19 +72,11 @@ export default function BottomNav() {
                 isActive ? "opacity-100" : "opacity-65"
               }`}
             >
-              <span
-                className="material-symbols-outlined text-[22px] text-foreground"
-                style={
-                  isActive
-                    ? { fontVariationSettings: "'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24" }
-                    : {}
-                }
-              >
-                {item.icon}
-              </span>
-              <span className="font-mono text-[8px] tracking-[0.12em] uppercase text-foreground">
-                {item.label}
-              </span>
+              <NavItemContent
+                icon={item.icon}
+                label={item.label}
+                isActive={isActive}
+              />
             </Link>
           );
         })}

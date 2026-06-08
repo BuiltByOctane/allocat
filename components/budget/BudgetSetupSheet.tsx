@@ -8,13 +8,12 @@ import { useFormatCurrency } from "@/lib/hooks/useFormatCurrency";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { getDB } from "@/lib/db";
+import { PREDEFINED_TEMPLATES, type BudgetTemplate } from "@/lib/budget-templates";
 import {
-  PREDEFINED_TEMPLATES,
-  getUserTemplates,
-  saveUserTemplate,
-  deleteUserTemplate,
-  type BudgetTemplate,
-} from "@/lib/budget-templates";
+  getBudgetTemplates,
+  saveBudgetTemplate,
+  deleteBudgetTemplate,
+} from "@/lib/actions/budget-templates";
 
 interface SetupItem {
   id: string;
@@ -107,10 +106,20 @@ export function BudgetSetupSheet({
   // Load user templates on open
   useEffect(() => {
     if (isOpen) {
-      setUserTemplates(getUserTemplates());
       setStep(1);
       setSelectedTemplate(null);
       setError("");
+      let cancelled = false;
+      getBudgetTemplates()
+        .then((t) => {
+          if (!cancelled) setUserTemplates(t);
+        })
+        .catch(() => {
+          if (!cancelled) setUserTemplates([]);
+        });
+      return () => {
+        cancelled = true;
+      };
     }
   }, [isOpen]);
 
@@ -246,10 +255,15 @@ export function BudgetSetupSheet({
     );
   }
 
-  function handleDeleteUserTemplate(id: string) {
+  async function handleDeleteUserTemplate(id: string) {
     haptic.heavy();
-    deleteUserTemplate(id);
-    setUserTemplates(getUserTemplates());
+    // Optimistic remove; refetch reconciles on failure.
+    setUserTemplates((prev) => prev.filter((t) => t.id !== id));
+    try {
+      await deleteBudgetTemplate(id);
+    } catch {
+      setUserTemplates(await getBudgetTemplates().catch(() => []));
+    }
   }
 
   async function handleCreate() {
@@ -363,7 +377,7 @@ export function BudgetSetupSheet({
 
       // 3. Save as template if requested
       if (saveAsTemplate && templateName.trim()) {
-        saveUserTemplate({
+        await saveBudgetTemplate({
           name: templateName.trim(),
           description: "Custom template",
           preview: categories.map((c) => c.name).slice(0, 4),

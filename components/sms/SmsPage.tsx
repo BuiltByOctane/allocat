@@ -1,49 +1,92 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getDB } from "@/lib/db";
 import { MaterialSymbol } from "@/components/ui/MaterialSymbol";
 import { formatCurrency } from "@/lib/number-format";
 import {
   usePendingSms,
-  useIngestSms,
   useCategorizeSms,
   useIgnoreSms,
 } from "@/lib/hooks/useSmsTransactions";
+import { useAddBudgetItem } from "@/lib/hooks/useBudget";
+import {
+  ItemDetailSheet,
+  NEW_ITEM_ID,
+  type LinkTarget,
+} from "@/components/budget/ItemDetailSheet";
+import {
+  AllocateSheet,
+  type AllocatePickerItem,
+  type AllocateCategory,
+} from "@/components/sms/AllocateSheet";
 import type { SmsTransactionRow } from "@/lib/db";
 
-interface PickerItem {
-  id: string;
-  label: string;
+const SMS_PICKER_KEY = ["sms-picker"] as const;
+
+type CategoryType = "needs" | "wants" | "investments" | "misc" | null;
+
+interface CatMeta {
+  name: string;
+  icon: string | null;
+  type: CategoryType;
+  allocation: number;
+  /** Σ planned of the category's existing items (the "other items" for a new one). */
+  plannedTotal: number;
 }
 
-/** Flat list of budget items for the current month, labelled "Category › Item". */
-async function loadBudgetItems(): Promise<PickerItem[]> {
+interface PickerData {
+  items: AllocatePickerItem[];
+  categories: AllocateCategory[];
+  metaById: Record<string, CatMeta>;
+}
+
+/** Budget items + categories for the current month, read from IDB. */
+async function loadPickerData(): Promise<PickerData> {
   const db = getDB();
   const now = new Date();
   const budget = await db.budgets
     .where("[month+year]")
     .equals([now.getMonth() + 1, now.getFullYear()])
     .first();
-  if (!budget) return [];
+  if (!budget) return { items: [], categories: [], metaById: {} };
 
   const categories = await db.categories
     .where("budget_id")
     .equals(budget.id)
     .toArray();
 
-  const out: PickerItem[] = [];
+  const items: AllocatePickerItem[] = [];
+  const metaById: Record<string, CatMeta> = {};
+
   for (const cat of categories) {
-    const items = await db.budget_items
+    const catItems = await db.budget_items
       .where("category_id")
       .equals(cat.id)
       .toArray();
-    for (const item of items) {
-      out.push({ id: item.id, label: `${cat.name} › ${item.name}` });
+    for (const item of catItems) {
+      items.push({
+        id: item.id,
+        itemName: item.name,
+        categoryName: cat.name,
+        icon: cat.icon,
+      });
     }
+    metaById[cat.id] = {
+      name: cat.name,
+      icon: cat.icon,
+      type: (cat.type as CategoryType) ?? null,
+      allocation: Number(cat.allocated_amount) || 0,
+      plannedTotal: catItems.reduce((s, i) => s + (Number(i.planned_amount) || 0), 0),
+    };
   }
-  return out;
+
+  return {
+    items,
+    categories: categories.map((c) => ({ id: c.id, name: c.name, icon: c.icon })),
+    metaById,
+  };
 }
 
 function money(row: SmsTransactionRow): string {
@@ -55,30 +98,69 @@ function money(row: SmsTransactionRow): string {
   });
 }
 
+function txnDate(row: SmsTransactionRow): string | null {
+  if (!row.occurred_at) return null;
+  const d = new Date(row.occurred_at);
+  if (isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+}
+
 export default function SmsPage() {
+  const qc = useQueryClient();
   const { data: pending, isLoading } = usePendingSms();
-  const ingest = useIngestSms();
   const categorize = useCategorizeSms();
   const ignore = useIgnoreSms();
+  const addItem = useAddBudgetItem();
 
-  const { data: pickerItems } = useQuery({
-    queryKey: ["sms-picker"],
-    queryFn: loadBudgetItems,
+  const { data: pickerData } = useQuery({
+    queryKey: SMS_PICKER_KEY,
+    queryFn: loadPickerData,
   });
 
-  const [activeTxn, setActiveTxn] = useState<string | null>(null);
-  const [chosenItem, setChosenItem] = useState<string>("");
-  const [remember, setRemember] = useState(true);
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
 
-  // Dev harness state
-  const [smsText, setSmsText] = useState("");
-  const [sender, setSender] = useState("HDFCBK");
+  // Allocate sheet (existing-item flow) + create flow (new item).
+  const [allocateTxn, setAllocateTxn] = useState<SmsTransactionRow | null>(null);
+  const [createFlow, setCreateFlow] = useState<{
+    txn: SmsTransactionRow;
+    categoryId: string;
+  } | null>(null);
 
-  const items = pickerItems ?? [];
+  // Asset/debt link targets for the full item editor (loaded once).
+  const [linkTargets, setLinkTargets] = useState<{
+    assets: LinkTarget[];
+    debts: LinkTarget[];
+  }>({ assets: [], debts: [] });
+
+  useEffect(() => {
+    const db = getDB();
+    let cancelled = false;
+    (async () => {
+      const [assets, debts] = await Promise.all([
+        db.assets.toArray(),
+        db.debts.toArray(),
+      ]);
+      if (cancelled) return;
+      const activeAssets = assets.filter((a) => !a.achieved_at);
+      setLinkTargets({
+        assets: activeAssets.map((a) => ({
+          id: a.id,
+          name: a.is_goal ? `🎯 ${a.name}` : a.name,
+          icon: a.icon,
+        })),
+        debts: debts.map((d) => ({ id: d.id, name: d.name, icon: d.icon })),
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Deep link from a notification:
-  //   /sms?txn=<id>                         → open allocate panel
-  //   /sms?dedupe=<key>                      → open allocate panel (find by dedupe)
+  //   /sms?txn=<id>                         → open allocate sheet
+  //   /sms?dedupe=<key>                      → open allocate sheet (find by dedupe)
   //   /sms?dedupe=<key>&item=<id>&apply=1    → one-tap allocate (action button)
   const handledDeepLink = useRef(false);
   useEffect(() => {
@@ -97,9 +179,9 @@ export default function SmsPage() {
         : undefined;
     if (!target) return;
 
+    handledDeepLink.current = true;
     if (apply && item) {
       // One-tap allocate straight from the notification action button.
-      handledDeepLink.current = true;
       void categorize.mutateAsync({
         txnId: target.id,
         budgetItemId: item,
@@ -107,29 +189,60 @@ export default function SmsPage() {
       });
       return;
     }
+    // Syncing an external deep-link (notification URL) into state on mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAllocateTxn(target);
+  }, [pending]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Otherwise open the allocate panel (needs the picker items loaded).
-    if (items.length === 0) return;
-    handledDeepLink.current = true;
-    startCategorize(target.id);
-    if (item && items.some((i) => i.id === item)) setChosenItem(item);
-  }, [pending, items]);
-
-  function startCategorize(txnId: string) {
-    setActiveTxn(txnId);
-    setChosenItem(items[0]?.id ?? "");
-    setRemember(true);
-  }
-
-  async function confirmCategorize(txnId: string) {
-    if (!chosenItem) return;
+  async function handleAllocate(budgetItemId: string, remember: boolean) {
+    if (!allocateTxn) return;
     await categorize.mutateAsync({
-      txnId,
-      budgetItemId: chosenItem,
+      txnId: allocateTxn.id,
+      budgetItemId,
       rememberRule: remember,
     });
-    setActiveTxn(null);
+    setAllocateTxn(null);
   }
+
+  function handleCreateNew(categoryId: string) {
+    const txn = allocateTxn;
+    setAllocateTxn(null);
+    if (txn) setCreateFlow({ txn, categoryId });
+  }
+
+  // Create the new item, then allocate the transaction to it. Routing the
+  // spend through categorize (not the item's actual_amount) is what cascades
+  // to a linked asset/debt. Thrown errors surface in the ItemDetailSheet.
+  async function handleCreateItem(data: {
+    name: string;
+    planned_amount: number;
+    link_type?: "asset" | "debt" | null;
+    link_id?: string | null;
+  }) {
+    if (!createFlow) return;
+    const link =
+      data.link_type && data.link_id
+        ? { link_type: data.link_type, link_id: data.link_id }
+        : null;
+    const { id: tempId } = await addItem.mutateAsync({
+      categoryId: createFlow.categoryId,
+      name: data.name,
+      planned: data.planned_amount,
+      link,
+      month,
+      year,
+    });
+    await categorize.mutateAsync({
+      txnId: createFlow.txn.id,
+      budgetItemId: tempId,
+      rememberRule: true,
+    });
+    qc.invalidateQueries({ queryKey: SMS_PICKER_KEY });
+  }
+
+  const createMeta = createFlow
+    ? pickerData?.metaById[createFlow.categoryId]
+    : undefined;
 
   return (
     <div className="flex flex-col gap-6 p-4 pb-24">
@@ -149,70 +262,47 @@ export default function SmsPage() {
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : !pending || pending.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No unallocated transactions. New transaction SMS will appear here.
-          </p>
+          <div className="flex flex-col items-center gap-2 border border-dashed border-border py-12 text-center">
+            <MaterialSymbol
+              icon="inbox"
+              className="text-3xl text-muted-foreground/60"
+            />
+            <p className="text-sm text-muted-foreground">
+              No unallocated transactions.
+            </p>
+            <p className="text-xs text-muted-foreground/70">
+              New transaction SMS will show up here to allocate.
+            </p>
+          </div>
         ) : (
-          pending.map((txn) => (
-            <div key={txn.id} className="border border-border p-3">
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="font-mono text-base font-bold">
-                  {money(txn)}
-                </span>
-                <span className="truncate text-sm text-muted-foreground">
-                  {txn.merchant_raw ?? "Unknown merchant"}
-                </span>
-              </div>
-
-              {activeTxn === txn.id ? (
-                <div className="mt-3 flex flex-col gap-3">
-                  {items.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">
-                      No budget items this month. Create a budget first.
-                    </p>
-                  ) : (
-                    <>
-                      <select
-                        value={chosenItem}
-                        onChange={(e) => setChosenItem(e.target.value)}
-                        className="border border-border bg-transparent p-2 text-sm"
-                      >
-                        {items.map((it) => (
-                          <option key={it.id} value={it.id}>
-                            {it.label}
-                          </option>
-                        ))}
-                      </select>
-                      <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <input
-                          type="checkbox"
-                          checked={remember}
-                          onChange={(e) => setRemember(e.target.checked)}
-                        />
-                        Remember this merchant for future transactions
-                      </label>
-                    </>
-                  )}
-                  <div className="flex gap-2">
-                    <button
-                      disabled={!chosenItem || categorize.isPending}
-                      onClick={() => confirmCategorize(txn.id)}
-                      className="flex-1 bg-foreground py-2 text-xs font-bold uppercase tracking-widest text-background disabled:opacity-40"
-                    >
-                      Allocate
-                    </button>
-                    <button
-                      onClick={() => setActiveTxn(null)}
-                      className="border border-border px-3 text-xs font-bold uppercase tracking-widest"
-                    >
-                      Cancel
-                    </button>
+          pending.map((txn) => {
+            const when = txnDate(txn);
+            return (
+              <div
+                key={txn.id}
+                className="flex flex-col gap-3 border border-border p-3"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <span className="font-mono text-lg font-bold tabular-nums">
+                      {money(txn)}
+                    </span>
+                    <span className="truncate text-sm text-muted-foreground">
+                      {txn.merchant_raw ?? "Unknown merchant"}
+                    </span>
                   </div>
+                  {(when || txn.direction) && (
+                    <span className="shrink-0 text-right text-[10px] uppercase tracking-widest text-muted-foreground/70">
+                      {when}
+                      {when && txn.direction ? " · " : ""}
+                      {txn.direction}
+                    </span>
+                  )}
                 </div>
-              ) : (
-                <div className="mt-3 flex gap-2">
+
+                <div className="flex gap-2">
                   <button
-                    onClick={() => startCategorize(txn.id)}
+                    onClick={() => setAllocateTxn(txn)}
                     className="flex-1 bg-foreground py-2 text-xs font-bold uppercase tracking-widest text-background"
                   >
                     Allocate
@@ -224,41 +314,52 @@ export default function SmsPage() {
                     Ignore
                   </button>
                 </div>
-              )}
-            </div>
-          ))
+              </div>
+            );
+          })
         )}
       </section>
 
-      {/* Dev / manual harness — feed a raw SMS through the same pipeline */}
-      <section className="flex flex-col gap-2 border-t border-border pt-4">
-        <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-          Simulate a transaction SMS
-        </h2>
-        <input
-          value={sender}
-          onChange={(e) => setSender(e.target.value)}
-          placeholder="Sender (e.g. HDFCBK)"
-          className="border border-border bg-transparent p-2 text-sm"
-        />
-        <textarea
-          value={smsText}
-          onChange={(e) => setSmsText(e.target.value)}
-          placeholder="Paste a bank/UPI SMS…"
-          rows={3}
-          className="border border-border bg-transparent p-2 font-mono text-xs"
-        />
-        <button
-          disabled={!smsText.trim() || ingest.isPending}
-          onClick={async () => {
-            await ingest.mutateAsync({ raw: smsText, sender });
-            setSmsText("");
-          }}
-          className="bg-foreground py-2 text-xs font-bold uppercase tracking-widest text-background disabled:opacity-40"
-        >
-          {ingest.isPending ? "Processing…" : "Ingest"}
-        </button>
-      </section>
+      {/* Allocate flow — pick an existing item, or jump to create-new */}
+      <AllocateSheet
+        txn={allocateTxn}
+        amountLabel={allocateTxn ? money(allocateTxn) : ""}
+        items={pickerData?.items ?? []}
+        categories={pickerData?.categories ?? []}
+        onAllocate={handleAllocate}
+        onCreateNew={handleCreateNew}
+        onClose={() => setAllocateTxn(null)}
+        isPending={categorize.isPending}
+      />
+
+      {/* Create-new item — full editor, scoped to the chosen category */}
+      <ItemDetailSheet
+        item={
+          createFlow && createMeta
+            ? {
+                id: NEW_ITEM_ID,
+                name: createFlow.txn.merchant_raw ?? "",
+                planned: 0,
+                actual: 0,
+                is_completed: false,
+                notes: null,
+              }
+            : null
+        }
+        category={{
+          name: createMeta?.name ?? "",
+          icon: createMeta?.icon ?? null,
+          type: createMeta?.type ?? null,
+          allocation: createMeta?.allocation ?? 0,
+          otherItemsPlanned: createMeta?.plannedTotal ?? 0,
+        }}
+        linkTargets={linkTargets}
+        hideActual
+        onClose={() => setCreateFlow(null)}
+        onCreate={handleCreateItem}
+        onSave={async () => {}}
+        onDelete={() => {}}
+      />
     </div>
   );
 }

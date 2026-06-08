@@ -17,6 +17,13 @@ export async function getDashboardFromIDB() {
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
+  // Independent table reads — kick off in parallel with the budget chain below.
+  const independent = Promise.all([
+    db.assets.toArray(),
+    db.asset_value_history.toArray(),
+    db.debts.toArray(),
+  ]);
+
   const budget = await db.budgets
     .where("[month+year]")
     .equals([month, year])
@@ -31,17 +38,17 @@ export async function getDashboardFromIDB() {
       .equals(budget.id)
       .toArray();
 
-    let spent = 0;
-    for (const cat of categories) {
-      summaryCategories.push({ id: cat.id, name: cat.name, icon: cat.icon });
-      const items = await db.budget_items
-        .where("category_id")
-        .equals(cat.id)
-        .toArray();
-      items.forEach((i) => {
-        spent += Number(i.actual_amount);
-      });
-    }
+    const categoryIds = categories.map((c) => c.id);
+    categories.forEach((cat) =>
+      summaryCategories.push({ id: cat.id, name: cat.name, icon: cat.icon })
+    );
+
+    // Single bulk read instead of one query per category.
+    const items = await db.budget_items
+      .where("category_id")
+      .anyOf(categoryIds)
+      .toArray();
+    const spent = items.reduce((sum, i) => sum + Number(i.actual_amount), 0);
 
     formattedBudget = {
       id: budget.id,
@@ -51,8 +58,9 @@ export async function getDashboardFromIDB() {
     };
   }
 
+  const [allAssets, allHistory, debts] = await independent;
+
   // Goals are now assets with is_goal=true; surface only active ones for dashboard
-  const allAssets = await db.assets.toArray();
   const goals = allAssets
     .filter((a) => a.is_goal === true && !a.achieved_at)
     .map((a) => ({
@@ -71,8 +79,7 @@ export async function getDashboardFromIDB() {
 
   // Compute monthly net worth from asset_value_history (same as net worth page).
   // This stays accurate even when asset values are updated without add/delete.
-  const allHistory = await db.asset_value_history.toArray();
-  const debts = await db.debts.toArray();
+  // `allHistory` and `debts` were read in parallel above.
   const totalLiabilities = debts
     .filter((d) => !d.is_closed && d.type !== "lent")
     .reduce((sum, d) => sum + (Number(d.principal) - Number(d.total_paid)), 0);

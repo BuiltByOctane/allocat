@@ -1,9 +1,9 @@
 "use client";
 
-import Link, { useLinkStatus } from "next/link";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { useEffect, useState } from "react";
+import { motion, useReducedMotion, type Transition } from "motion/react";
 import { LayoutGrid, Wallet, TrendingUp, CreditCard, User, type LucideIcon } from "lucide-react";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 
@@ -17,15 +17,11 @@ const navItems: NavItem[] = [
   { label: "You", href: "/profile", Icon: User },
 ];
 
-// Child of <Link> — useLinkStatus reads the nearest Link's pending state, so a
-// tap nudges the icon before the route commits.
-function PendingScale({ children }: { children: React.ReactNode }) {
-  const { pending } = useLinkStatus();
-  return (
-    <span className={`flex items-center transition-transform ${pending ? "scale-110" : ""}`}>
-      {children}
-    </span>
+function hrefForPath(pathname: string): string {
+  const match = navItems.find(
+    (item) => pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href)),
   );
+  return match?.href ?? "/dashboard";
 }
 
 export default function BottomNav() {
@@ -34,23 +30,31 @@ export default function BottomNav() {
   const router = useRouter();
   const reduce = useReducedMotion();
 
+  // Optimistic active tab: flips the instant you tap (before the route commits),
+  // so the pill slides immediately instead of waiting on navigation.
+  const [active, setActive] = useState(() => hrefForPath(pathname));
+
+  useEffect(() => {
+    setActive(hrefForPath(pathname));
+  }, [pathname]);
+
   useEffect(() => {
     navItems.forEach((item) => router.prefetch(item.href));
   }, [router]);
 
-  const spring = reduce
+  const spring: Transition = reduce
     ? { duration: 0 }
-    : ({ type: "spring", stiffness: 420, damping: 34 } as const);
+    : { type: "spring", stiffness: 560, damping: 38, mass: 0.7 };
 
   return (
-    <nav
+    <motion.nav
+      layout
+      transition={spring}
       className="md:hidden fixed left-1/2 -translate-x-1/2 z-50 flex items-center gap-[5px] p-1.5 rounded-nav glass-dock"
-      style={{ bottom: "calc(14px + env(safe-area-inset-bottom))" }}
+      style={{ bottom: "calc(14px + env(safe-area-inset-bottom))", willChange: "transform" }}
     >
       {navItems.map((item) => {
-        const isActive =
-          pathname === item.href ||
-          (item.href !== "/dashboard" && pathname.startsWith(item.href));
+        const isActive = active === item.href;
         const { Icon } = item;
 
         return (
@@ -59,48 +63,51 @@ export default function BottomNav() {
             href={item.href}
             aria-label={item.label}
             aria-current={isActive ? "page" : undefined}
-            onClick={() => haptic.light()}
+            onClick={() => {
+              setActive(item.href);
+              haptic.light();
+            }}
             className="relative flex items-center justify-center"
           >
-            <PendingScale>
-              {isActive ? (
+            <motion.span
+              layout
+              transition={spring}
+              className={`relative flex items-center justify-center ${
+                isActive ? "h-11 gap-1.5 rounded-[22px] px-3.5" : "size-9 rounded-full"
+              }`}
+              style={{ willChange: "transform" }}
+            >
+              {isActive && (
                 <motion.span
-                  layout
-                  className="relative flex h-11 items-center gap-1.5 rounded-[22px] px-3.5"
+                  layoutId="nav-pill"
+                  className="absolute inset-0 rounded-[22px] bg-[var(--navpill)]"
                   transition={spring}
-                >
-                  <motion.span
-                    layoutId="nav-pill"
-                    className="absolute inset-0 rounded-[22px] bg-[var(--navpill)]"
-                    transition={spring}
-                  />
-                  <Icon
-                    size={18}
-                    strokeWidth={2}
-                    className="relative z-10 text-[var(--navpill-foreground)]"
-                  />
-                  <motion.span
-                    initial={reduce ? false : { opacity: 0, width: 0 }}
-                    animate={{ opacity: 1, width: "auto" }}
-                    transition={reduce ? { duration: 0 } : { duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-                    className="relative z-10 overflow-hidden whitespace-nowrap text-[12.5px] font-semibold text-[var(--navpill-foreground)]"
-                  >
-                    {item.label}
-                  </motion.span>
-                </motion.span>
-              ) : (
+                  style={{ willChange: "transform" }}
+                />
+              )}
+              {!isActive && (
+                <span className="absolute inset-0 rounded-full bg-[var(--nav-circle)] shadow-[0_2px_6px_rgba(0,0,0,0.08)]" />
+              )}
+              <Icon
+                size={18}
+                strokeWidth={isActive ? 2 : 1.8}
+                className={`relative z-10 ${isActive ? "text-[var(--navpill-foreground)]" : "text-[var(--nav-circle-foreground)]"}`}
+              />
+              {isActive && (
                 <motion.span
-                  layout
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--nav-circle)] text-[var(--nav-circle-foreground)] shadow-[0_2px_6px_rgba(0,0,0,0.08)]"
-                  transition={spring}
+                  initial={reduce ? false : { opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: "auto" }}
+                  exit={{ opacity: 0, width: 0 }}
+                  transition={reduce ? { duration: 0 } : { duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                  className="relative z-10 overflow-hidden whitespace-nowrap text-[12.5px] font-semibold text-[var(--navpill-foreground)]"
                 >
-                  <Icon size={18} strokeWidth={1.8} />
+                  {item.label}
                 </motion.span>
               )}
-            </PendingScale>
+            </motion.span>
           </Link>
         );
       })}
-    </nav>
+    </motion.nav>
   );
 }

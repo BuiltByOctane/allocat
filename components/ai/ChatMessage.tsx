@@ -21,7 +21,7 @@ export default function ChatMessage({ role, content, isStreaming }: ChatMessageP
     return (
       <div className="mb-3 flex w-full justify-end">
         <div
-          className="max-w-[82%] rounded-2xl rounded-tr-sm bg-foreground px-4 py-2.5 text-sm leading-relaxed text-background"
+          className="max-w-[82%] rounded-[20px] rounded-tr-md bg-[var(--pill)] px-4 py-2.5 text-sm leading-relaxed text-[var(--pill-foreground)]"
           style={{ wordBreak: "break-word" }}
         >
           {content}
@@ -33,7 +33,7 @@ export default function ChatMessage({ role, content, isStreaming }: ChatMessageP
   return (
     <div className="mb-3 flex w-full justify-start">
       <div
-        className="flex max-w-[88%] items-end gap-1.5 rounded-2xl rounded-tl-sm border border-border bg-card px-4 py-2.5 text-sm leading-relaxed text-foreground"
+        className="flex max-w-[88%] items-end gap-1.5 rounded-[20px] rounded-tl-md border border-border bg-card px-4 py-2.5 text-sm leading-relaxed text-foreground"
         style={{ wordBreak: "break-word" }}
       >
         {content ? (

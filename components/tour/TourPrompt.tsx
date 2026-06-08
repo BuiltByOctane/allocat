@@ -18,12 +18,12 @@ export function TourPrompt() {
   if (!tour.hydrated || tour.asked) return null;
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-background/98 p-6 backdrop-blur-sm">
-      <div className="w-full max-w-[360px] border border-border bg-card p-6 text-center">
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-border">
-          <MaterialSymbol icon="map" className="text-foreground" />
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-background/95 p-6 backdrop-blur-sm">
+      <div className="w-full max-w-[360px] rounded-card border border-border bg-card p-6 text-center shadow-[0_12px_40px_rgba(0,0,0,0.18)]">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-[18px] bg-accent text-[var(--accent-ink)]">
+          <MaterialSymbol icon="map" style={{ fontSize: 26 }} />
         </div>
-        <h1 className="text-lg font-bold uppercase tracking-widest">
+        <h1 className="font-display text-[22px] font-bold tracking-[-0.02em] text-foreground">
           Take a quick tour?
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
@@ -31,18 +31,18 @@ export function TourPrompt() {
           takes a minute — or skip it and explore on your own.
         </p>
 
-        <div className="mt-6 flex flex-col gap-2">
+        <div className="mt-6 flex flex-col gap-2.5">
           <button
             type="button"
             onClick={() => tour.answerPrompt(true)}
-            className="w-full bg-foreground py-3 text-xs font-bold uppercase tracking-widest text-background"
+            className="w-full h-[48px] rounded-pill bg-[var(--pill)] text-[var(--pill-foreground)] text-sm font-bold active:scale-[0.98] transition-all"
           >
             Yes, show me around
           </button>
           <button
             type="button"
             onClick={() => tour.answerPrompt(false)}
-            className="w-full border border-border py-3 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground"
+            className="w-full h-[48px] rounded-pill bg-muted text-foreground text-sm font-semibold hover:brightness-95 transition-all"
           >
             No thanks
           </button>

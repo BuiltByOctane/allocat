@@ -303,11 +303,13 @@ input[type="date"] {
   padding-top: 12px !important;
   border-top: 1px solid var(--border) !important;
   margin-top: 0 !important;
+  text-shadow: none !important;
 }
 
 .allocat-tour-popover .driver-popover-btn-disabled {
   opacity: 0 !important;
   pointer-events: none !important;
+  text-shadow: none !important;
 }
 
 .allocat-tour-popover button {
@@ -333,6 +335,7 @@ input[type="date"] {
   background: var(--pill) !important;
   color: var(--pill-foreground) !important;
   border-color: var(--pill) !important;
+  text-shadow: none !important;
 }
 
 .allocat-tour-popover .driver-popover-next-btn:hover {

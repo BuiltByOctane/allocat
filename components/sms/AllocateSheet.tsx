@@ -70,14 +70,14 @@ export function AllocateSheet({
       }}
     >
       <Drawer.Portal>
-        <Drawer.Overlay className="fixed inset-0 bg-black/60 z-40" />
+        <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
         <Drawer.Content
           aria-describedby={undefined}
-          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-2xl bg-card border-t border-border max-h-[85vh] focus:outline-none"
+          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card max-h-[85vh] focus:outline-none"
         >
           {/* Drag handle */}
           <div className="flex justify-center pt-3 pb-1 shrink-0">
-            <div className="w-10 h-1 bg-muted rounded-full" />
+            <div className="mx-auto w-9 h-1 bg-border rounded-full" />
           </div>
 
           {view === "items" ? (
@@ -86,17 +86,17 @@ export function AllocateSheet({
               <div className="px-5 pt-2 pb-4 border-b border-border shrink-0">
                 <div className="flex items-baseline justify-between gap-3">
                   <span
-                    className={`text-2xl font-bold text-foreground ${
-                      hasNumericText(amountLabel) ? "font-mono tabular-nums" : ""
+                    className={`text-[26px] font-bold text-foreground ${
+                      hasNumericText(amountLabel) ? "figure" : "font-display"
                     }`}
                   >
                     {amountLabel}
                   </span>
-                  <span className="truncate text-sm text-muted-foreground">
+                  <span className="truncate text-[13px] font-bold text-foreground">
                     {merchant}
                   </span>
                 </div>
-                <Drawer.Title className="mt-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground m-0">
+                <Drawer.Title className="mt-3 t-label text-muted-foreground m-0">
                   Allocate to
                 </Drawer.Title>
               </div>
@@ -109,7 +109,7 @@ export function AllocateSheet({
                     <button
                       type="button"
                       onClick={() => setView("pick-category")}
-                      className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left border border-dashed border-border text-foreground hover:bg-muted/50 active:bg-muted transition-colors"
+                      className="w-full flex items-center gap-3 px-4 py-3.5 rounded-tile text-left border border-dashed border-border text-foreground hover:bg-muted/50 active:bg-muted transition-colors"
                     >
                       <span className="material-symbols-outlined text-[20px] shrink-0">
                         add
@@ -137,7 +137,7 @@ export function AllocateSheet({
                           <button
                             type="button"
                             onClick={() => setChosenItem(it.id)}
-                            className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl text-left transition-colors ${
+                            className={`w-full flex items-center justify-between px-4 py-3.5 rounded-tile text-left transition-colors ${
                               isSelected
                                 ? "bg-muted text-foreground"
                                 : "text-muted-foreground hover:bg-muted/50 active:bg-muted"
@@ -180,7 +180,7 @@ export function AllocateSheet({
                 >
                   <span
                     className={`material-symbols-outlined text-[20px] ${
-                      remember ? "text-primary" : "text-muted-foreground"
+                      remember ? "text-accent-strong" : "text-muted-foreground"
                     }`}
                     style={{
                       fontVariationSettings: remember ? "'FILL' 1" : "'FILL' 0",
@@ -197,14 +197,14 @@ export function AllocateSheet({
                     type="button"
                     disabled={!chosenItem || isPending}
                     onClick={() => onAllocate(chosenItem, remember)}
-                    className="flex-1 rounded-xl bg-primary py-3.5 text-sm font-bold text-primary-foreground disabled:opacity-40 active:scale-[0.98] transition-all"
+                    className="flex-1 h-[48px] rounded-pill bg-[var(--pill)] text-[var(--pill-foreground)] text-sm font-bold disabled:opacity-40 active:scale-[0.98] transition-all"
                   >
                     {isPending ? "Allocating…" : "Allocate"}
                   </button>
                   <button
                     type="button"
                     onClick={onClose}
-                    className="rounded-xl bg-muted px-5 text-sm font-medium text-foreground active:scale-[0.98] transition-all"
+                    className="h-[48px] rounded-pill bg-muted px-5 text-sm font-semibold text-foreground active:scale-[0.98] transition-all"
                   >
                     Cancel
                   </button>
@@ -225,7 +225,7 @@ export function AllocateSheet({
                     arrow_back
                   </span>
                 </button>
-                <Drawer.Title className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground m-0">
+                <Drawer.Title className="t-label text-muted-foreground m-0">
                   Add to which category?
                 </Drawer.Title>
               </div>
@@ -244,7 +244,7 @@ export function AllocateSheet({
                         <button
                           type="button"
                           onClick={() => onCreateNew(cat.id)}
-                          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left text-muted-foreground hover:bg-muted/50 active:bg-muted transition-colors"
+                          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-tile text-left text-muted-foreground hover:bg-muted/50 active:bg-muted transition-colors"
                         >
                           {cat.icon && (
                             <span className="text-lg leading-none shrink-0">

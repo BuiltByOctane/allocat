@@ -24,7 +24,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
     return (
       <button
         ref={ref}
-        className={`inline-flex items-center justify-center min-w-[44px] min-h-[44px] text-muted-foreground hover:text-foreground active:scale-90 transition-all rounded-lg ${className}`}
+        className={`inline-flex items-center justify-center min-w-[44px] min-h-[44px] text-muted-foreground hover:text-foreground active:scale-90 transition-all rounded-xl ${className}`}
         {...props}
       >
         <MaterialSymbol

@@ -47,9 +47,11 @@ export function EmptyState({
 }: EmptyStateProps) {
   return (
     <div
-      className={`flex flex-col items-center justify-center text-center py-20 px-8 bg-muted/40 border border-border rounded-xl ${className}`}
+      className={`flex flex-col items-center justify-center text-center py-16 px-8 bg-card rounded-card ${className}`}
     >
-      <MaterialSymbol icon={icon} className="text-[56px] text-muted-foreground/60 mb-6" />
+      <span className="flex items-center justify-center w-16 h-16 rounded-[20px] bg-tile mb-6">
+        <MaterialSymbol icon={icon} className="text-[32px] text-muted-foreground" />
+      </span>
       <h2 className="t-heading text-foreground mb-2">{title}</h2>
       {description && (
         <p className="t-body text-muted-foreground max-w-sm mb-8">{description}</p>

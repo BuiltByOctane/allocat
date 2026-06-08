@@ -2,6 +2,7 @@
 
 import { useRef, useState, useEffect, useCallback } from "react";
 import { Drawer } from "vaul";
+import { X } from "lucide-react";
 import PawLogo from "./PawLogo";
 import ChatMessage from "./ChatMessage";
 import ChatInput from "./ChatInput";
@@ -115,26 +116,26 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
     <Drawer.Root open={open} onClose={handleClose} shouldScaleBackground>
       <Drawer.Portal>
         <Drawer.Overlay
-          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
           onClick={handleClose}
         />
         <Drawer.Content
-          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-2xl bg-background outline-none"
+          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-background outline-none"
           style={{ height: "92dvh" }}
           aria-label="AlloCat AI Chat"
         >
           {/* Drag handle */}
-          <div className="mx-auto mt-3 mb-1 h-1 w-10 rounded-full bg-border" />
+          <div className="mx-auto mt-3 mb-1 h-1 w-9 rounded-full bg-border" />
 
           {/* Header */}
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div className="flex items-center gap-2.5">
               <PawLogo size={32} className="h-8 w-8" />
               <div>
-                <Drawer.Title className="text-sm font-semibold text-foreground">
+                <Drawer.Title className="font-display text-[18px] font-bold leading-none tracking-[-0.02em] text-foreground">
                   AlloCat AI
                 </Drawer.Title>
-                <p className="text-xs text-(--muted-foreground,#888)">
+                <p className="mt-1 text-xs text-muted-foreground">
                   {isStreaming ? "Typing…" : "Your finance buddy"}
                 </p>
               </div>
@@ -143,12 +144,9 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
               id="ai-chat-close"
               onClick={handleClose}
               aria-label="Close chat"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-foreground transition-colors hover:bg-card active:bg-border"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
+              <X size={18} strokeWidth={2} />
             </button>
           </div>
 

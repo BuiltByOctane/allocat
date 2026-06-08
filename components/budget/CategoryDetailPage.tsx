@@ -2,11 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ChevronLeft, ChevronRight, Link2, Trash2, Check } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { useFormatCurrency } from "@/lib/hooks/useFormatCurrency";
 import { InlineEditableText } from "@/components/ui/InlineEditableText";
 import { InlineEditableNumber } from "@/components/ui/InlineEditableNumber";
+import { Card } from "@/components/ui/Card";
+import { Progress } from "@/components/ui/Progress";
 import EmojiPickerModal from "@/components/ui/EmojiPickerModal";
 import { ColorPicker } from "@/components/ui/ColorPicker";
 import type { CatKey } from "@/lib/theme/dataViz";
@@ -43,20 +46,13 @@ interface LinkTargetEntry {
   icon?: string | null;
 }
 
-function SegBar({ pct, segments = 20 }: { pct: number; segments?: number }) {
+function SegBar({ pct, over }: { pct: number; over?: boolean }) {
   return (
-    <div className="flex gap-[2px] mt-2">
-      {Array.from({ length: segments }).map((_, j) => (
-        <div
-          key={j}
-          className="flex-1"
-          style={{
-            height: 2,
-            background: j / segments < pct ? "var(--foreground)" : "var(--progress-empty)",
-          }}
-        />
-      ))}
-    </div>
+    <Progress
+      value={pct * 100}
+      state={over ? "over" : "normal"}
+      className="mt-2 h-1.5"
+    />
   );
 }
 
@@ -65,15 +61,11 @@ export default function CategoryDetailPage({ categoryId }: { categoryId: string 
 
   if (isLoading) {
     return (
-      <div className="flex flex-col min-h-full animate-pulse px-7 pt-14 gap-6">
-        <div className="h-8 bg-muted rounded w-40" />
-        <div className="h-px bg-border" />
-        <div className="grid grid-cols-3 gap-6">
-          {[0, 1, 2].map((i) => <div key={i} className="h-16 bg-muted rounded" />)}
-        </div>
-        <div className="h-px bg-border" />
-        <div className="flex flex-col gap-4">
-          {[0, 1, 2].map((i) => <div key={i} className="h-12 bg-muted rounded" />)}
+      <div className="flex flex-col animate-pulse px-4 pt-4 gap-3">
+        <div className="h-9 bg-muted rounded-xl w-40" />
+        <div className="h-28 bg-muted rounded-card" />
+        <div className="flex flex-col gap-2.5">
+          {[0, 1, 2].map((i) => <div key={i} className="h-16 bg-muted rounded-card" />)}
         </div>
       </div>
     );
@@ -475,32 +467,33 @@ function CategoryDetailContent({
     : 0;
 
   return (
-    <div className="flex flex-col min-h-full">
+    <div className="px-4 pt-4 flex flex-col gap-3">
       {/* Header */}
-      <header className="sticky top-0 z-10 bg-background px-7 pt-14 pb-5 flex items-center justify-between">
+      <div className="flex items-center gap-3 px-1 pt-1">
         <button
           id="category-back"
           onClick={() => { haptic.light(); router.back(); }}
-          className="size-9 flex items-center justify-center border border-border text-muted-foreground hover:text-foreground hover:border-foreground transition-colors"
+          className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-foreground"
+          aria-label="Back"
         >
-          <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+          <ChevronLeft size={18} strokeWidth={1.9} />
         </button>
 
-        <div className="flex items-center gap-2 flex-1 min-w-0 mx-4">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
           <button
             onClick={() => { haptic.light(); setIsPickerOpen(true); }}
-            className="shrink-0 text-xl"
+            className="shrink-0 text-xl leading-none"
             title="Choose Icon"
           >
             {icon || (
-              <span className="material-symbols-outlined text-[18px] text-muted-foreground">add_reaction</span>
+              <span className="material-symbols-outlined text-[20px] text-muted-foreground">add_reaction</span>
             )}
           </button>
-          <h1 className="font-display text-[26px] leading-none tracking-[-0.02em] text-foreground truncate">
+          <h1 className="font-display text-[24px] font-bold leading-none tracking-[-0.03em] text-foreground truncate">
             <InlineEditableText
               value={name}
               onSave={handleUpdateCategoryName}
-              className="font-display text-[26px] text-foreground"
+              className="font-display text-[24px] font-bold text-foreground"
             />
           </h1>
         </div>
@@ -508,235 +501,177 @@ function CategoryDetailContent({
         <button
           id="category-delete"
           onClick={() => { haptic.heavy(); setIsConfirmDeleteOpen(true); }}
-          className="size-9 flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
+          className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-neg"
           title="Delete Category"
+          aria-label="Delete Category"
         >
-          <span className="material-symbols-outlined text-[18px]">delete</span>
+          <Trash2 size={17} strokeWidth={1.7} />
         </button>
-      </header>
-
-      {/* Hairline */}
-      <div className="h-px bg-border mx-7" />
-
-      {/* Color */}
-      <div className="px-7 py-3 flex items-center gap-3 flex-wrap border-b border-border">
-        <span className="t-label text-muted-foreground shrink-0">Color</span>
-        <ColorPicker value={color} onChange={handleUpdateColor} />
       </div>
 
-      <div className="md:grid md:grid-cols-[1fr_1.5fr] flex-1">
-        {/* Left — stats */}
-        <div className="md:border-r border-border">
-          {/* Stats — Left as hero */}
-          <div className="px-7 py-6 border-b border-border">
-            <div className="flex flex-col gap-1">
-              <span className="font-mono text-[9px] tracking-[0.14em] uppercase text-muted-foreground">
-                {left < 0 ? "Over Budget" : "Left"}
-              </span>
-              <div
-                className="text-[44px] md:text-[52px] leading-[0.95] tracking-[-0.025em] tabular-nums mt-1"
-                style={{ color: left < 0 ? "var(--neg)" : "var(--foreground)" }}
-              >
-                {left < 0 ? "−" : ""}
-                <CurrencyText value={Math.abs(left)} />
-              </div>
-            </div>
+      {/* Color */}
+      <Card compact className="flex items-center gap-3 flex-wrap">
+        <span className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground shrink-0">Color</span>
+        <ColorPicker value={color} onChange={handleUpdateColor} />
+      </Card>
 
-            <div className="grid grid-cols-2 gap-0 mt-5 pt-4 border-t border-border">
-              {/* Budget (editable) */}
-              <div className="flex flex-col gap-1 pr-4 border-r border-border">
-                <span className="font-mono text-[9px] tracking-[0.14em] uppercase text-muted-foreground">Budget</span>
-                <div className="text-[20px] leading-none tracking-[-0.02em] text-muted-foreground tabular-nums mt-1">
-                  <InlineEditableNumber
-                    value={categoryAllocation}
-                    onSave={handleUpdateCategoryAllocation}
-                  />
-                </div>
-                <span className="font-mono text-[9px] text-muted-foreground mt-0.5">tap to edit</span>
-              </div>
-
-              {/* Spent */}
-              <div className="flex flex-col gap-1 pl-4">
-                <span className="font-mono text-[9px] tracking-[0.14em] uppercase text-muted-foreground">Spent</span>
-                <CurrencyText
-                  value={totalActual}
-                  className="text-[20px] leading-none tracking-[-0.02em] text-foreground mt-1 tabular-nums"
-                />
-              </div>
+      {/* Stats card */}
+      <Card>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <span className="t-label text-muted-foreground">
+              {left < 0 ? "Over Budget" : "Left"}
+            </span>
+            <div
+              className="figure text-[30px] mt-1"
+              style={{ color: left < 0 ? "var(--neg)" : "var(--foreground)" }}
+            >
+              {left < 0 ? "−" : ""}
+              <CurrencyText value={Math.abs(left)} />
             </div>
           </div>
-
-          {/* Progress bar */}
-          <div className="px-7 py-4 border-b border-border">
-            <SegBar pct={pct} segments={30} />
-            <div className="flex justify-between mt-2">
-              <span className="font-mono text-[9px] text-muted-foreground">
-                {Math.round(pct * 100)}% used
-              </span>
-              <span className="font-mono text-[9px] text-muted-foreground tabular-nums">
-                <CurrencyText value={totalActual} /> /{" "}
-                <CurrencyText value={categoryAllocation} />
-              </span>
+          <div className="text-right">
+            <span className="t-label text-muted-foreground">Budget / Spent</span>
+            <div className="figure text-[15px] mt-1.5 text-foreground">
+              <InlineEditableNumber
+                value={categoryAllocation}
+                onSave={handleUpdateCategoryAllocation}
+              />
+              {" / "}
+              <CurrencyText value={totalActual} />
             </div>
           </div>
+        </div>
 
-          {/* Budget context */}
-          <div className="px-7 py-4 space-y-1">
-            <p className="font-mono text-[10px] tabular-nums text-muted-foreground">
-              Total <CurrencyText value={data.totalBudget} /> · Other{" "}
-              <CurrencyText value={data.otherAllocated} />
+        <SegBar pct={pct} over={totalActual > categoryAllocation && categoryAllocation > 0} />
+
+        <div className="mt-2.5 space-y-1">
+          <p className="text-[10.5px] font-medium text-muted-foreground tabular-nums">
+            {Math.round(pct * 100)}% used · <CurrencyText value={totalPlanned} /> planned
+            {categoryAllocation > 0 ? (
+              <>
+                {" "}·{" "}
+                <CurrencyText value={Math.max(0, categoryAllocation - totalPlanned)} />{" "}
+                unallocated
+              </>
+            ) : null}
+          </p>
+          <p className="text-[10.5px] font-medium text-muted-foreground tabular-nums">
+            Total <CurrencyText value={data.totalBudget} /> · Other{" "}
+            <CurrencyText value={data.otherAllocated} />
+          </p>
+          {data.totalBudget <= 0 ? (
+            <button
+              type="button"
+              onClick={() => { haptic.light(); router.back(); }}
+              className="text-[11px] font-bold text-foreground"
+            >
+              Set Total Budget first →
+            </button>
+          ) : remainingBudgetCapacity < 0 ? (
+            <p className="text-[10.5px] font-medium text-neg">
+              <CurrencyText value={Math.abs(remainingBudgetCapacity)} /> over total budget cap.
             </p>
-            <p className="font-mono text-[10px] tabular-nums text-muted-foreground">
-              <CurrencyText value={totalPlanned} /> planned
-              {categoryAllocation > 0 ? (
-                <>
-                  {" "}·{" "}
-                  <CurrencyText
-                    value={Math.max(0, categoryAllocation - totalPlanned)}
-                  />{" "}
-                  unplanned
-                </>
-              ) : null}
-            </p>
-            {data.totalBudget <= 0 ? (
+          ) : null}
+          {validationError && (
+            <p className="text-[10.5px] font-medium text-neg">{validationError}</p>
+          )}
+        </div>
+      </Card>
+
+      {/* Items header */}
+      <div className="flex items-center justify-between px-1 mt-1">
+        <span className="font-display text-[15px] font-bold text-foreground">
+          Items · {items.length}
+        </span>
+        <button
+          id="add-item-btn"
+          type="button"
+          onClick={() => {
+            haptic.light();
+            setSelectedItem({
+              id: NEW_ITEM_ID,
+              name: "",
+              planned: 0,
+              actual: 0,
+              is_completed: false,
+              notes: null,
+            });
+          }}
+          className="flex items-center gap-1 text-[13px] font-bold text-foreground"
+        >
+          <span className="text-accent-strong text-base leading-none">＋</span>Add
+        </button>
+      </div>
+
+      {/* Item list */}
+      <div className="flex flex-col gap-2.5">
+        {items.map((item) => {
+          const itemPct = item.planned > 0 ? Math.min(1, item.actual / item.planned) : 0;
+
+          return (
+            <Card key={item.id} compact>
               <button
                 type="button"
-                onClick={() => { haptic.light(); router.back(); }}
-                className="font-mono text-[10px] text-foreground underline underline-offset-4"
+                onClick={() => openItem(item)}
+                className="w-full text-left"
               >
-                Set Total Budget first →
-              </button>
-            ) : remainingBudgetCapacity < 0 ? (
-              <p className="font-mono text-[10px] text-neg">
-                <CurrencyText value={Math.abs(remainingBudgetCapacity)} /> over
-                {" "}total budget cap.
-              </p>
-            ) : (
-              <p className="font-mono text-[10px] text-muted-foreground">
-                <CurrencyText value={remainingBudgetCapacity} /> still
-                {" "}unallocated.
-              </p>
-            )}
-            {validationError && (
-              <p className="font-mono text-[10px] text-neg">{validationError}</p>
-            )}
-          </div>
-        </div>
-
-        {/* Right — items */}
-        <div className="flex flex-col flex-1">
-          {/* Items header */}
-          <div className="px-7 py-4 flex justify-between items-baseline border-b border-border">
-            <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
-              Items
-            </span>
-            <span className="font-mono text-[10px] text-muted-foreground tabular-nums">
-              {items.length} total
-            </span>
-          </div>
-
-          {/* Item list */}
-          <div className="flex-1 px-7">
-            {items.map((item, idx) => {
-              const itemPct = item.planned > 0 ? Math.min(1, item.actual / item.planned) : 0;
-
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => openItem(item)}
-                  className="w-full text-left py-4 border-b border-border active:bg-muted/30 transition-colors"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex flex-col gap-1 flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[9px] text-muted-foreground shrink-0">
-                          {String(idx + 1).padStart(2, "0")}
-                        </span>
-                        {item.is_completed && (
-                          <span
-                            className="material-symbols-outlined text-sm text-foreground shrink-0"
-                            style={{ fontVariationSettings: "'FILL' 1" }}
-                          >
-                            check_circle
-                          </span>
-                        )}
-                        <span
-                          className={`text-[15px] font-medium truncate ${
-                            item.is_completed ? "line-through text-muted-foreground" : "text-foreground"
-                          }`}
-                        >
-                          {item.name}
-                        </span>
-                      </div>
-                      <div className="font-mono text-[10px] text-muted-foreground tabular-nums">
-                        <span>
-                          <CurrencyText value={item.actual} /> spent
-                        </span>
-                        {item.planned > 0 && (
-                          <span style={{ color: "var(--dimmer)" }}>
-                            {" "}of <CurrencyText value={item.planned} />
-                          </span>
-                        )}
-                      </div>
-                      {item.link_type && item.link_id && (
-                        <div className="font-mono text-[9px] text-foreground/70 mt-0.5 inline-flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[12px]">link</span>
-                          {(() => {
-                            const target =
-                              item.link_type === "asset"
-                                ? allAssets.find((t) => t.id === item.link_id)
-                                : linkTargets.debts.find((t) => t.id === item.link_id);
-                            return target ? `${target.icon ?? ""} ${target.name}`.trim() : item.link_type;
-                          })()}
-                        </div>
-                      )}
-                      {item.planned > 0 && (
-                        <SegBar pct={itemPct} segments={16} />
-                      )}
-                      {item.notes && (
-                        <p className="font-mono text-[9px] text-muted-foreground truncate mt-0.5">
-                          {item.notes}
-                        </p>
-                      )}
+                <div className="flex items-center gap-3">
+                  {item.is_completed ? (
+                    <div className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-accent-strong text-white">
+                      <Check size={13} strokeWidth={2.4} />
                     </div>
-                    <span
-                      className="material-symbols-outlined text-[16px] shrink-0 mt-0.5"
-                      style={{ color: "var(--dimmer)" }}
+                  ) : (
+                    <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-tile text-[15px]">
+                      {item.name.charAt(0).toUpperCase() || "•"}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div
+                      className={`text-[14px] font-bold truncate ${
+                        item.is_completed ? "line-through text-muted-foreground" : "text-foreground"
+                      }`}
                     >
-                      chevron_right
-                    </span>
+                      {item.name}
+                    </div>
+                    {item.link_type && item.link_id ? (
+                      <div className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-semibold text-accent-strong">
+                        <Link2 size={12} strokeWidth={1.7} />
+                        {(() => {
+                          const target =
+                            item.link_type === "asset"
+                              ? allAssets.find((t) => t.id === item.link_id)
+                              : linkTargets.debts.find((t) => t.id === item.link_id);
+                          return target ? `${target.icon ?? ""} ${target.name}`.trim() : item.link_type;
+                        })()}
+                      </div>
+                    ) : item.notes ? (
+                      <p className="text-[10.5px] font-medium text-muted-foreground truncate mt-0.5">
+                        {item.notes}
+                      </p>
+                    ) : null}
                   </div>
-                </button>
-              );
-            })}
-
-            {/* Add item */}
-            <button
-              id="add-item-btn"
-              type="button"
-              onClick={() => {
-                haptic.light();
-                setSelectedItem({
-                  id: NEW_ITEM_ID,
-                  name: "",
-                  planned: 0,
-                  actual: 0,
-                  is_completed: false,
-                  notes: null,
-                });
-              }}
-              className="w-full flex items-center gap-2 py-4 font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <span className="material-symbols-outlined text-[16px]">add</span>
-              Add Item
-            </button>
-          </div>
-        </div>
+                  <div className="text-right shrink-0">
+                    <div className="figure text-[13px]">
+                      <CurrencyText value={item.actual} />
+                    </div>
+                    {item.planned > 0 && (
+                      <div className="text-[9.5px] font-medium text-muted-foreground tabular-nums mt-0.5">
+                        of <CurrencyText value={item.planned} />
+                      </div>
+                    )}
+                  </div>
+                  <ChevronRight size={15} strokeWidth={2} className="shrink-0 text-muted-foreground" />
+                </div>
+                {item.planned > 0 && <SegBar pct={itemPct} over={item.actual > item.planned} />}
+              </button>
+            </Card>
+          );
+        })}
       </div>
 
       {/* Bottom spacer */}
-      <div className="h-24 md:h-8" />
+      <div className="h-28 md:h-12" />
 
       <EmojiPickerModal
         isOpen={isPickerOpen}

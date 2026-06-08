@@ -32,9 +32,9 @@ function WelcomeVisual() {
         aria-hidden
         className="absolute size-[168px] rounded-full border border-white/[0.07]"
       />
-      <div className="flex size-24 items-center justify-center rounded-[28px] border border-white/10 bg-white/[0.04]">
+      <div className="flex size-24 items-center justify-center rounded-[28px] bg-accent">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/paw-white.png" alt="AlloCat" className="size-14 opacity-90" />
+        <img src="/paw-white.png" alt="AlloCat" className="size-14 opacity-90 [filter:brightness(0)_saturate(100%)]" />
       </div>
     </div>
   );
@@ -55,10 +55,10 @@ function BudgetVisual() {
   return (
     <MiniFrame>
       <div className="flex items-center justify-between">
-        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/40">
+        <span className="text-[10px] font-bold uppercase tracking-wide text-white/40">
           Budget left
         </span>
-        <span className="font-mono text-[10px] text-white/30">June</span>
+        <span className="text-[10px] font-medium text-white/30">June</span>
       </div>
       <div className="mt-2 flex items-baseline gap-1">
         <span className="text-base text-white/50">₹</span>
@@ -72,7 +72,7 @@ function BudgetVisual() {
           <motion.span
             key={i}
             className={`h-7 flex-1 rounded-[2px] ${
-              i < FILLED ? "bg-white" : "bg-white/15"
+              i < FILLED ? "bg-accent" : "bg-white/15"
             }`}
             initial={reduce ? false : { opacity: i < FILLED ? 0.15 : 0.15 }}
             animate={{ opacity: i < FILLED ? 1 : 0.15 }}
@@ -80,7 +80,7 @@ function BudgetVisual() {
           />
         ))}
       </div>
-      <div className="mt-2 flex justify-between font-mono text-[10px] text-white/35">
+      <div className="mt-2 flex justify-between text-[10px] font-medium text-white/35">
         <span>₹24,600 spent</span>
         <span>₹37,000 budget</span>
       </div>
@@ -93,10 +93,10 @@ function GrowVisual() {
   return (
     <MiniFrame>
       <div className="flex items-center justify-between">
-        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/40">
+        <span className="text-[10px] font-bold uppercase tracking-wide text-white/40">
           Net worth
         </span>
-        <span className="font-mono text-[10px] text-emerald-400/80">+4.2%</span>
+        <span className="text-[10px] font-bold text-accent-strong">+4.2%</span>
       </div>
       <div className="mt-2 flex items-baseline gap-1">
         <span className="text-base text-white/50">₹</span>
@@ -108,7 +108,7 @@ function GrowVisual() {
       <svg viewBox="0 0 240 72" className="mt-3 h-16 w-full" fill="none">
         <motion.path
           d="M4 60 L40 54 L76 56 L112 40 L148 45 L184 22 L236 8"
-          stroke="white"
+          stroke="var(--accent-strong)"
           strokeWidth={2}
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -120,7 +120,7 @@ function GrowVisual() {
           cx={236}
           cy={8}
           r={3.5}
-          fill="white"
+          fill="var(--accent-strong)"
           initial={reduce ? false : { opacity: 0, scale: 0 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: reduce ? 0 : 1.45, duration: 0.3 }}
@@ -135,7 +135,7 @@ function SmsVisual() {
   return (
     <div className="w-full max-w-[300px] space-y-2">
       <div className="rounded-2xl rounded-tl-sm border border-white/10 bg-white/[0.04] px-4 py-3">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-white/35">
+        <span className="text-[10px] font-bold uppercase tracking-wide text-white/35">
           HDFC Bank · now
         </span>
         <p className="mt-1 text-[12px] leading-relaxed text-white/70">
@@ -149,14 +149,14 @@ function SmsVisual() {
         </span>
       </div>
       <motion.div
-        className="flex items-center gap-2 rounded-2xl rounded-tl-sm border border-white/10 bg-white px-4 py-3 text-black"
+        className="flex items-center gap-2 rounded-2xl rounded-tl-sm bg-accent px-4 py-3 text-[var(--accent-ink)]"
         initial={reduce ? false : { opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: reduce ? 0 : 0.6, duration: 0.4 }}
       >
         <span className="text-base">🍽️</span>
         <span className="text-[12px] font-semibold">Dining Out · ₹450</span>
-        <span className="ml-auto font-mono text-[9px] uppercase tracking-wider text-black/50">
+        <span className="ml-auto text-[9px] font-bold uppercase tracking-wide text-[var(--accent-ink)]/60">
           auto-logged
         </span>
       </motion.div>
@@ -168,7 +168,7 @@ function AiVisual() {
   const reduce = useReducedMotion();
   return (
     <div className="w-full max-w-[300px] space-y-2">
-      <div className="ml-auto max-w-[82%] rounded-2xl rounded-tr-sm bg-white px-4 py-2 text-[12px] text-black">
+      <div className="ml-auto max-w-[82%] rounded-2xl rounded-tr-sm bg-accent px-4 py-2 text-[12px] text-[var(--accent-ink)]">
         Can I afford dinner out this week?
       </div>
       <motion.div

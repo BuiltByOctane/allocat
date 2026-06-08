@@ -41,11 +41,11 @@ export default function EmojiPickerModal({ isOpen, onClose, onSelect }: EmojiPic
       onTouchStart={(e) => e.stopPropagation()}
     >
       <div
-        className="bg-card w-full max-w-md rounded-t-2xl sm:rounded-2xl p-4 shadow-xl animate-in slide-in-from-bottom flex flex-col max-h-[80vh] border border-border relative z-[101]"
+        className="bg-card w-full max-w-md rounded-t-sheet sm:rounded-card p-4 shadow-xl animate-in slide-in-from-bottom flex flex-col max-h-[80vh] border border-border relative z-[101]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-3 px-2">
-          <h2 className="text-foreground font-semibold text-lg">Select Icon</h2>
+          <h2 className="font-display text-foreground font-bold text-[18px] tracking-[-0.02em]">Select Icon</h2>
           <button
             onClick={onClose}
             className="text-muted-foreground hover:text-foreground transition-colors p-2"

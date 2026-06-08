@@ -5,33 +5,39 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 export type ButtonVariant =
   | "primary"
+  | "lime"
   | "secondary"
   | "ghost"
   | "outline"
+  | "dashed"
   | "danger"
   | "link";
 export type ButtonSize = "sm" | "md" | "lg";
 
 const VARIANTS: Record<ButtonVariant, string> = {
   primary:
-    "bg-foreground text-background hover:opacity-90 active:scale-[0.98]",
+    "bg-[var(--pill)] text-[var(--pill-foreground)] hover:opacity-90 active:scale-[0.98]",
+  lime:
+    "bg-accent text-[var(--accent-ink)] hover:brightness-[0.97] active:scale-[0.98]",
   secondary:
     "bg-muted text-foreground hover:bg-muted/70 active:scale-[0.98]",
   ghost:
     "bg-transparent text-foreground hover:bg-muted active:scale-[0.98]",
   outline:
-    "bg-transparent text-foreground border border-border hover:border-foreground/40 active:scale-[0.98]",
+    "bg-card text-foreground border border-border hover:border-foreground/40 active:scale-[0.98]",
+  dashed:
+    "bg-transparent text-muted-foreground border-[1.5px] border-dashed border-border hover:text-foreground hover:border-foreground/40 active:scale-[0.98]",
   danger:
-    "bg-destructive/10 text-destructive hover:bg-destructive/20 active:scale-[0.98]",
+    "bg-[var(--neg-dim)] text-neg hover:brightness-95 active:scale-[0.98]",
   link:
     "bg-transparent text-foreground underline underline-offset-4 decoration-border hover:decoration-foreground px-0 py-0 min-h-0",
 };
 
 // md/lg meet the 44px minimum tap target.
 const SIZES: Record<ButtonSize, string> = {
-  sm: "min-h-[36px] px-3 text-[13px] gap-1.5",
-  md: "min-h-[44px] px-4 text-sm gap-2",
-  lg: "min-h-[48px] px-6 text-sm gap-2",
+  sm: "min-h-[38px] px-4 text-[13px] gap-1.5",
+  md: "min-h-[46px] px-5 text-sm gap-2",
+  lg: "min-h-[50px] px-6 text-[15px] gap-2",
 };
 
 function buttonClasses(
@@ -41,7 +47,7 @@ function buttonClasses(
   className?: string,
 ) {
   return [
-    "inline-flex items-center justify-center rounded-lg font-medium",
+    "inline-flex items-center justify-center rounded-pill font-bold",
     "transition-all disabled:opacity-40 disabled:pointer-events-none select-none",
     VARIANTS[variant],
     variant === "link" ? "" : SIZES[size],

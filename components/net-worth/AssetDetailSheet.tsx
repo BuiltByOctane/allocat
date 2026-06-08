@@ -12,6 +12,7 @@ import { useAssetCategories } from "@/lib/hooks/useAssetCategories";
 import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { ColorPicker } from "@/components/ui/ColorPicker";
+import { Progress } from "@/components/ui/Progress";
 import type { CatKey } from "@/lib/theme/dataViz";
 import { AssetEntrySheet } from "./AssetEntrySheet";
 
@@ -115,18 +116,18 @@ export function AssetDetailSheet({ asset, onClose }: AssetDetailSheetProps) {
     <>
       <Drawer.Root open={!!asset} onOpenChange={(o) => { if (!o) onClose(); }}>
         <Drawer.Portal>
-          <Drawer.Overlay className="fixed inset-0 bg-black/60 z-40" />
+          <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
           <Drawer.Content
             aria-describedby="asset-detail-description"
-            className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-2xl bg-card border-t border-border focus:outline-none max-h-[88dvh]"
+            className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none max-h-[88dvh]"
           >
             <div className="flex justify-center pt-3 pb-1 shrink-0">
-              <div className="w-10 h-1 bg-muted rounded-full" />
+              <div className="mx-auto w-9 h-1 bg-border rounded-full" />
             </div>
 
             <div className="overflow-y-auto flex-1">
               {asset && (
-                <div className="px-5 pt-4 pb-8 space-y-6">
+                <div className="px-6 pt-4 pb-8 space-y-6">
                   {/* Header */}
                   <div className="flex items-start gap-3">
                     <span className="text-3xl leading-none mt-0.5">
@@ -141,13 +142,13 @@ export function AssetDetailSheet({ asset, onClose }: AssetDetailSheetProps) {
                             value={nameValue}
                             onChange={(e) => setNameValue(e.target.value)}
                             onKeyDown={(e) => { if (e.key === "Enter") handleSaveName(); if (e.key === "Escape") setEditingName(false); }}
-                            className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 text-base font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-foreground"
+                            className="flex-1 bg-card border border-border rounded-[11px] px-3 py-1.5 text-base font-bold text-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
                           />
-                          <button onClick={handleSaveName} className="text-xs font-bold text-foreground px-3 py-1.5 bg-foreground/10 rounded-lg">Save</button>
+                          <button onClick={handleSaveName} className="text-xs font-bold text-foreground px-3 py-1.5 bg-tile rounded-[11px]">Save</button>
                         </div>
                       ) : (
                         <button onClick={handleEditName} className="text-left w-full">
-                          <Drawer.Title className="text-lg font-bold text-foreground leading-tight">{asset.name}</Drawer.Title>
+                          <Drawer.Title className="font-display text-[20px] font-bold tracking-[-0.02em] text-foreground leading-tight">{asset.name}</Drawer.Title>
                         </button>
                       )}
                       {editingCategory ? (
@@ -187,19 +188,19 @@ export function AssetDetailSheet({ asset, onClose }: AssetDetailSheetProps) {
                   {/* Current value + invested + gain/loss */}
                   <div className="space-y-3">
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">Current Value</p>
+                      <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mb-1">Current Value</p>
                       <CurrencyText
                         value={asset.value}
-                        className="text-4xl font-bold tracking-tighter text-foreground"
+                        className="figure text-[38px] text-foreground"
                       />
                     </div>
                     {asset.invested_amount > 0 && (
                       <div className="flex items-center gap-4">
                         <div>
-                          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-0.5">Invested</p>
+                          <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mb-0.5">Invested</p>
                           <CurrencyText
                             value={asset.invested_amount}
-                            className="text-sm font-semibold tabular-nums text-foreground"
+                            className="figure text-sm tabular-nums text-foreground"
                           />
                         </div>
                         {(() => {
@@ -210,7 +211,7 @@ export function AssetDetailSheet({ asset, onClose }: AssetDetailSheetProps) {
                           const isPositive = gain >= 0;
                           return (
                             <div>
-                              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-0.5">
+                              <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mb-0.5">
                                 {isPositive ? "Gain" : "Loss"}
                               </p>
                               <span className={`text-sm font-semibold tabular-nums ${isPositive ? "text-pos" : "text-neg"}`}>
@@ -228,13 +229,13 @@ export function AssetDetailSheet({ asset, onClose }: AssetDetailSheetProps) {
 
                   {/* Goal section */}
                   {asset.is_goal && (
-                    <div className="rounded-xl border border-border bg-background px-4 py-3 space-y-2">
+                    <div className="rounded-tile border border-border bg-tile px-4 py-3 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                        <span className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
                           🎯 Goal Target
                         </span>
                         {asset.achieved_at ? (
-                          <span className="text-[10px] font-mono uppercase tracking-widest text-foreground">
+                          <span className="text-[9px] font-bold uppercase tracking-wide text-foreground">
                             Achieved {new Date(asset.achieved_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                           </span>
                         ) : (
@@ -243,7 +244,7 @@ export function AssetDetailSheet({ asset, onClose }: AssetDetailSheetProps) {
                               setTargetValue(String(asset.target_amount ?? 0));
                               setEditingTarget(true);
                             }}
-                            className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground hover:text-foreground"
+                            className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground hover:text-foreground"
                           >
                             Edit
                           </button>
@@ -257,7 +258,7 @@ export function AssetDetailSheet({ asset, onClose }: AssetDetailSheetProps) {
                             min="0"
                             value={targetValue}
                             onChange={(e) => setTargetValue(e.target.value)}
-                            className="flex-1 bg-card border border-border rounded-lg px-3 py-1.5 text-sm font-mono tabular-nums text-foreground focus:outline-none focus:ring-1 focus:ring-foreground"
+                            className="flex-1 bg-card border border-border rounded-[11px] px-3 py-1.5 text-sm figure tabular-nums text-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
                           />
                           <button
                             onClick={() => {
@@ -270,7 +271,7 @@ export function AssetDetailSheet({ asset, onClose }: AssetDetailSheetProps) {
                               }
                               setEditingTarget(false);
                             }}
-                            className="text-xs font-bold text-foreground px-3 py-1.5 bg-foreground/10 rounded-lg"
+                            className="text-xs font-bold text-foreground px-3 py-1.5 bg-card rounded-[11px]"
                           >
                             Save
                           </button>
@@ -280,32 +281,28 @@ export function AssetDetailSheet({ asset, onClose }: AssetDetailSheetProps) {
                           <div className="flex items-baseline justify-between">
                             <CurrencyText
                               value={Number(asset.target_amount ?? 0)}
-                              className="text-lg font-bold tabular-nums text-foreground"
+                              className="figure text-lg tabular-nums text-foreground"
                             />
-                            <span className="text-xs font-mono tabular-nums text-muted-foreground">
+                            <span className="figure text-xs tabular-nums text-muted-foreground">
                               {asset.target_amount && asset.target_amount > 0
                                 ? `${Math.round(Math.min(100, (asset.value / Number(asset.target_amount)) * 100))}%`
                                 : "—"}
                             </span>
                           </div>
-                          <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-foreground rounded-full transition-all"
-                              style={{
-                                width: `${
-                                  asset.target_amount && asset.target_amount > 0
-                                    ? Math.min(100, (asset.value / Number(asset.target_amount)) * 100)
-                                    : 0
-                                }%`,
-                              }}
-                            />
-                          </div>
+                          <Progress
+                            className="h-1.5"
+                            value={
+                              asset.target_amount && asset.target_amount > 0
+                                ? Math.min(100, (asset.value / Number(asset.target_amount)) * 100)
+                                : 0
+                            }
+                          />
                           {!asset.achieved_at && (
                             <button
                               onClick={() => { haptic.heavy(); setConfirmAchieve(true); }}
-                              className="w-full mt-2 py-2 text-xs font-mono uppercase tracking-widest text-foreground border border-border bg-card rounded-lg hover:bg-muted transition-colors"
+                              className="w-full mt-2 py-2 text-xs font-bold text-[var(--accent-ink)] bg-accent rounded-pill active:scale-[0.98] transition-transform"
                             >
-                              Mark Achieved · Withdraw
+                              Mark achieved · Withdraw
                             </button>
                           )}
                         </>
@@ -317,47 +314,47 @@ export function AssetDetailSheet({ asset, onClose }: AssetDetailSheetProps) {
                   <div className="grid grid-cols-3 gap-2.5">
                     <button
                       onClick={() => { haptic.light(); setEntrySheetType("add_funds"); }}
-                      className="flex flex-col items-center gap-1.5 py-3.5 bg-background rounded-xl border border-border hover:bg-muted active:scale-95 transition-transform"
+                      className="flex flex-col items-center gap-1.5 py-3.5 bg-tile rounded-tile hover:opacity-80 active:scale-95 transition-all"
                     >
                       <span className="material-symbols-outlined text-foreground text-[20px]">add_circle</span>
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Add Funds</span>
+                      <span className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Add Funds</span>
                     </button>
                     <button
                       onClick={() => { haptic.light(); setEntrySheetType("withdraw"); }}
-                      className="flex flex-col items-center gap-1.5 py-3.5 bg-background rounded-xl border border-border hover:bg-muted active:scale-95 transition-transform"
+                      className="flex flex-col items-center gap-1.5 py-3.5 bg-tile rounded-tile hover:opacity-80 active:scale-95 transition-all"
                     >
                       <span className="material-symbols-outlined text-foreground text-[20px]">remove_circle</span>
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Withdraw</span>
+                      <span className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Withdraw</span>
                     </button>
                     <button
                       onClick={() => { haptic.light(); setEntrySheetType("update_value"); }}
-                      className="flex flex-col items-center gap-1.5 py-3.5 bg-background rounded-xl border border-border hover:bg-muted active:scale-95 transition-transform"
+                      className="flex flex-col items-center gap-1.5 py-3.5 bg-tile rounded-tile hover:opacity-80 active:scale-95 transition-all"
                     >
                       <span className="material-symbols-outlined text-foreground text-[20px]">update</span>
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Update Value</span>
+                      <span className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Update Value</span>
                     </button>
                   </div>
 
                   {/* History */}
                   {history && history.length > 0 && (
                     <div>
-                      <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-3">History</h3>
+                      <h3 className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mb-3">History</h3>
                       <div className="space-y-2">
                         {history.map((entry) => (
-                          <div key={entry.id} className="flex items-center justify-between py-2.5 px-3 bg-background rounded-xl border border-border">
+                          <div key={entry.id} className="flex items-center justify-between py-2.5 px-3 bg-tile rounded-tile">
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium text-foreground capitalize">
+                              <p className="text-xs font-bold text-foreground capitalize">
                                 {entryTypeLabel(entry.entry_type)}
                                 {entry.note ? ` · ${entry.note}` : ""}
                               </p>
                               <p className="text-[11px] text-muted-foreground mt-0.5">
-                                <span className="font-mono tabular-nums">
+                                <span className="tabular-nums">
                                   {new Date(entry.entry_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                                 </span>
                               </p>
                             </div>
                             <div className="text-right shrink-0 ml-3">
-                              <p className="text-xs font-semibold tabular-nums text-foreground">
+                              <p className="figure text-xs tabular-nums text-foreground">
                                 {entry.entry_type === "update_value" || entry.entry_type === "initial"
                                   ? <CurrencyText value={entry.running_total} />
                                   : (
@@ -383,9 +380,9 @@ export function AssetDetailSheet({ asset, onClose }: AssetDetailSheetProps) {
                   <div className="pt-2">
                     <button
                       onClick={() => { haptic.heavy(); setConfirmDelete(true); }}
-                      className="w-full py-3 text-destructive text-sm font-medium rounded-xl border border-destructive/20 bg-destructive/5 hover:bg-destructive/10 transition-colors"
+                      className="w-full py-3 text-neg text-sm font-bold rounded-pill bg-[var(--neg-dim)] hover:brightness-95 transition-all"
                     >
-                      Delete Asset
+                      Delete asset
                     </button>
                   </div>
                 </div>

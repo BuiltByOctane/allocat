@@ -94,7 +94,7 @@ export function FirstBudgetCard() {
   return (
     <div className="flex h-full w-full flex-col gap-6 overflow-y-auto px-7 py-8 no-scrollbar">
       <div className="flex flex-col gap-3">
-        <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-white/40">
+        <span className="text-[11px] font-bold uppercase tracking-wide text-accent-strong">
           Last step — Your budget
         </span>
         <h1 className="font-display text-[clamp(1.9rem,8vw,2.6rem)] font-bold leading-[0.98] tracking-tight text-white">
@@ -122,7 +122,7 @@ export function FirstBudgetCard() {
               }}
               className={`rounded-2xl border p-4 text-left transition-colors ${
                 active
-                  ? "border-white bg-white/[0.06]"
+                  ? "border-transparent bg-white/[0.06] ring-2 ring-[var(--accent-strong)]"
                   : "border-white/12 bg-white/[0.02] active:bg-white/[0.05]"
               }`}
             >
@@ -132,7 +132,7 @@ export function FirstBudgetCard() {
                 </span>
                 <span
                   className={`material-symbols-outlined text-lg ${
-                    active ? "text-white" : "text-white/25"
+                    active ? "text-accent-strong" : "text-white/25"
                   }`}
                 >
                   {active ? "radio_button_checked" : "radio_button_unchecked"}
@@ -146,7 +146,7 @@ export function FirstBudgetCard() {
                   {t.preview.slice(0, 3).map((p) => (
                     <span
                       key={p}
-                      className="rounded-full bg-white/[0.08] px-2 py-0.5 font-mono text-[10px] text-white/55"
+                      className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[10px] font-medium text-white/55"
                     >
                       {p}
                     </span>
@@ -160,10 +160,10 @@ export function FirstBudgetCard() {
 
       {/* Total budget */}
       <div className="flex flex-col gap-2">
-        <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/40">
+        <label className="text-[10px] font-bold uppercase tracking-wide text-white/40">
           Monthly budget ({sym})
         </label>
-        <div className="flex items-center gap-2 rounded-2xl border border-white/12 bg-white/[0.02] px-4 py-3 focus-within:border-white/40">
+        <div className="flex items-center gap-2 rounded-2xl border border-white/12 bg-white/[0.02] px-4 py-3 focus-within:border-transparent focus-within:ring-2 focus-within:ring-[var(--accent-strong)]">
           <span className="text-lg text-white/40">{sym}</span>
           <input
             type="number"
@@ -181,7 +181,7 @@ export function FirstBudgetCard() {
             {...(reduce
               ? {}
               : { initial: { opacity: 0 }, animate: { opacity: 1 } })}
-            className="font-mono text-[11px] text-white/45"
+            className="text-[11px] font-medium text-white/45"
           >
             {selected.categories.length} categories ·{" "}
             {fmt(totalNum)} allocated across {selected.name}
@@ -195,7 +195,7 @@ export function FirstBudgetCard() {
           type="button"
           onClick={() => complete(true)}
           disabled={busy || !canCreate}
-          className="w-full rounded-full bg-white py-4 text-sm font-bold uppercase tracking-widest text-black transition active:scale-[0.98] disabled:opacity-30"
+          className="w-full rounded-pill bg-accent py-4 text-sm font-bold text-[var(--accent-ink)] transition active:scale-[0.98] disabled:opacity-30"
         >
           {busy ? "Setting up…" : "Create & enter AlloCat"}
         </button>

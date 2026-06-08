@@ -23,20 +23,18 @@ export default function TourBanner({ title, description, onDismiss }: TourBanner
 
   return (
     <div
-      className="mx-7 mb-0 mt-5 transition-all duration-200"
+      className="mx-4 mb-0 mt-4 transition-all duration-200"
       style={{
         opacity: visible ? 1 : 0,
         transform: visible ? "translateY(0)" : "translateY(-6px)",
       }}
     >
-      <div className="bg-foreground text-background px-5 py-4">
+      <div className="rounded-card bg-[var(--pill)] text-[var(--pill-foreground)] px-5 py-4">
         {/* Label row */}
         <div className="flex items-start justify-between gap-3 mb-2">
           <div>
-            <div className="font-mono text-[9px] tracking-[0.18em] uppercase opacity-60 mb-1">
-              Guide
-            </div>
-            <div className="font-mono text-[11px] tracking-[0.14em] uppercase font-medium">
+            <div className="t-label opacity-60 mb-1">Guide</div>
+            <div className="text-[15px] font-bold tracking-[-0.01em]">
               {title}
             </div>
           </div>
@@ -44,9 +42,9 @@ export default function TourBanner({ title, description, onDismiss }: TourBanner
             type="button"
             onClick={handleDismiss}
             aria-label="Skip guide"
-            className="shrink-0 mt-0.5 font-mono text-[9px] tracking-[0.14em] uppercase opacity-50 hover:opacity-100 transition-opacity"
+            className="shrink-0 mt-0.5 text-[11px] font-bold opacity-50 hover:opacity-100 transition-opacity"
           >
-            SKIP
+            Skip
           </button>
         </div>
 
@@ -59,14 +57,11 @@ export default function TourBanner({ title, description, onDismiss }: TourBanner
         <button
           type="button"
           onClick={handleDismiss}
-          className="w-full border border-background/30 py-2.5 font-mono text-[10px] tracking-[0.14em] uppercase text-background hover:bg-background/10 transition-colors"
+          className="w-full h-[44px] rounded-pill bg-[var(--accent)] text-[var(--accent-ink)] text-[13px] font-bold hover:brightness-95 active:scale-[0.98] transition-all"
         >
-          Got it →
+          Got it
         </button>
       </div>
-
-      {/* Accent line */}
-      <div className="h-px bg-border" />
     </div>
   );
 }

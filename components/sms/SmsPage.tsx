@@ -1,9 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
+import { ChevronLeft, Inbox } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getDB } from "@/lib/db";
-import { MaterialSymbol } from "@/components/ui/MaterialSymbol";
+import { Card } from "@/components/ui/Card";
+import { Chip } from "@/components/ui/Chip";
 import { formatCurrency } from "@/lib/number-format";
 import {
   usePendingSms,
@@ -245,80 +248,81 @@ export default function SmsPage() {
     : undefined;
 
   return (
-    <div className="flex flex-col gap-6 p-4 pb-24">
-      <header className="flex items-center gap-2">
-        <MaterialSymbol icon="sms" className="text-foreground" />
-        <h1 className="text-lg font-bold uppercase tracking-widest">
-          Transactions
-        </h1>
-      </header>
+    <div className="px-4 pt-4 flex flex-col gap-3">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-1 pt-1">
+        <Link
+          href="/profile"
+          aria-label="Back"
+          className="flex size-9 items-center justify-center rounded-xl border border-border bg-card text-foreground"
+        >
+          <ChevronLeft size={18} strokeWidth={2} />
+        </Link>
+        <div>
+          <h1 className="font-display text-[26px] font-bold leading-none tracking-[-0.03em] text-foreground">
+            Transactions
+          </h1>
+          <p className="text-[11px] font-medium text-muted-foreground mt-1">
+            Awaiting allocation{!isLoading && pending ? ` · ${pending.length}` : ""}
+          </p>
+        </div>
+      </div>
 
       {/* Pending list */}
       <section className="flex flex-col gap-3">
-        <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-          Awaiting allocation
-        </h2>
-
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-sm text-muted-foreground px-1">Loading…</p>
         ) : !pending || pending.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 border border-dashed border-border py-12 text-center">
-            <MaterialSymbol
-              icon="inbox"
-              className="text-3xl text-muted-foreground/60"
-            />
-            <p className="text-sm text-muted-foreground">
-              No unallocated transactions.
-            </p>
-            <p className="text-xs text-muted-foreground/70">
+          <Card className="flex flex-col items-center gap-2 py-12 text-center">
+            <div className="flex size-12 items-center justify-center rounded-[14px] bg-tile text-muted-foreground mb-1">
+              <Inbox size={24} strokeWidth={1.7} />
+            </div>
+            <p className="text-sm font-bold text-foreground">No unallocated transactions.</p>
+            <p className="text-xs text-muted-foreground">
               New transaction SMS will show up here to allocate.
             </p>
-          </div>
+          </Card>
         ) : (
           pending.map((txn) => {
             const when = txnDate(txn);
+            const meta = [when, txn.direction].filter(Boolean).join(" · ");
             return (
-              <div
-                key={txn.id}
-                className="flex flex-col gap-3 border border-border p-3"
-              >
+              <Card key={txn.id}>
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <span className="font-mono text-lg font-bold tabular-nums">
-                      {money(txn)}
-                    </span>
-                    <span className="truncate text-sm text-muted-foreground">
+                  <div className="flex min-w-0 flex-col">
+                    <span className="figure text-[26px] text-foreground">{money(txn)}</span>
+                    <span className="truncate text-[13px] font-bold text-foreground mt-0.5">
                       {txn.merchant_raw ?? "Unknown merchant"}
                     </span>
                   </div>
-                  {(when || txn.direction) && (
-                    <span className="shrink-0 text-right text-[10px] uppercase tracking-widest text-muted-foreground/70">
-                      {when}
-                      {when && txn.direction ? " · " : ""}
-                      {txn.direction}
-                    </span>
-                  )}
+                  {meta && <Chip tone="neutral">{meta}</Chip>}
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex gap-2.5 mt-3.5">
                   <button
                     onClick={() => setAllocateTxn(txn)}
-                    className="flex-1 bg-foreground py-2 text-xs font-bold uppercase tracking-widest text-background"
+                    className="flex-1 h-[42px] rounded-pill bg-[var(--pill)] text-[var(--pill-foreground)] text-sm font-bold active:scale-[0.98] transition-transform"
                   >
                     Allocate
                   </button>
                   <button
                     onClick={() => ignore.mutate(txn.id)}
-                    className="border border-border px-3 text-xs font-bold uppercase tracking-widest text-muted-foreground"
+                    className="h-[42px] px-5 rounded-pill border border-border text-sm font-semibold text-muted-foreground active:scale-[0.98] transition-transform"
                   >
                     Ignore
                   </button>
                 </div>
-              </div>
+              </Card>
             );
           })
         )}
+
+        <p className="text-center text-[11.5px] font-medium text-muted-foreground mt-2">
+          Spends from SMS land here for one-tap budgeting.
+        </p>
       </section>
+
+      <div className="h-28 md:h-12" />
 
       {/* Allocate flow — pick an existing item, or jump to create-new */}
       <AllocateSheet

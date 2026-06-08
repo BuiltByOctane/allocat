@@ -7,7 +7,7 @@ import type { GoalFormData } from "./GoalDetailSheet";
 import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Progress } from "@/components/ui/Progress";
-import { resolveColor, softText } from "@/lib/theme/dataViz";
+import { resolveColor } from "@/lib/theme/dataViz";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { CurrencySymbol } from "@/components/ui/CurrencySymbol";
@@ -187,10 +187,10 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
         </div>
       </header>
 
-      <main className="pb-10 mt-20">
+      <main className="pb-10 mt-27">
         {/* Tabs */}
         <SegmentedControl
-          className="px-7 pt-4"
+          className="px-7 pt-2"
           options={[
             { label: "Active", value: "active", count: activeGoals.length },
             { label: "Achieved", value: "achieved", count: achievedGoals.length },
@@ -346,10 +346,7 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
                             </div>
                           </div>
                           <div className="text-right shrink-0">
-                            <div
-                              className="font-mono text-[11px] tabular-nums"
-                              style={{ color: softText(resolveColor({ id: goal.id, color: goal.color })) }}
-                            >{pctDisplay}%</div>
+                            <div className="font-mono text-[11px] tabular-nums text-foreground">{pctDisplay}%</div>
                             <div className="font-mono text-[9px] text-muted-foreground tabular-nums mt-0.5">
                               <CurrencyText value={current} /> / <CurrencyText value={target} />
                             </div>

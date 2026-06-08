@@ -12,7 +12,7 @@ import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { InlineEditableNumber } from "@/components/ui/InlineEditableNumber";
 import { Progress } from "@/components/ui/Progress";
-import { resolveColor, softText, tintSurface } from "@/lib/theme/dataViz";
+import { resolveColor } from "@/lib/theme/dataViz";
 import BudgetEmptyState from "@/components/budget/BudgetEmptyState";
 import { BudgetSetupSheet } from "@/components/budget/BudgetSetupSheet";
 
@@ -180,17 +180,13 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
           </div>
 
           {/* Hero — Remaining */}
-          <div
-            id="budget-hero-section"
-            className="px-7 pt-7 mt-20 pb-[22px]"
-            style={{ background: tintSurface(totalRemaining < 0 ? "var(--neg)" : "var(--pos)", 6) }}
-          >
+          <div id="budget-hero-section" className="px-7 pt-7 mt-20 pb-[22px]">
             <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
               {totalRemaining < 0 ? "Over Budget" : "Remaining"} · {monthName.substring(0, 3)}
             </div>
             <div
               className="text-[72px] md:text-[84px] leading-[0.95] tracking-[-0.025em] mt-2.5 tabular-nums"
-              style={{ color: totalRemaining < 0 ? "var(--neg)" : softText("var(--pos)", 35) }}
+              style={{ color: totalRemaining < 0 ? "var(--neg)" : "var(--foreground)" }}
             >
               {totalRemaining < 0 ? "−" : ""}
               <CurrencyText value={Math.abs(totalRemaining)} />
@@ -353,7 +349,7 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
                             </span>
                           </div>
                           <div className="font-mono text-[12px] tabular-nums shrink-0">
-                            <span style={{ color: isOver ? "var(--neg)" : softText(resolveColor({ id: cat.id, color: cat.color })) }}>
+                            <span style={{ color: isOver ? "var(--neg)" : "var(--foreground)" }}>
                               <CurrencyText value={cat.spent} />
                             </span>
                             <span className="text-muted-foreground">

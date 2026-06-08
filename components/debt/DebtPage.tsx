@@ -6,7 +6,7 @@ import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Progress } from "@/components/ui/Progress";
-import { resolveColor, softText } from "@/lib/theme/dataViz";
+import { resolveColor } from "@/lib/theme/dataViz";
 import {
   useAddDebt,
   useUpdateDebt,
@@ -216,7 +216,7 @@ const trendPct = trendData?.trendPct ?? 0;
   if (!hasDebts && !hasLents) {
     return (
       <>
-        <header className="sticky top-0 z-10 bg-background px-7 pt-14 pb-[18px] border-b border-border">
+        <header className="sticky top-0 z-10 bg-background px-7 pt-6 pb-[18px] border-b border-border">
           <div className="font-display text-[32px] leading-none tracking-[-0.02em] text-foreground">Debt</div>
           <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mt-2">
             Liability Tracker · <MonthCaption />
@@ -436,9 +436,7 @@ const trendPct = trendData?.trendPct ?? 0;
                         )}
                       </div>
                       <div className="font-mono text-[12px] text-right inline-flex items-baseline gap-1">
-                        <span style={{ color: softText(resolveColor({ id: debt.id, color: debt.color })) }}>
-                          <CurrencyText value={remaining} />
-                        </span>
+                        <CurrencyText value={remaining} className="text-foreground" />
                         {repayable !== debt.principal && (
                           <span className="text-muted-foreground inline-flex items-baseline gap-0.5">/ <CurrencyText value={repayable} className="text-muted-foreground" /></span>
                         )}

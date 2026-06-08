@@ -4,7 +4,6 @@ import Link from "next/link";
 import QuickSpendInput from "@/components/dashboard/QuickSpendInput";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { useHaptic } from "@/lib/hooks/useHaptic";
-import { softText } from "@/lib/theme/dataViz";
 
 interface DashboardProps {
   data: {
@@ -127,7 +126,7 @@ export default function DashboardPage({ data }: DashboardProps) {
               <>
                 <div
                   className="text-[48px] leading-[0.95] tabular-nums"
-                  style={{ color: data.budget.remaining < 0 ? "var(--neg)" : softText("var(--pos)", 35) }}
+                  style={{ color: data.budget.remaining < 0 ? "var(--neg)" : "var(--foreground)" }}
                 >
                   <CurrencyText value={data.budget.remaining} />
                 </div>
@@ -187,14 +186,12 @@ export default function DashboardPage({ data }: DashboardProps) {
                 <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground mb-2">
                   Net Worth
                 </div>
-                <span style={{ color: netWorthChange >= 0 ? softText("var(--pos)", 35) : softText("var(--neg)", 35) }}>
-                  <CurrencyText
-                    value={currentNetWorth}
-                    minimumFractionDigits={2}
-                    maximumFractionDigits={2}
-                    className="text-[36px] leading-none tracking-[-0.02em]"
-                  />
-                </span>
+                <CurrencyText
+                  value={currentNetWorth}
+                  minimumFractionDigits={2}
+                  maximumFractionDigits={2}
+                  className="text-[36px] leading-none tracking-[-0.02em] text-foreground"
+                />
               </div>
               <div className="text-right">
                 <div

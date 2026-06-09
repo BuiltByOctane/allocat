@@ -23,14 +23,14 @@ export type CatKey = (typeof CAT_KEYS)[number];
 
 /** Dark-mode reference hex — for <canvas>/SSR contexts where CSS vars can't resolve. */
 export const CAT_HEX_DARK: Record<CatKey, string> = {
-  "cat-1": "#8aa6c0",
-  "cat-2": "#6fae8f",
-  "cat-3": "#c8a36a",
-  "cat-4": "#b58ec0",
-  "cat-5": "#d98b8b",
-  "cat-6": "#7fb0ad",
-  "cat-7": "#c79a78",
-  "cat-8": "#9aa37f",
+  "cat-1": "#22d3ee",
+  "cat-2": "#4ade80",
+  "cat-3": "#fbbf24",
+  "cat-4": "#e879f9",
+  "cat-5": "#fb7185",
+  "cat-6": "#2dd4bf",
+  "cat-7": "#fb923c",
+  "cat-8": "#a78bfa",
 };
 
 /** CSS reference for a palette key, e.g. `var(--cat-3)`. Use in style props/SVG fills. */

@@ -3,6 +3,8 @@ import { Hanken_Grotesk, Bricolage_Grotesque, JetBrains_Mono } from "next/font/g
 import "./globals.css";
 import QueryProvider from "@/lib/providers/QueryProvider";
 import { ThemeProvider } from "@/lib/providers/ThemeProvider";
+import { AccentProvider } from "@/lib/providers/AccentProvider";
+import { ACCENT_IDS, ACCENT_STORAGE_KEY } from "@/lib/theme/accents";
 import RegisterPWA from "@/components/ui/RegisterPWA";
 import { NativeShell } from "@/components/pwa/NativeShell";
 
@@ -165,6 +167,17 @@ export default function RootLayout({
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block"
         />
+        {/* Apply the saved accent before first paint — no lime flash. Mirrors
+            next-themes' class strategy; lime is the default (no attribute). */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var v=localStorage.getItem(${JSON.stringify(
+              ACCENT_STORAGE_KEY
+            )});var ids=${JSON.stringify(
+              ACCENT_IDS
+            )};if(v&&v!=="lime"&&ids.indexOf(v)>-1){document.documentElement.dataset.accent=v;}}catch(e){}})();`,
+          }}
+        />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -179,7 +192,9 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <QueryProvider>{children}</QueryProvider>
+          <AccentProvider>
+            <QueryProvider>{children}</QueryProvider>
+          </AccentProvider>
           <RegisterPWA />
           <NativeShell />
         </ThemeProvider>

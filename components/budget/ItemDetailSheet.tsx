@@ -8,6 +8,8 @@ import { CurrencySymbol } from "@/components/ui/CurrencySymbol";
 import { useFormatCurrency } from "@/lib/hooks/useFormatCurrency";
 import { Progress } from "@/components/ui/Progress";
 import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
+import EmojiPickerModal from "@/components/ui/EmojiPickerModal";
+import { ItemTransactionList } from "@/components/budget/ItemTransactionList";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { suggestLink } from "@/lib/utils/link-suggest";
 
@@ -24,6 +26,7 @@ export interface LinkTarget {
 interface ItemData {
   id: string;
   name: string;
+  emoji?: string | null;
   planned: number;
   actual: number;
   is_completed: boolean;
@@ -54,6 +57,7 @@ interface ItemDetailSheetProps {
     itemId: string,
     updates: {
       name?: string;
+      emoji?: string | null;
       planned_amount?: number;
       actual_amount?: number;
       is_completed?: boolean;
@@ -64,6 +68,7 @@ interface ItemDetailSheetProps {
   ) => Promise<void>;
   onCreate: (data: {
     name: string;
+    emoji?: string | null;
     planned_amount: number;
     actual_amount: number;
     is_completed: boolean;
@@ -90,6 +95,8 @@ export function ItemDetailSheet({
   const isNew = item?.id === NEW_ITEM_ID;
 
   const [name, setName] = useState("");
+  const [emoji, setEmoji] = useState<string | null>(null);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [planned, setPlanned] = useState("");
   const [actual, setActual] = useState("");
   const [isCompleted, setIsCompleted] = useState(false);
@@ -104,6 +111,8 @@ export function ItemDetailSheet({
   useEffect(() => {
     if (item) {
       setName(item.name ?? "");
+      setEmoji(isNew ? null : (item.emoji ?? null));
+      setEmojiPickerOpen(false);
       setPlanned(item.planned > 0 ? String(item.planned) : "");
       setActual(item.actual > 0 ? String(item.actual) : "");
       setIsCompleted(isNew ? false : item.is_completed);
@@ -200,6 +209,7 @@ export function ItemDetailSheet({
       if (isNew) {
         await onCreate({
           name: name.trim(),
+          emoji,
           planned_amount: plannedVal,
           actual_amount: hideActual ? 0 : actualVal,
           is_completed: isCompleted,
@@ -210,6 +220,7 @@ export function ItemDetailSheet({
       } else {
         const updates: Parameters<typeof onSave>[1] = {};
         if (name.trim() !== item.name) updates.name = name.trim();
+        if (emoji !== (item.emoji ?? null)) updates.emoji = emoji;
         if (plannedVal !== item.planned) updates.planned_amount = plannedVal;
         if (actualVal !== item.actual) updates.actual_amount = actualVal;
         if (isCompleted !== item.is_completed) updates.is_completed = isCompleted;
@@ -243,6 +254,7 @@ export function ItemDetailSheet({
   }
 
   return (
+    <>
     <Drawer.Root
       open={!!item}
       onOpenChange={(open) => {
@@ -253,7 +265,7 @@ export function ItemDetailSheet({
         <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
         <Drawer.Content
           aria-describedby="item-sheet-description"
-          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none max-h-[90dvh]"
+          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none h-[78dvh]"
         >
           <div className="flex justify-center pt-3 pb-1 shrink-0">
             <div className="mx-auto w-9 h-1 bg-border rounded-full" />
@@ -360,17 +372,47 @@ export function ItemDetailSheet({
                 <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground block">
                   Item Name
                 </label>
-                <input
-                  ref={nameRef}
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleSave();
-                  }}
-                  className="w-full rounded-[13px] border border-border bg-card px-3.5 py-3 text-sm font-medium text-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
-                  placeholder="e.g. Electricity bill"
-                />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      haptic.light();
+                      setEmojiPickerOpen(true);
+                    }}
+                    className="flex size-[46px] shrink-0 items-center justify-center rounded-[13px] border border-border bg-card text-xl transition-colors hover:border-[var(--accent-strong)]"
+                    title="Choose emoji"
+                    aria-label="Choose emoji"
+                  >
+                    {emoji || (
+                      <span className="material-symbols-outlined text-[20px] text-muted-foreground">
+                        add_reaction
+                      </span>
+                    )}
+                  </button>
+                  <input
+                    ref={nameRef}
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleSave();
+                    }}
+                    className="w-full rounded-[13px] border border-border bg-card px-3.5 py-3 text-sm font-medium text-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
+                    placeholder="e.g. Electricity bill"
+                  />
+                </div>
+                {emoji ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      haptic.light();
+                      setEmoji(null);
+                    }}
+                    className="text-[10px] font-medium text-muted-foreground hover:text-foreground"
+                  >
+                    Remove emoji
+                  </button>
+                ) : null}
               </div>
 
               {/* Planned + Actual */}
@@ -537,6 +579,11 @@ export function ItemDetailSheet({
 
               {error ? <p className="text-xs font-medium text-neg">{error}</p> : null}
 
+              {/* Transactions — per-item activity history */}
+              {!isNew && item ? (
+                <ItemTransactionList itemId={item.id} />
+              ) : null}
+
               {/* Actions */}
               <div className="flex gap-3 pt-1">
                 {isNew ? (
@@ -574,5 +621,12 @@ export function ItemDetailSheet({
         </Drawer.Content>
       </Drawer.Portal>
     </Drawer.Root>
+
+    <EmojiPickerModal
+      isOpen={emojiPickerOpen}
+      onClose={() => setEmojiPickerOpen(false)}
+      onSelect={(e) => setEmoji(e)}
+    />
+    </>
   );
 }

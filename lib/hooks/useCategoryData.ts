@@ -43,6 +43,7 @@ async function getCategoryFromIDB(categoryId: string) {
     items: items.map((item) => ({
       id: item.id,
       name: item.name,
+      emoji: item.emoji ?? null,
       planned: Number(item.planned_amount),
       actual: Number(item.actual_amount),
       is_completed: item.is_completed,

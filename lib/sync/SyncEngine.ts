@@ -125,7 +125,8 @@ export class SyncEngine {
           p.categoryId as string,
           p.name as string,
           (p.planned as number) ?? 0,
-          (p.link as { link_type: "asset" | "debt"; link_id: string } | null) ?? null
+          (p.link as { link_type: "asset" | "debt"; link_id: string } | null) ?? null,
+          (p.emoji as string | null) ?? null
         ),
       UPDATE: (p) =>
         updateBudgetItem(

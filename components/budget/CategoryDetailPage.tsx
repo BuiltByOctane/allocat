@@ -32,6 +32,7 @@ type LinkType = "asset" | "debt";
 interface BudgetItem {
   id: string;
   name: string;
+  emoji?: string | null;
   planned: number;
   actual: number;
   is_completed: boolean;
@@ -181,6 +182,7 @@ function CategoryDetailContent({
 
   async function handleAddItem(data: {
     name: string;
+    emoji?: string | null;
     planned_amount: number;
     actual_amount: number;
     is_completed: boolean;
@@ -194,9 +196,11 @@ function CategoryDetailContent({
     const tempId = `temp_${crypto.randomUUID()}`;
     const linkType = data.link_type ?? null;
     const linkId = data.link_id ?? null;
+    const emoji = data.emoji ?? null;
     const newItem: BudgetItem = {
       id: tempId,
       name: trimmedName,
+      emoji,
       planned: data.planned_amount,
       actual: data.actual_amount,
       is_completed: data.is_completed,
@@ -214,6 +218,7 @@ function CategoryDetailContent({
         category_id: categoryId,
         user_id: "__pending__",
         name: trimmedName,
+        emoji,
         planned_amount: data.planned_amount,
         actual_amount: data.actual_amount,
         is_completed: data.is_completed,
@@ -231,6 +236,7 @@ function CategoryDetailContent({
         payload: {
           categoryId,
           name: trimmedName,
+          emoji,
           planned: data.planned_amount,
           actual: data.actual_amount,
           is_completed: data.is_completed,
@@ -250,6 +256,7 @@ function CategoryDetailContent({
     id: string,
     updates: {
       name?: string;
+      emoji?: string | null;
       planned_amount?: number;
       actual_amount?: number;
       is_completed?: boolean;
@@ -282,6 +289,7 @@ function CategoryDetailContent({
         ? {
             ...item,
             ...(finalUpdates.name !== undefined ? { name: finalUpdates.name } : {}),
+            ...(finalUpdates.emoji !== undefined ? { emoji: finalUpdates.emoji } : {}),
             ...(finalUpdates.planned_amount !== undefined ? { planned: finalUpdates.planned_amount } : {}),
             ...(finalUpdates.actual_amount !== undefined ? { actual: finalUpdates.actual_amount } : {}),
             ...(finalUpdates.is_completed !== undefined ? { is_completed: finalUpdates.is_completed } : {}),
@@ -307,6 +315,7 @@ function CategoryDetailContent({
 
     const idbUpdates: Record<string, string | number | boolean | null> = {};
     if (finalUpdates.name !== undefined) idbUpdates.name = finalUpdates.name;
+    if (finalUpdates.emoji !== undefined) idbUpdates.emoji = finalUpdates.emoji;
     if (finalUpdates.planned_amount !== undefined) idbUpdates.planned_amount = finalUpdates.planned_amount;
     if (finalUpdates.actual_amount !== undefined) idbUpdates.actual_amount = finalUpdates.actual_amount;
     if (finalUpdates.is_completed !== undefined) idbUpdates.is_completed = finalUpdates.is_completed;
@@ -623,7 +632,7 @@ function CategoryDetailContent({
                     </div>
                   ) : (
                     <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-tile text-[15px]">
-                      {item.name.charAt(0).toUpperCase() || "•"}
+                      {item.emoji || item.name.charAt(0).toUpperCase() || "•"}
                     </div>
                   )}
                   <div className="flex-1 min-w-0">

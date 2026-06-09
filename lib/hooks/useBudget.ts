@@ -275,11 +275,13 @@ export function useAddBudgetItem() {
       name,
       planned = 0,
       link = null,
+      emoji = null,
     }: {
       categoryId: string;
       name: string;
       planned?: number;
       link?: { link_type: LinkType; link_id: string } | null;
+      emoji?: string | null;
       month: number;
       year: number;
     }) => {
@@ -292,6 +294,7 @@ export function useAddBudgetItem() {
         category_id: categoryId,
         user_id: "__pending__",
         name: name.trim(),
+        emoji: emoji ?? null,
         planned_amount: planned ?? 0,
         actual_amount: 0,
         is_completed: false,
@@ -307,7 +310,7 @@ export function useAddBudgetItem() {
         operation: "INSERT",
         recordId: tempId,
         tempId,
-        payload: { categoryId, name: name.trim(), planned: planned ?? 0, link },
+        payload: { categoryId, name: name.trim(), planned: planned ?? 0, link, emoji: emoji ?? null },
       });
 
       return { id: tempId };
@@ -330,6 +333,7 @@ export function useUpdateBudgetItem() {
       itemId: string;
       updates: {
         name?: string;
+        emoji?: string | null;
         planned_amount?: number;
         actual_amount?: number;
         is_completed?: boolean;

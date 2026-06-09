@@ -339,6 +339,7 @@ export function BudgetSetupSheet({
             category_id: catTempId,
             user_id: "__pending__",
             name: itemName,
+            emoji: null,
             planned_amount: itemPlanned,
             actual_amount: 0,
             is_completed: false,

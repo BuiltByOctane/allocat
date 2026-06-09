@@ -439,7 +439,8 @@ export async function addBudgetItem(
   categoryId: string,
   name: string,
   planned: number = 0,
-  link?: { link_type: LinkType; link_id: string } | null
+  link?: { link_type: LinkType; link_id: string } | null,
+  emoji: string | null = null
 ) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -462,6 +463,7 @@ export async function addBudgetItem(
       category_id: categoryId,
       user_id: user.id,
       name: trimmedName,
+      emoji: emoji ?? null,
       planned_amount: planned,
       actual_amount: 0,
       is_completed: false,
@@ -497,6 +499,7 @@ export async function updateBudgetItem(
   itemId: string,
   updates: {
     name?: string;
+    emoji?: string | null;
     planned_amount?: number;
     actual_amount?: number;
     is_completed?: boolean;
@@ -1044,6 +1047,7 @@ export async function getCategoryData(categoryId: string) {
     items: (categoryWithItems.budget_items || []).map((item) => ({
       id: item.id,
       name: item.name,
+      emoji: item.emoji ?? null,
       planned: Number(item.planned_amount || 0),
       actual: Number(item.actual_amount || 0),
       is_completed: item.is_completed,

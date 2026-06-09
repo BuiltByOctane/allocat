@@ -1,8 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
-import { getActivityLogs } from "@/lib/actions/activity-logs";
+import {
+  getActivityLogs,
+  getActivityLogsForItem,
+} from "@/lib/actions/activity-logs";
 import { getDB, type ActivityLogRow } from "@/lib/db";
 
 export const ACTIVITY_LOGS_KEY = ["activity-logs"] as const;
+
+export function itemActivityKey(itemId: string) {
+  return ["item-activity", itemId] as const;
+}
 
 type ActivityCategory = "budget" | "net_worth" | "goals" | "debts";
 
@@ -38,6 +45,43 @@ async function fetchLogs(): Promise<ActivityLogRow[]> {
   await db.sync_meta.put({ table: "activity_logs", lastSynced: Date.now() });
 
   return fresh as ActivityLogRow[];
+}
+
+// ─── Per-item activity (transactions in the item sheet) ────────────────────────
+
+async function fetchItemLogs(itemId: string): Promise<ActivityLogRow[]> {
+  const db = getDB();
+
+  // IDB-first — instant, offline. Cached logs already carry metadata.itemId.
+  const local = (
+    await db.activity_logs.orderBy("created_at").reverse().toArray()
+  ).filter(
+    (l) => (l.metadata as { itemId?: string } | null)?.itemId === itemId
+  );
+
+  try {
+    const fresh = await getActivityLogsForItem(itemId);
+    if (fresh.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await db.activity_logs.bulkPut(fresh as any);
+    }
+    return fresh as ActivityLogRow[];
+  } catch {
+    // Offline / fetch failed — fall back to whatever we have cached.
+    return local;
+  }
+}
+
+export function useItemActivity(itemId: string | null, enabled: boolean) {
+  const isReal =
+    !!itemId && itemId !== "__new__" && !itemId.startsWith("temp_");
+
+  return useQuery({
+    queryKey: itemActivityKey(itemId ?? "none"),
+    queryFn: () => fetchItemLogs(itemId!),
+    enabled: enabled && isReal,
+    staleTime: 30_000,
+  });
 }
 
 export function useActivityLogs(filter: ActivityFilter) {

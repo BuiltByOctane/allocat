@@ -146,6 +146,7 @@ export type Database = {
           category_id: string
           user_id: string
           name: string
+          emoji: string | null
           planned_amount: number
           actual_amount: number
           is_completed: boolean
@@ -160,6 +161,7 @@ export type Database = {
           category_id: string
           user_id: string
           name: string
+          emoji?: string | null
           planned_amount?: number
           actual_amount?: number
           is_completed?: boolean
@@ -171,6 +173,7 @@ export type Database = {
         }
         Update: {
           name?: string
+          emoji?: string | null
           planned_amount?: number
           actual_amount?: number
           is_completed?: boolean

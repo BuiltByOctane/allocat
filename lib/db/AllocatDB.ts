@@ -188,5 +188,12 @@ export class AllocatDB extends Dexie {
       await meta.delete("debts");
       await meta.delete("asset_categories");
     });
+
+    // v10: per-item `emoji` added to budget_items (optional display glyph).
+    // Non-indexed → schema string unchanged; the bump only forces re-hydration
+    // so the new column lands on cached budget_items rows.
+    this.version(10).upgrade(async (tx) => {
+      await tx.table("sync_meta").delete("budget_items");
+    });
   }
 }

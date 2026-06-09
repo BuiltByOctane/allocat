@@ -1,5 +1,6 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { TrendingUp } from "lucide-react";
 import QuickSpendInput from "@/components/dashboard/QuickSpendInput";
@@ -8,6 +9,8 @@ import { Card } from "@/components/ui/Card";
 import { StatCard } from "@/components/ui/StatCard";
 import { Chip } from "@/components/ui/Chip";
 import { useHaptic } from "@/lib/hooks/useHaptic";
+import { useProfile } from "@/lib/hooks/useProfile";
+import { getTimeGreeting, getWittyLine, WITTY_POOL_LEN } from "@/lib/utils/greeting";
 
 interface DashboardProps {
   data: {
@@ -17,6 +20,23 @@ interface DashboardProps {
     netWorthHistory: { net_worth: number | string; snapshot_date: string }[];
   };
 }
+
+// Greeting depends on live clock + random pick. Computed once and cached so it
+// can serve as a stable useSyncExternalStore snapshot, and kept in a module fn
+// (not a component/hook) so the impure Date/Math.random calls don't trip the
+// react-hooks purity rule.
+let greetingCache: { hi: string; line: string } | null = null;
+function getGreetingSnapshot(): { hi: string; line: string } {
+  if (!greetingCache) {
+    const h = new Date().getHours();
+    greetingCache = {
+      hi: getTimeGreeting(h),
+      line: getWittyLine(h, Math.floor(Math.random() * WITTY_POOL_LEN)),
+    };
+  }
+  return greetingCache;
+}
+const subscribeNoop = () => () => {};
 
 function NetWorthSparkline({ data }: { data: { net_worth: number | string }[] }) {
   if (data.length < 2) return null;
@@ -47,6 +67,14 @@ function NetWorthSparkline({ data }: { data: { net_worth: number | string }[] })
 
 export default function DashboardPage({ data }: DashboardProps) {
   const haptic = useHaptic();
+  const { data: profile } = useProfile();
+  const firstName = profile?.full_name?.trim().split(/\s+/)[0] ?? "";
+
+  // Server (and first client render) get null to match SSR markup; after
+  // hydration useSyncExternalStore re-renders with the cached greeting. No
+  // synchronous setState-in-effect, so React 19's cascading-render warning
+  // never fires.
+  const greeting = useSyncExternalStore(subscribeNoop, getGreetingSnapshot, () => null);
 
   const currentNetWorth =
     data.netWorthHistory.length > 0
@@ -78,9 +106,15 @@ export default function DashboardPage({ data }: DashboardProps) {
       <div className="flex items-center justify-between px-1 pt-1">
         <div>
           <h1 className="font-display text-[26px] font-bold leading-none tracking-[-0.03em] text-foreground">
-            Dashboard
+            {greeting
+              ? `${greeting.hi}${firstName ? `, ${firstName}` : ""}`
+              : firstName
+                ? `Hi, ${firstName}`
+                : "Dashboard"}
           </h1>
-          <p className="text-[11px] font-medium text-muted-foreground mt-1">Financial overview</p>
+          <p className="text-[11px] font-medium text-muted-foreground mt-1">
+            {greeting?.line ?? "Financial overview"}
+          </p>
         </div>
         <Link
           href="/profile"
@@ -101,17 +135,17 @@ export default function DashboardPage({ data }: DashboardProps) {
                 {overBudget ? "Over budget" : "On track"}
               </Chip>
             </div>
-            <div className="figure text-[44px] leading-[0.92] my-2.5" style={{ color: "#1b210a" }}>
+            <div className="figure text-[44px] leading-[0.92] my-2.5" style={{ color: "var(--accent-ink)" }}>
               <CurrencyText value={data.budget.remaining} />
             </div>
             <div
               id="dashboard-budget-progress"
               className="h-[7px] rounded-full overflow-hidden"
-              style={{ background: "rgba(27,33,10,.18)" }}
+              style={{ background: "color-mix(in srgb, var(--accent-ink) 18%, transparent)" }}
             >
               <div
                 className="h-full rounded-full"
-                style={{ width: `${budgetSpentPct}%`, background: "#1b210a" }}
+                style={{ width: `${budgetSpentPct}%`, background: "var(--accent-ink)" }}
               />
             </div>
             <div className="flex justify-between mt-2 text-[11px] font-semibold">
@@ -133,7 +167,7 @@ export default function DashboardPage({ data }: DashboardProps) {
             className="block rounded-card bg-accent wordmark-watermark p-[18px] text-[var(--accent-ink)]"
           >
             <div className="text-[11.5px] font-semibold">Budget</div>
-            <div className="font-display text-[22px] font-bold mt-1" style={{ color: "#1b210a" }}>
+            <div className="font-display text-[22px] font-bold mt-1" style={{ color: "var(--accent-ink)" }}>
               Set up your budget
             </div>
             <div className="text-[12px] font-medium mt-1 opacity-80">
@@ -203,8 +237,6 @@ export default function DashboardPage({ data }: DashboardProps) {
           <QuickSpendInput categories={data.categories} />
         </Card>
       )}
-
-      <div className="h-24 md:h-8" />
     </div>
   );
 }

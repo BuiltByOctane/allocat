@@ -12,6 +12,8 @@ import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
 
+import java.util.List;
+
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.Person;
 import androidx.core.content.ContextCompat;
@@ -24,9 +26,10 @@ import androidx.core.graphics.drawable.IconCompat;
  * res/raw/meow is present (else the default notification sound).
  */
 final class SmsNotifier {
-    // Bump this whenever channel settings change — Android freezes a channel's
-    // config (importance/sound) at creation time, so a new id forces a refresh.
-    private static final String CHANNEL = "allocat_txn_v4";
+    // Android freezes a channel's config (importance/sound) at creation time, so
+    // the chosen sound is encoded into the channel id and we use a fresh channel
+    // per sound. Bump the version suffix when the *other* channel settings change.
+    private static final String CHANNEL_PREFIX = "allocat_txn_v5_";
 
     private SmsNotifier() {}
 
@@ -40,11 +43,25 @@ final class SmsNotifier {
             (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
 
-        Uri sound = soundUri(c);
+        String soundKey = SmsConfig.sound(c);
+        String channelId = CHANNEL_PREFIX + soundKey;
+        Uri sound = soundUri(c, soundKey);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // Drop stale channels (old versions / previously-chosen sounds) so the
+            // system notification settings list stays a single "Transactions" entry.
+            List<NotificationChannel> existing = nm.getNotificationChannels();
+            if (existing != null) {
+                for (NotificationChannel ec : existing) {
+                    String id = ec.getId();
+                    if (id != null && id.startsWith("allocat_txn_") && !id.equals(channelId)) {
+                        nm.deleteNotificationChannel(id);
+                    }
+                }
+            }
+
             NotificationChannel ch = new NotificationChannel(
-                CHANNEL, "Transactions", NotificationManager.IMPORTANCE_HIGH);
+                channelId, "Transactions", NotificationManager.IMPORTANCE_HIGH);
             ch.setDescription("Transaction + budget alerts");
             ch.enableVibration(true);
             ch.setVibrationPattern(new long[] { 0, 120, 80, 120 });
@@ -73,7 +90,7 @@ final class SmsNotifier {
         } catch (Exception ignored) {
         }
 
-        NotificationCompat.Builder b = new NotificationCompat.Builder(c, CHANNEL)
+        NotificationCompat.Builder b = new NotificationCompat.Builder(c, channelId)
             .setSmallIcon(R.drawable.ic_notification)
             .setColor(ContextCompat.getColor(c, R.color.notif_accent))
             .setContentTitle(title)
@@ -121,11 +138,16 @@ final class SmsNotifier {
         nm.notify(id, b.build());
     }
 
-    /** res/raw/meow if present, else the system default notification sound. */
-    private static Uri soundUri(Context c) {
-        int meow = c.getResources().getIdentifier("meow", "raw", c.getPackageName());
-        if (meow != 0) {
-            return Uri.parse("android.resource://" + c.getPackageName() + "/" + meow);
+    /**
+     * Resolves the chosen sound: "default" (or a missing res/raw entry) falls back
+     * to the system notification sound; otherwise res/raw/<key> is used.
+     */
+    private static Uri soundUri(Context c, String key) {
+        if (key != null && !key.equals("default")) {
+            int res = c.getResources().getIdentifier(key, "raw", c.getPackageName());
+            if (res != 0) {
+                return Uri.parse("android.resource://" + c.getPackageName() + "/" + res);
+            }
         }
         return RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
     }

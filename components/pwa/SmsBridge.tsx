@@ -7,7 +7,8 @@ import { SmsReader, type CapturedSms } from "@/lib/native/SmsReader";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { ingestSmsClient } from "@/lib/sms/ingestClient";
 import { scheduleWeeklyRecap } from "@/lib/sms/recap";
-import { confirmAutoAllocate } from "@/lib/sms/notifPrefs";
+import { confirmAutoAllocate, notifSound } from "@/lib/sms/notifPrefs";
+import { nativeSoundKey } from "@/lib/native/notifSounds";
 import { getDB } from "@/lib/db";
 
 /**
@@ -95,7 +96,10 @@ export function SmsBridge() {
           .slice(0, 3)
           .map((it) => ({ id: it.id, name: it.name }));
         await SmsReader.setQuickTargets({ targets: JSON.stringify(targets) });
-        await SmsReader.setConfig({ confirmAutoAllocate: confirmAutoAllocate() });
+        await SmsReader.setConfig({
+          confirmAutoAllocate: confirmAutoAllocate(),
+          sound: nativeSoundKey(notifSound()),
+        });
       } catch {
         /* ignore */
       }

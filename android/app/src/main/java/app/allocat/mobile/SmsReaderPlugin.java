@@ -133,6 +133,7 @@ public class SmsReaderPlugin extends Plugin {
     public void setConfig(PluginCall call) {
         SmsConfig.setConfirmAutoAllocate(getContext(),
             call.getBoolean("confirmAutoAllocate", true));
+        SmsConfig.setSound(getContext(), call.getString("sound", "meow"));
         call.resolve();
     }
 

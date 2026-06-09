@@ -15,8 +15,11 @@ export interface SmsReaderPlugin {
   setRules(options: { rules: string }): Promise<void>;
   /** Push top budget items (JSON [{id,name}]) for the quick-allocate buttons. */
   setQuickTargets(options: { targets: string }): Promise<void>;
-  /** Push notification preferences (e.g. the auto-allocate confirmation toggle). */
-  setConfig(options: { confirmAutoAllocate: boolean }): Promise<void>;
+  /**
+   * Push notification preferences (auto-allocate confirmation toggle, and the
+   * chosen sound — a res/raw resource name or "default" for the system sound).
+   */
+  setConfig(options: { confirmAutoAllocate: boolean; sound?: string }): Promise<void>;
   /** Returns + clears a deep-link stashed when a notification was tapped. */
   consumeDeepLink(): Promise<{ url: string | null }>;
   /** Opens the OEM autostart manager (or the app settings page as fallback). */

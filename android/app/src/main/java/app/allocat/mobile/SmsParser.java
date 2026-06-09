@@ -29,6 +29,9 @@ final class SmsParser {
         Pattern.compile("\\b(debited|debit|spent|sent|paid|withdrawn|w/d|purchase|txn|transferred|auto[-\\s]?debit|e-?mandate)\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern CREDIT =
         Pattern.compile("\\b(credited|credit|received|deposited|refund(?:ed)?)\\b", Pattern.CASE_INSENSITIVE);
+    // Credit-card spend phrasing ("...made using your ... Card at X") has no debit keyword.
+    private static final Pattern CARD_SPEND =
+        Pattern.compile("\\busing\\s+your\\b[\\s\\S]*?\\bcard\\b", Pattern.CASE_INSENSITIVE);
     // Balance clauses report the post-txn balance, not the spend — strip first.
     private static final Pattern BALANCE = Pattern.compile(
         "(?:avl\\.?\\s*bal(?:ance)?|available\\s+bal(?:ance)?|a/c\\s+bal(?:ance)?|bal(?:ance)?)\\s*:?\\s*(?:₹|Rs\\.?|INR)?\\s*[\\d,]+(?:\\.\\d{1,2})?",
@@ -40,8 +43,8 @@ final class SmsParser {
         Pattern.compile("(?:₹|Rs\\.?|INR)\\s*([\\d,]+(?:\\.\\d{1,2})?)", Pattern.CASE_INSENSITIVE);
 
     private static final Pattern[] MERCHANTS = new Pattern[] {
-        Pattern.compile("(?:to|from|by)\\s+VPA\\s+([\\w.\\-]+)@[\\w.\\-]+", Pattern.CASE_INSENSITIVE),
-        Pattern.compile("(?:to|from)\\s+([\\w.\\-]+)@[\\w.\\-]+", Pattern.CASE_INSENSITIVE),
+        Pattern.compile("(?:to|from|by|at)\\s+VPA\\s+([\\w.\\-]+)@[\\w.\\-]+", Pattern.CASE_INSENSITIVE),
+        Pattern.compile("(?:to|from|at)\\s+([\\w.\\-]+)@[\\w.\\-]+", Pattern.CASE_INSENSITIVE),
         Pattern.compile(
             "(?:trf to|transfer to|sent to|paid to|towards|to)\\s+([A-Za-z0-9][A-Za-z0-9 &._\\-]*?)" + STOP,
             Pattern.CASE_INSENSITIVE),
@@ -59,6 +62,7 @@ final class SmsParser {
 
         if (CURRENCY.matcher(t).find()) p.currency = "INR";
         if (DEBIT.matcher(t).find()) p.direction = "debit";
+        else if (CARD_SPEND.matcher(t).find()) p.direction = "debit";
         else if (CREDIT.matcher(t).find()) p.direction = "credit";
 
         p.amount = extractAmount(t);

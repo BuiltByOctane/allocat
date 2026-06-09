@@ -144,4 +144,20 @@ describe("parseTransactionSms — on-device coverage (post-LLM-removal)", () => 
     const r = parseTransactionSms("Your account was updated. Avl Bal Rs.100");
     expect(r.confidence).toBeLessThan(0.6);
   });
+
+  it("reads the HDFC credit-card UPI spend ('made using your ... Card at <vpa>')", () => {
+    const r = parseTransactionSms(
+      "A transaction of Rs. 133.08 was made using your HDFC Bank Pixel Play Credit Card at zomato-order@ptybl via UPI 652606067939 on 09/06/26 at 20:07. Not you? Block your Card: https://1.hdfc.bank.in/HDFCBK/s/4JPep9Oj or SMS BLOCKPCC 7122 to 8433642286",
+      "HDFCBK",
+    );
+    expect(r.amount).toBe(133.08);
+    expect(r.currency).toBe("INR");
+    // No debit keyword — direction comes from the card-spend phrasing.
+    expect(r.direction).toBe("debit");
+    // Merchant must be the payee VPA, not the trailing BLOCKPCC shortcode number.
+    expect(r.merchant?.toLowerCase()).toContain("zomato");
+    expect(r.merchant).not.toMatch(/^\d+$/);
+    expect(r.occurredAt).toBe("2026-06-09");
+    expect(r.confidence).toBeGreaterThanOrEqual(0.6);
+  });
 });

@@ -27,6 +27,9 @@ const CURRENCY_MAP: Array<[RegExp, string]> = [[/₹|\bRs\.?\b|\bINR\b/i, "INR"]
 const DEBIT_RE =
   /\b(debited|debit|spent|sent|paid|withdrawn|w\/d|purchase|txn|transferred|auto[-\s]?debit|e-?mandate)\b/i;
 const CREDIT_RE = /\b(credited|credit|received|deposited|refund(?:ed)?)\b/i;
+// Credit-card spend phrasing carries no debit keyword: "A transaction of Rs.X was
+// made using your HDFC ... Credit Card at <merchant>". Treat as a debit.
+const CARD_SPEND_RE = /\busing\s+your\b[\s\S]*?\bcard\b/i;
 
 // Balance clauses report the post-transaction balance, NOT the spend. Strip them
 // before amount extraction so "...spent Rs.200, Avl Bal Rs.5,000" reads 200.
@@ -41,6 +44,8 @@ function extractCurrency(text: string): string | null {
 function extractDirection(text: string): TxnDirection | null {
   // "A/C debited ... payee credited" → debit wins (account is the subject).
   if (DEBIT_RE.test(text)) return "debit";
+  // Card spends ("...made using your ... Card at X") have no debit keyword.
+  if (CARD_SPEND_RE.test(text)) return "debit";
   if (CREDIT_RE.test(text)) return "credit";
   return null;
 }
@@ -101,9 +106,9 @@ function extractDate(text: string): string | null {
 const STOP = "(?=\\s+(?:on|ref|refno|ref no|upi|avl|a\\/c|info|not|via|dt|your|bal|txn|using|cr|dr|\\.|,)|$)";
 const MERCHANT_PATTERNS: RegExp[] = [
   // VPA / UPI handle: "to VPA amazon@ybl", "by VPA john@oksbi" → take name before @
-  /(?:to|from|by)\s+VPA\s+([\w.\-]+)@[\w.\-]+/i,
-  // bare UPI handle: "to amazon@ybl"
-  /(?:to|from)\s+([\w.\-]+)@[\w.\-]+/i,
+  /(?:to|from|by|at)\s+VPA\s+([\w.\-]+)@[\w.\-]+/i,
+  // bare UPI handle: "to amazon@ybl", card spend "at zomato-order@ptybl"
+  /(?:to|from|at)\s+([\w.\-]+)@[\w.\-]+/i,
   // "trf to ZOMATO", "transfer to X", "sent to X", "paid to X", "towards X"
   new RegExp(`(?:trf to|transfer to|sent to|paid to|towards|to)\\s+([A-Za-z0-9][A-Za-z0-9 &._\\-]*?)${STOP}`, "i"),
   // card spend: "spent at AMAZON", "purchase at BIGBASKET"

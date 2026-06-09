@@ -4,22 +4,36 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-AlloCat — minimalist personal-finance PWA. Next.js 16 (App Router, Turbopack) + React 19 + Supabase + Dexie (IndexedDB) + TanStack Query 5 + Tailwind v4. Currency formatting hardcoded `en-IN` / INR in server actions and the activity logger.
+AlloCat — minimalist personal-finance PWA, also shipped as a native Android app (Capacitor) for SMS-based transaction tracking. Next.js 16 (App Router) + React 19 + Supabase + Dexie (IndexedDB) + TanStack Query 5 + Tailwind v4. Currency is multi-currency via `lib/number-format.ts` + `lib/currency/catalog` (INR is the default for legacy callers); do **not** assume hardcoded `en-IN`.
 
 `package.json` declares `name: "AlloCat-web"` despite the directory name.
 
 ## Commands
 
 ```bash
-npm run dev      # next dev (Turbopack)
-npm run build    # next build (PWA enabled — runs the @ducanh2912/next-pwa wrapper)
-npm run start    # next start
-npm run lint     # eslint (flat config in eslint.config.mjs)
+npm run dev         # next dev
+npm run build       # next build && serwist build (service worker bundling)
+npm run start       # next start
+npm run lint        # eslint (flat config in eslint.config.mjs)
+npm run test        # vitest run (one-shot)
+npm run test:watch  # vitest (watch)
+
+npx vitest run lib/sms/match.test.ts        # single file
+npx vitest run -t "matches exact rule"      # single test by name
 ```
 
-No test runner is configured. There is no typecheck script — run `npx tsc --noEmit` if needed.
+Test files live next to source (`*.test.ts`, e.g. `lib/ai/parseSmsTransaction.test.ts`, `lib/sms/match.test.ts`). No typecheck script — run `npx tsc --noEmit` if needed.
 
-Both `package-lock.json` and `pnpm-lock.yaml` are checked in; pick the one already used in your environment to avoid drift.
+Use **pnpm** (per memory: `npm install` fails with ERESOLVE). Both `package-lock.json` and `pnpm-lock.yaml` are checked in.
+
+### Android (Capacitor)
+
+```bash
+npx cap sync android                                  # copy web config + plugins into android/
+CAP_SERVER_URL=http://192.168.1.20:3000 npx cap sync # point the shell at a LAN dev server
+```
+
+Requires Android Studio JBR (JDK 21). Open `android/` in Android Studio to build/run the APK.
 
 ## Required env (`.env.local`)
 
@@ -35,7 +49,7 @@ OPENROUTER_API_KEY=     # used by app/api/ai/chat
 
 Every page reads from IndexedDB first; the network is a fallback and a background reconciler. Three layers cooperate:
 
-1. **IDB cache** — `lib/db/AllocatDB.ts` defines a Dexie schema mirroring the Supabase tables (`profiles`, `budgets`, `categories`, `budget_items`, `goals`, `assets`, `asset_categories`, `asset_value_history`, `debts`, `reports`, `net_worth_snapshots`, `activity_logs`) plus three sync infra tables: `sync_queue`, `id_map`, `sync_meta`. The DB is a browser-only singleton via `getDB()` — calling it on the server throws. Schema version bumps live in `AllocatDB.ts` constructor; add a new `.version(N).stores({...})` block, never mutate prior versions.
+1. **IDB cache** — `lib/db/AllocatDB.ts` defines a Dexie schema mirroring the Supabase tables (`profiles`, `budgets`, `categories`, `budget_items`, `goals`, `assets`, `asset_categories`, `asset_value_history`, `debts`, `reports`, `net_worth_snapshots`, `activity_logs`, `merchant_rules`, `sms_transactions`) plus three sync infra tables: `sync_queue`, `id_map`, `sync_meta`. Currently at schema version 10. The DB is a browser-only singleton via `getDB()` — calling it on the server throws. Schema version bumps live in `AllocatDB.ts` constructor; add a new `.version(N).stores({...})` block, never mutate prior versions.
 
 2. **Hydration + prefetch** — on mount, `SyncProvider` (`lib/providers/SyncProvider.tsx`) calls `hydrateAllTables()` (`lib/db/hydrate.ts`) which bulk-pulls every table for the current user into IDB. If `sync_meta.__userId__` differs from the active user, IDB is wiped first (multi-account device safety). After hydration, `prefetchAllQueries()` (`lib/db/prefetch.ts`) warms the React Query cache from IDB so first navigation has no skeletons. Use `qc.fetchQuery` (not `prefetchQuery`) when adding new prefetched keys — staleTime semantics would otherwise serve stale entries across reloads.
 
@@ -48,9 +62,10 @@ Cross-cutting rules:
 
 ### Routing
 
-- `app/(app)/*` — protected app shell (dashboard, budget, debt, goals, net-worth, profile, activity). Layout wraps in `TourProvider` → `SyncProvider`, with mobile-first 480px frame and `md:` desktop layout.
+- `app/(app)/*` — protected app shell (dashboard, budget, debt, goals, net-worth, profile, activity, **sms**). Layout wraps in `TourProvider` → `SyncProvider`, with mobile-first 480px frame and `md:` desktop layout.
 - `app/auth/*` — login / signup / oauth callback.
 - `app/onboarding/page.tsx` — post-signup flow.
+- `app/share-target/` — PWA Web Share Target landing (manifest `share_target` posts here); shared text is parsed by `lib/ai/parseSpend.ts`.
 - `app/api/ai/chat/route.ts` — streaming AI chat. Hard off-topic regex guard runs *before* the model call; topic detection in `lib/ai-utils.ts` decides which slice of `buildFinancialContext` to attach.
 
 ### Auth + middleware quirk
@@ -72,9 +87,21 @@ Server actions write to `activity_logs` via `lib/server/activity-logger.ts` (`lo
 
 Driver.js tour managed by `lib/tour/` — `TourContext` persists `{ enabled, seenPages }` in `localStorage` under `allocat-tour-state`. Add new pages by extending `tourSteps.ts` + `types.ts`.
 
+### Native Android + SMS transaction tracking (Android-only)
+
+The native app runs in **remote-URL WebView mode** (`capacitor.config.ts`): the shell loads the deployed Next.js app over the network, so SSR, server actions and the offline-first IDB layer work unchanged — no web assets are bundled (`webDir: "public"` is a CLI formality). `components/pwa/NativeShell.tsx` calls `SplashScreen.hide()` once mounted (auto-hide is disabled so users don't see a blank WebView during load).
+
+The core native feature reads incoming bank/UPI **transaction** SMS and auto-categorizes spends. Full design in `docs/sms-feature.md`. Pipeline:
+
+1. **Native receiver** (`android/app/src/main/java/app/allocat/mobile/`) — `SmsTransactionReceiver` fires even when the app is killed. `SmsFilter` applies an on-device financial-only gate (Play SMS-policy compliance). Messages are queued in `SmsQueue` (SharedPreferences); if the WebView is foregrounded, a `smsReceived` event is emitted. When app is closed, `SmsParser` (a Java port of the TS parser) + `SmsNotifier` post a transaction notification directly. **Only `RECEIVE_SMS` is declared — the app never reads the existing inbox (`READ_SMS` is intentionally absent).**
+2. **JS bridge** — `components/pwa/SmsBridge.tsx` (native-only) listens for live events and drains the queue silently on open (native already notified). It mirrors merchant rules / quick-allocate targets / notif config into native via the `SmsReader` Capacitor plugin (`lib/native/SmsReader.ts`).
+3. **Ingest** — `lib/sms/ingestClient.ts` parses on-device (`lib/ai/parseSmsTransaction.ts`, regex, **no LLM/network** — removed for Play compliance), matches a learned `merchant_rules` row (`lib/sms/match.ts`, exact > contains > regex), writes an optimistic `sms_transactions` IDB row, and enqueues a sync INSERT. **Privacy: only extracted fields + a hashed dedupe key sync to the server; the raw SMS body/sender stay on-device.** Only debits are tracked; credits are ignored.
+
+Keep `SmsParser.java` regex in sync with `lib/ai/parseSmsTransaction.ts` (both are documented as needing to match). Notifications go through `lib/native/notify.ts` (`notifyLocal`, no-op on web); sounds in `android/app/src/main/res/raw/` mapped by `lib/native/notifSounds.ts`.
+
 ### PWA
 
-`@ducanh2912/next-pwa` wraps `next.config.ts`; service worker emitted to `public/`, disabled in dev. Manifest at `app/manifest.ts`. Install prompt UI in `components/ui/InstallPrompt.tsx`.
+**Serwist** (`@serwist/next`), not next-pwa. The service worker source is `app/sw.ts`, configured via `serwist.config.js`; `npm run build` runs `serwist build` after `next build`. Disabled in dev. Manifest at `app/manifest.ts` (includes `share_target` and shortcuts). Install prompt UI in `components/ui/InstallPrompt.tsx`.
 
 ## Path alias
 
@@ -82,4 +109,6 @@ Driver.js tour managed by `lib/tour/` — `TourContext` persists `{ enabled, see
 
 ## Design system
 
-Editorial monochrome — Inter Tight (sans), Bricolage Grotesque (display), JetBrains Mono (mono). Dark default (`#0a0a0a` bg). Material Symbols Outlined loaded from Google Fonts in the root layout. Tailwind v4 (PostCSS plugin in `postcss.config.mjs`, no `tailwind.config.*`).
+Neo · Lime redesign with a runtime **accent system**: presets in `lib/theme/accents.ts` (`lime` default, plus tangerine/lemon/purple/blue). `data-accent` on `<html>` swaps tokens defined in `app/globals.css`; `AccentProvider` (`lib/providers/AccentProvider.tsx`) mirrors/persists the choice (`allocat-accent`), but the no-flash initial paint is a blocking script in `app/layout.tsx`. Light/dark via `next-themes` (`ThemeProvider`). Chart colors in `lib/theme/dataViz.ts`.
+
+Fonts (root layout): Hanken Grotesk (`--font-sans`), Bricolage Grotesque (`--font-display`), JetBrains Mono (`--font-mono`). Material Symbols Outlined from Google Fonts. Tailwind v4 (PostCSS plugin in `postcss.config.mjs`, no `tailwind.config.*`).

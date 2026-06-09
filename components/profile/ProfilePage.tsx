@@ -3,12 +3,15 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Capacitor } from "@capacitor/core";
-import { ChevronRight, History, MessageSquareText, CheckCircle2, Lightbulb, RotateCcw } from "lucide-react";
+import { ChevronRight, History, MessageSquareText, CheckCircle2, Lightbulb, RotateCcw, LifeBuoy } from "lucide-react";
 import PawLogo from "@/components/ai/PawLogo";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
 import ThemeSelector from "@/components/profile/ThemeSelector";
+import AccentSelector from "@/components/profile/AccentSelector";
 import CurrencySelector from "@/components/profile/CurrencySelector";
+import NotificationSoundSelector from "@/components/profile/NotificationSoundSelector";
+import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { signOut } from "@/lib/actions/auth";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { useTour } from "@/lib/tour/useTour";
@@ -20,7 +23,13 @@ export default function ProfilePage() {
   const tour = useTour();
 
   const [confirm, setConfirm] = useState(true);
-  useEffect(() => setConfirm(confirmAutoAllocate()), []);
+  const [isNative, setIsNative] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  useEffect(() => {
+    setConfirm(confirmAutoAllocate());
+    setIsNative(Capacitor.isNativePlatform());
+  }, []);
   function toggleConfirm() {
     const next = !confirm;
     setConfirm(next);
@@ -49,7 +58,7 @@ export default function ProfilePage() {
           <Chip tone="good" className="bg-white/60 border-0 text-[var(--accent-ink)]">
             ✓ Verified
           </Chip>
-          <div className="font-display text-[22px] font-bold mt-1.5 truncate" style={{ color: "#1b210a" }}>
+          <div className="font-display text-[22px] font-bold mt-1.5 truncate" style={{ color: "var(--accent-ink)" }}>
             {profile?.full_name || "Anonymous Architect"}
           </div>
           <div className="text-[11px] font-medium text-[var(--accent-ink)] opacity-75 truncate">
@@ -92,6 +101,7 @@ export default function ProfilePage() {
       <p className="t-label text-muted-foreground mt-1 ml-1">Preferences</p>
 
       <ThemeSelector />
+      <AccentSelector />
       <CurrencySelector />
 
       {/* Notifications group */}
@@ -123,6 +133,10 @@ export default function ProfilePage() {
           />
         </button>
       </Card>
+
+      {/* Custom sound is an Android-native feature — the web Notification API
+          can't set one, so only show the picker inside the native app. */}
+      {isNative && <NotificationSoundSelector />}
 
       {/* Helper group */}
       <p className="t-label text-muted-foreground mt-1 ml-1">Helper</p>
@@ -173,19 +187,63 @@ export default function ProfilePage() {
         </Card>
       </button>
 
+      {/* Support group */}
+      <p className="t-label text-muted-foreground mt-1 ml-1">Support</p>
+
+      <a
+        href="mailto:innovationsoctane@gmail.com?subject=AlloCat%20Support"
+        className="block active:scale-[0.99] transition-transform"
+      >
+        <Card compact className="flex items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-tile text-muted-foreground">
+            <LifeBuoy size={18} strokeWidth={1.7} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[13.5px] font-bold text-foreground">Contact Support</div>
+            <div className="text-[10.5px] font-medium text-muted-foreground mt-0.5">
+              Report an issue or send feedback
+            </div>
+          </div>
+          <ChevronRight size={16} strokeWidth={2} className="text-muted-foreground" />
+        </Card>
+      </a>
+
       {/* Logout */}
-      <form action={signOut} className="mt-2">
-        <button
-          type="submit"
-          className="w-full h-[48px] rounded-pill border border-destructive/40 text-destructive text-sm font-bold uppercase tracking-[0.18em] hover:bg-destructive/10 active:scale-[0.98] transition-all"
-        >
-          Logout
-        </button>
-      </form>
+      <button
+        type="button"
+        onClick={() => setLogoutOpen(true)}
+        className="mt-2 w-full h-[48px] rounded-pill border border-destructive/40 text-destructive text-sm font-bold uppercase tracking-[0.18em] hover:bg-destructive/10 active:scale-[0.98] transition-all"
+      >
+        Logout
+      </button>
+
+      <ConfirmDrawer
+        isOpen={logoutOpen}
+        onClose={() => setLogoutOpen(false)}
+        onConfirm={async () => {
+          if (loggingOut) return;
+          setLoggingOut(true);
+          await signOut();
+        }}
+        title="Log out?"
+        description="You'll need to sign in again to access your account."
+        confirmText={loggingOut ? "Logging out…" : "Log out"}
+        cancelText="Cancel"
+      />
 
       <footer className="text-center mt-2 opacity-40">
         <p className="figure text-[11px] text-foreground">v1.0.4</p>
-        <p className="text-[10px] font-medium tracking-widest text-foreground">AlloCat © 2026</p>
+        <a
+          href="https://octane.team"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[10px] font-medium tracking-widest text-foreground"
+        >
+          octane.team
+        </a>
+        <p className="text-[10px] font-medium tracking-widest text-foreground mt-0.5">
+          Built by © 2026 Octane Innovations
+        </p>
       </footer>
 
       <div className="h-28 md:h-12" />

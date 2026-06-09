@@ -12,7 +12,7 @@ import { Card } from "@/components/ui/Card";
 import { Progress } from "@/components/ui/Progress";
 import EmojiPickerModal from "@/components/ui/EmojiPickerModal";
 import { ColorPicker } from "@/components/ui/ColorPicker";
-import type { CatKey } from "@/lib/theme/dataViz";
+import { resolveColor, type CatKey } from "@/lib/theme/dataViz";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { ItemDetailSheet, NEW_ITEM_ID } from "@/components/budget/ItemDetailSheet";
 import { useHaptic } from "@/lib/hooks/useHaptic";
@@ -47,11 +47,12 @@ interface LinkTargetEntry {
   icon?: string | null;
 }
 
-function SegBar({ pct, over }: { pct: number; over?: boolean }) {
+function SegBar({ pct, over, color }: { pct: number; over?: boolean; color?: string }) {
   return (
     <Progress
       value={pct * 100}
       state={over ? "over" : "normal"}
+      color={over ? undefined : color}
       className="mt-2 h-1.5"
     />
   );
@@ -471,6 +472,8 @@ function CategoryDetailContent({
     setSelectedItem(item);
   }
 
+  const categoryColor = resolveColor({ id: categoryId, color });
+
   const otherItemsPlanned = selectedItem
     ? items.filter((i) => i.id !== selectedItem.id).reduce((s, i) => s + i.planned, 0)
     : 0;
@@ -552,7 +555,7 @@ function CategoryDetailContent({
           </div>
         </div>
 
-        <SegBar pct={pct} over={totalActual > categoryAllocation && categoryAllocation > 0} />
+        <SegBar pct={pct} over={totalActual > categoryAllocation && categoryAllocation > 0} color={categoryColor} />
 
         <div className="mt-2.5 space-y-1">
           <p className="text-[10.5px] font-medium text-muted-foreground tabular-nums">
@@ -627,11 +630,20 @@ function CategoryDetailContent({
               >
                 <div className="flex items-center gap-3">
                   {item.is_completed ? (
-                    <div className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-accent-strong text-white">
+                    <div
+                      className="flex size-[22px] shrink-0 items-center justify-center rounded-full text-white"
+                      style={{ background: categoryColor }}
+                    >
                       <Check size={13} strokeWidth={2.4} />
                     </div>
                   ) : (
-                    <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-tile text-[15px]">
+                    <div
+                      className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] text-[15px] font-bold"
+                      style={{
+                        background: `color-mix(in srgb, ${categoryColor} 16%, transparent)`,
+                        color: categoryColor,
+                      }}
+                    >
                       {item.emoji || item.name.charAt(0).toUpperCase() || "•"}
                     </div>
                   )}
@@ -672,7 +684,7 @@ function CategoryDetailContent({
                   </div>
                   <ChevronRight size={15} strokeWidth={2} className="shrink-0 text-muted-foreground" />
                 </div>
-                {item.planned > 0 && <SegBar pct={itemPct} over={item.actual > item.planned} />}
+                {item.planned > 0 && <SegBar pct={itemPct} over={item.actual > item.planned} color={categoryColor} />}
               </button>
             </Card>
           );

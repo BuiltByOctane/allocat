@@ -44,7 +44,7 @@ export default function BottomNav() {
 
   const spring: Transition = reduce
     ? { duration: 0 }
-    : { type: "spring", stiffness: 560, damping: 38, mass: 0.7 };
+    : { type: "spring", stiffness: 520, damping: 42, mass: 0.7 };
 
   return (
     <motion.nav
@@ -95,11 +95,11 @@ export default function BottomNav() {
               />
               {isActive && (
                 <motion.span
-                  initial={reduce ? false : { opacity: 0, width: 0 }}
-                  animate={{ opacity: 1, width: "auto" }}
-                  exit={{ opacity: 0, width: 0 }}
-                  transition={reduce ? { duration: 0 } : { duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                  className="relative z-10 overflow-hidden whitespace-nowrap text-[12.5px] font-semibold text-[var(--navpill-foreground)]"
+                  layout
+                  initial={reduce ? false : { opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={reduce ? { duration: 0 } : { duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                  className="relative z-10 whitespace-nowrap text-[12.5px] font-semibold text-[var(--navpill-foreground)]"
                 >
                   {item.label}
                 </motion.span>

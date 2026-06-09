@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 /**
  * The lime hero card — the one punchy accent surface per screen. Faint repeating
- * "AlloCat" wordmark watermark, a label + status chip header, a big figure, then
+ * cat-paw watermark, a label + status chip header, a big figure, then
  * optional progress/meta and a CTA passed as children.
  */
 export function HeroCard({
@@ -16,7 +16,7 @@ export function HeroCard({
   label?: ReactNode;
   chip?: ReactNode;
   value: ReactNode;
-  /** Show the repeating AlloCat wordmark texture. */
+  /** Show the repeating cat-paw watermark texture. */
   watermark?: boolean;
   children?: ReactNode;
   className?: string;
@@ -33,7 +33,7 @@ export function HeroCard({
           {chip}
         </div>
       )}
-      <div className="figure text-[44px] leading-[0.92] my-1.5" style={{ color: "#1b210a" }}>
+      <div className="figure text-[44px] leading-[0.92] my-1.5" style={{ color: "var(--accent-ink)" }}>
         {value}
       </div>
       {children}

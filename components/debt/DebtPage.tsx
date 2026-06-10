@@ -262,25 +262,6 @@ export default function DebtPage({ data }: { data: Debt[] }) {
           )}
         </Card>
 
-        {/* Stat pair: Avg interest (light) + Payoff trend (dark) */}
-        <div className="flex gap-3">
-          <StatCard
-            tone="light"
-            className="flex-1"
-            icon={<span className="material-symbols-outlined text-[18px]">percent</span>}
-            label="Avg interest"
-            value={`${avgInterest.toFixed(1)}%`}
-          />
-          <StatCard
-            tone="dark"
-            className="flex-1"
-            icon={<span className="material-symbols-outlined text-[18px]">trending_down</span>}
-            chip={<Chip tone="onDark">30-day</Chip>}
-            label="Payoff trend"
-            value={trendLabel}
-          />
-        </div>
-
         {/* Quick payment */}
         {quickPayDebts.length > 0 && (
           <Card id="debt-quick-section">

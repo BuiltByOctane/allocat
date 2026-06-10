@@ -10,6 +10,7 @@ import {
 
 const CONFIRM_KEY = "allocat-confirm-autoallocate";
 const SOUND_KEY = "allocat-notif-sound";
+const INSIGHTS_KEY = "allocat-weekly-insights";
 
 /** Whether to show a subtle confirmation when a known merchant auto-allocates. Default ON. */
 export function confirmAutoAllocate(): boolean {
@@ -41,6 +42,23 @@ export function notifSound(): NotifSoundId {
 export function setNotifSound(id: NotifSoundId): void {
   try {
     localStorage.setItem(SOUND_KEY, id);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Whether to schedule the weekly AI insight notification. Default ON. */
+export function weeklyInsightsEnabled(): boolean {
+  try {
+    return localStorage.getItem(INSIGHTS_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export function setWeeklyInsightsEnabled(on: boolean): void {
+  try {
+    localStorage.setItem(INSIGHTS_KEY, on ? "1" : "0");
   } catch {
     /* ignore */
   }

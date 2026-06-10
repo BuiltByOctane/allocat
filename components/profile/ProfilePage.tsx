@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { ChevronRight, History, MessageSquareText, CheckCircle2, Lightbulb, RotateCcw, LifeBuoy } from "lucide-react";
-import PawLogo from "@/components/ai/PawLogo";
+import UserAvatar from "@/components/profile/UserAvatar";
+import AvatarPickerSheet from "@/components/profile/AvatarPickerSheet";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
 import ThemeSelector from "@/components/profile/ThemeSelector";
@@ -15,7 +16,13 @@ import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { signOut } from "@/lib/actions/auth";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { useTour } from "@/lib/tour/useTour";
-import { confirmAutoAllocate, setConfirmAutoAllocate } from "@/lib/sms/notifPrefs";
+import {
+  confirmAutoAllocate,
+  setConfirmAutoAllocate,
+  weeklyInsightsEnabled,
+  setWeeklyInsightsEnabled,
+} from "@/lib/sms/notifPrefs";
+import { scheduleWeeklyRecap } from "@/lib/sms/recap";
 import { SmsReader } from "@/lib/native/SmsReader";
 
 export default function ProfilePage() {
@@ -23,11 +30,14 @@ export default function ProfilePage() {
   const tour = useTour();
 
   const [confirm, setConfirm] = useState(true);
+  const [insights, setInsights] = useState(true);
   const [isNative, setIsNative] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [avatarOpen, setAvatarOpen] = useState(false);
   useEffect(() => {
     setConfirm(confirmAutoAllocate());
+    setInsights(weeklyInsightsEnabled());
     setIsNative(Capacitor.isNativePlatform());
   }, []);
   function toggleConfirm() {
@@ -37,6 +47,13 @@ export default function ProfilePage() {
     if (Capacitor.isNativePlatform()) {
       void SmsReader.setConfig({ confirmAutoAllocate: next });
     }
+  }
+  function toggleInsights() {
+    const next = !insights;
+    setInsights(next);
+    setWeeklyInsightsEnabled(next);
+    // Schedules immediately when on; cancels the pending one when off.
+    void scheduleWeeklyRecap();
   }
 
   return (
@@ -51,9 +68,17 @@ export default function ProfilePage() {
 
       {/* Lime identity card */}
       <div className="rounded-card bg-accent p-[18px] flex items-center gap-3.5 text-[var(--accent-ink)]">
-        <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-white/55">
-          <PawLogo size={36} />
-        </div>
+        <button
+          type="button"
+          onClick={() => setAvatarOpen(true)}
+          aria-label="Change avatar"
+          className="relative flex size-14 shrink-0 items-center justify-center rounded-full bg-white/55 overflow-hidden"
+        >
+          <UserAvatar id={profile?.avatar} size={56} className="size-full" />
+          <span className="absolute bottom-0 right-0 flex size-5 items-center justify-center rounded-full bg-foreground text-background ring-2 ring-accent">
+            <span className="material-symbols-outlined text-[12px] leading-none">edit</span>
+          </span>
+        </button>
         <div className="flex-1 min-w-0">
           <Chip tone="good" className="bg-white/60 border-0 text-[var(--accent-ink)]">
             ✓ Verified
@@ -133,6 +158,37 @@ export default function ProfilePage() {
           />
         </button>
       </Card>
+
+      {/* Weekly AI insight notification — native-only (scheduled local
+          notification that fires when the app is closed). */}
+      {isNative && (
+        <Card compact className="flex items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-tile text-muted-foreground">
+            <Lightbulb size={18} strokeWidth={1.7} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[13.5px] font-bold text-foreground">Weekly insights</div>
+            <div className="text-[10.5px] font-medium text-muted-foreground mt-0.5">
+              A useful AI summary each Sunday
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={insights}
+            onClick={toggleInsights}
+            className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
+              insights ? "bg-foreground" : "bg-border"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-card shadow transition-transform ${
+                insights ? "translate-x-5" : "translate-x-0"
+              }`}
+            />
+          </button>
+        </Card>
+      )}
 
       {/* Custom sound is an Android-native feature — the web Notification API
           can't set one, so only show the picker inside the native app. */}
@@ -229,6 +285,12 @@ export default function ProfilePage() {
         description="You'll need to sign in again to access your account."
         confirmText={loggingOut ? "Logging out…" : "Log out"}
         cancelText="Cancel"
+      />
+
+      <AvatarPickerSheet
+        open={avatarOpen}
+        onClose={() => setAvatarOpen(false)}
+        current={profile?.avatar}
       />
 
       <footer className="text-center mt-2 opacity-40">

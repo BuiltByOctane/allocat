@@ -1,6 +1,7 @@
 import { buildFinancialContext } from "@/lib/actions/ai-chat";
 import { detectTopic } from "@/lib/ai-utils";
 import { createClient } from "@/lib/supabase/server";
+import { openRouterChat } from "@/lib/server/openrouter";
 
 // Max number of previous messages to retain in the window (system prompt excluded)
 const HISTORY_WINDOW = 8;
@@ -84,26 +85,13 @@ export async function POST(req: Request) {
   const windowedMessages = userMessages.slice(-HISTORY_WINDOW);
 
   // ── 5. Call OpenRouter ────────────────────────────────────────────────────
-  const openRouterRes = await fetch(
-    "https://openrouter.ai/api/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "HTTP-Referer": "https://allocat.app",
-        "X-Title": "AlloCat",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "openai/gpt-oss-120b:free", // update your model here
-        stream: true,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...windowedMessages,
-        ],
-      }),
-    }
-  );
+  const openRouterRes = await openRouterChat({
+    stream: true,
+    messages: [
+      { role: "system", content: systemPrompt },
+      ...windowedMessages,
+    ],
+  });
 
   if (!openRouterRes.ok) {
     const err = await openRouterRes.text();

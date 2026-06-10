@@ -16,6 +16,7 @@ export type Database = {
           email: string
           is_onboarded: boolean
           currency: string
+          avatar: string | null
           created_at: string
           updated_at: string
         }
@@ -25,6 +26,7 @@ export type Database = {
           email: string
           is_onboarded?: boolean
           currency?: string
+          avatar?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -33,6 +35,7 @@ export type Database = {
           email?: string
           is_onboarded?: boolean
           currency?: string
+          avatar?: string | null
           updated_at?: string
         }
         Relationships: []

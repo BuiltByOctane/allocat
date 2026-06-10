@@ -1,35 +1,53 @@
 /**
- * Weekly recap notification — a reason to open the app each week. Computed from
- * IDB (accurate across foreground + closed-app spends) and scheduled via
- * @capacitor/local-notifications so it fires when the app is closed. Rescheduled
- * on each app open with fresh numbers, rotating four flavors week to week so it
- * never feels like the same boring digest.
+ * Weekly insight notification — a useful reason to open the app each week.
+ *
+ * Generated while the app is open (so the AI call has network + a session) and
+ * scheduled via @capacitor/local-notifications so it fires Sunday 19:00 even
+ * when the app is closed. Rescheduled on each app open with fresh data.
+ *
+ * Text resolution: a 24h-cached insight → a fresh AI insight
+ * (`generateWeeklyInsight`) → an offline template (`pickFlavor`). The cache also
+ * rate-limits the AI call, since SmsBridge re-runs this on every app focus.
  */
 import { Capacitor } from "@capacitor/core";
-import { getDB } from "@/lib/db";
-import { formatCurrency } from "@/lib/number-format";
+import {
+  computeInsightStats,
+  pickFlavor,
+  type InsightStats,
+} from "@/lib/sms/insightStats";
+import { generateWeeklyInsight } from "@/lib/actions/insights";
+import { weeklyInsightsEnabled } from "@/lib/sms/notifPrefs";
 
 const RECAP_ID = 920424;
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const CACHE_KEY = "allocat-insight-cache";
+const AI_TTL_MS = 24 * 60 * 60 * 1000; // reuse a good AI insight for a day
+const FALLBACK_TTL_MS = 60 * 60 * 1000; // retry AI ~hourly after a failure
 
-interface RecapStats {
-  thisTotal: number;
-  count: number;
-  topCat: string;
-  topAmt: number;
-  lastTotal: number;
-  over: number;
-  tracked: number;
-  money: (v: number) => string;
+interface Insight {
+  title: string;
+  body: string;
+}
+
+interface CachedInsight extends Insight {
+  ts: number;
+  ai: boolean;
 }
 
 export async function scheduleWeeklyRecap(): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
   try {
-    const stats = await computeStats();
-    if (!stats) return;
-    const { title, body } = pickFlavor(stats);
     const { LocalNotifications } = await import("@capacitor/local-notifications");
+
+    // Respect the user's toggle — cancel any pending insight when turned off.
+    if (!weeklyInsightsEnabled()) {
+      await LocalNotifications.cancel({ notifications: [{ id: RECAP_ID }] });
+      return;
+    }
+
+    const stats = await computeInsightStats();
+    if (!stats) return;
+
+    const { title, body } = await resolveInsight(stats);
     await LocalNotifications.schedule({
       notifications: [
         {
@@ -46,118 +64,41 @@ export async function scheduleWeeklyRecap(): Promise<void> {
   }
 }
 
-/** Rotate flavor by week so consecutive weeks differ. */
-function pickFlavor(s: RecapStats): { title: string; body: string } {
-  const flavor = Math.floor(Date.now() / WEEK_MS) % 4;
+/** Cached insight → fresh AI insight → offline template. */
+async function resolveInsight(stats: InsightStats): Promise<Insight> {
+  const cached = readCache();
+  if (cached) return { title: cached.title, body: cached.body };
 
-  // 3 = vs-last-week, but needs last-week data; fall back to recap.
-  if (flavor === 3 && s.lastTotal > 0) {
-    const diff = Math.round(((s.thisTotal - s.lastTotal) / s.lastTotal) * 100);
-    if (diff <= -5) {
-      return {
-        title: "🎉 Week over week",
-        body: `${s.money(s.thisTotal)} this week — ${Math.abs(diff)}% less than last. Nice restraint.`,
-      };
-    }
-    if (diff >= 5) {
-      return {
-        title: "👀 The cat's watching",
-        body: `${s.money(s.thisTotal)} this week — up ${diff}% on last. Worth a look.`,
-      };
-    }
-    return {
-      title: "🐾 Week over week",
-      body: `${s.money(s.thisTotal)} this week — about the same as last. Steady.`,
-    };
+  const ai = await generateWeeklyInsight(stats);
+  if (ai) {
+    writeCache({ ...ai, ts: Date.now(), ai: true });
+    return ai;
   }
 
-  if (flavor === 2) {
-    // Cat-mood report.
-    if (s.over > 0) {
-      return {
-        title: "🙀 The cat's concerned",
-        body: `${s.over} budget${s.over > 1 ? "s" : ""} over this week. Tap to regroup.`,
-      };
-    }
-    return {
-      title: "😺 Smooth week",
-      body: `All ${s.tracked} budgets on track. The cat approves. ${s.money(s.thisTotal)} across ${s.count} spend${s.count > 1 ? "s" : ""}.`,
-    };
-  }
-
-  if (flavor === 1 && s.topCat) {
-    // Next-week challenge.
-    return {
-      title: "🐾 This week's challenge",
-      body: `You spent ${s.money(s.topAmt)} on ${s.topCat}. Think you can beat it? Aim lower this week.`,
-    };
-  }
-
-  // 0 (and fallbacks): recap + insight.
-  const insight = s.topCat
-    ? ` ${s.topCat} was your big one.`
-    : "";
-  return {
-    title: "🐾 Your week with AlloCat",
-    body: `${s.money(s.thisTotal)} across ${s.count} spend${s.count > 1 ? "s" : ""}.${insight}`,
-  };
+  const tmpl = pickFlavor(stats);
+  writeCache({ ...tmpl, ts: Date.now(), ai: false });
+  return tmpl;
 }
 
-async function computeStats(): Promise<RecapStats | null> {
-  const db = getDB();
-  const now = Date.now();
-  const weekAgo = new Date(now - WEEK_MS).toISOString();
-  const twoWeeksAgo = new Date(now - 2 * WEEK_MS).toISOString();
-
-  const all = (await db.sms_transactions.toArray()).filter(
-    (t) => t.status === "categorized" && typeof t.amount === "number",
-  );
-  const thisWk = all.filter((t) => t.created_at >= weekAgo);
-  if (thisWk.length === 0) return null;
-  const lastWk = all.filter(
-    (t) => t.created_at >= twoWeeksAgo && t.created_at < weekAgo,
-  );
-
-  const [items, cats, profiles] = await Promise.all([
-    db.budget_items.toArray(),
-    db.categories.toArray(),
-    db.profiles.toArray(),
-  ]);
-  const itemCat = new Map(items.map((i) => [i.id, i.category_id]));
-  const catName = new Map(cats.map((c) => [c.id, c.name]));
-  const code = profiles[0]?.currency ?? "INR";
-  const money = (v: number) =>
-    formatCurrency(v, { code, maximumFractionDigits: 0 });
-
-  const byCat = new Map<string, number>();
-  for (const t of thisWk) {
-    const cid = t.budget_item_id ? itemCat.get(t.budget_item_id) : undefined;
-    if (cid) byCat.set(cid, (byCat.get(cid) ?? 0) + Number(t.amount));
+function readCache(): CachedInsight | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const c = JSON.parse(raw) as CachedInsight;
+    const ttl = c.ai ? AI_TTL_MS : FALLBACK_TTL_MS;
+    if (Date.now() - c.ts > ttl) return null;
+    return c;
+  } catch {
+    return null;
   }
-  let topCat = "";
-  let topAmt = 0;
-  for (const [cid, amt] of byCat) {
-    if (amt > topAmt) {
-      topAmt = amt;
-      topCat = catName.get(cid) ?? "";
-    }
+}
+
+function writeCache(c: CachedInsight): void {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(c));
+  } catch {
+    /* ignore */
   }
-
-  const tracked = items.filter((i) => Number(i.planned_amount) > 0);
-  const over = tracked.filter(
-    (i) => Number(i.actual_amount) > Number(i.planned_amount),
-  ).length;
-
-  return {
-    thisTotal: thisWk.reduce((s, t) => s + Number(t.amount), 0),
-    count: thisWk.length,
-    topCat,
-    topAmt,
-    lastTotal: lastWk.reduce((s, t) => s + Number(t.amount), 0),
-    over,
-    tracked: tracked.length,
-    money,
-  };
 }
 
 /** Upcoming Sunday at 19:00 local (or next week's if already past). */

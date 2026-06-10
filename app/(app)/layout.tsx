@@ -23,9 +23,15 @@ export default async function AppLayout({
     <SyncProvider>
     <CurrencyProvider>
     <QuickActionProvider>
-      <div className="relative flex flex-col min-h-[100dvh] w-full max-w-[480px] mx-auto md:max-w-full md:flex-row bg-background overflow-x-hidden md:overflow-x-visible">
+      <div
+        className="relative flex flex-col min-h-[100dvh] w-full max-w-[480px] mx-auto md:max-w-full md:flex-row bg-background overflow-x-hidden md:overflow-x-visible"
+        style={{ paddingTop: "env(safe-area-inset-top)" }}
+      >
         {/* Sync status indicator — top-right, only visible when offline or syncing */}
-        <div className="fixed top-3 right-4 z-50">
+        <div
+          className="fixed right-4 z-50"
+          style={{ top: "calc(0.75rem + env(safe-area-inset-top))" }}
+        >
           <SyncStatusBadge />
         </div>
         <SidebarNav />

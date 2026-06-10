@@ -2,4 +2,7 @@
 <resources>
     <!-- Warm "cat" accent used to tint the notification small icon + app name. -->
     <color name="notif_accent">#F4A340</color>
+    <!-- App background (light). Matches the CSS background in app/globals.css so
+         transparent system bars blend with the app. values-night overrides it. -->
+    <color name="app_bg">#efeff0</color>
 </resources>

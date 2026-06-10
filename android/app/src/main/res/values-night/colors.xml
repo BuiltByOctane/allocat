@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App background (dark). Matches the CSS background (.dark) in
+         app/globals.css so transparent system bars blend in dark mode. -->
+    <color name="app_bg">#0f0f12</color>
+</resources>

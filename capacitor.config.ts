@@ -21,6 +21,17 @@ const config: CapacitorConfig = {
     cleartext: (process.env.CAP_SERVER_URL ?? "").startsWith("http://"),
   },
   plugins: {
+    // Android 15+ forces edge-to-edge. "css" makes the WebView draw behind the
+    // (transparent) status + navigation bars, so the page's own background fills
+    // those zones — it follows ANY in-app theme/accent because it's the real
+    // rendered pixels, not a native colour guess. Capacitor injects
+    // --safe-area-inset-* / env(safe-area-inset-*) so the web layer can pad
+    // content clear of the bars. Bar icon colour is set at runtime per the
+    // active <html>.dark theme via SystemBars.setStyle (see NativeShell).
+    SystemBars: {
+      insetsHandling: "css",
+      style: "DEFAULT",
+    },
     LocalNotifications: {
       smallIcon: "ic_notification",
       iconColor: "#F4A340",

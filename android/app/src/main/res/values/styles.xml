@@ -12,7 +12,22 @@
     <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
-        <item name="android:background">@null</item>
+        <!-- The status and navigation bars are transparent and the WebView stays
+             inset (so prod content never hides under them). Behind the bars the
+             window background shows, so we paint it the SAME colour as the app's
+             CSS background (app_bg, a DayNight resource) and the bars blend in
+             instead of showing the OS default grey. -->
+        <item name="android:windowBackground">@color/app_bg</item>
+        <item name="android:colorBackground">@color/app_bg</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- Kill the auto scrim Android draws behind transparent bars (API 29+). -->
+        <item name="android:enforceStatusBarContrast">false</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
+        <!-- Light theme = light background = dark bar icons. values-night flips
+             these to false (dark background = light icons). -->
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 
 

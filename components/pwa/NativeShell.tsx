@@ -27,6 +27,32 @@ export function NativeShell() {
       );
     })();
 
+    // Reliable system-bar theming on Android 15+, where the OS forces
+    // edge-to-edge. With SystemBars insetsHandling:"css" (capacitor.config.ts)
+    // the WebView draws BEHIND the transparent bars, so the bar zones show the
+    // real page background — whatever in-app theme or accent is active, because
+    // that's literally the web pixels underneath. No native colour guess.
+    //
+    // Here we only flip the bar *icons* light/dark to stay legible against the
+    // actual <html>.dark state (the static config `style` can't track the in-app
+    // theme toggle). SystemBars lives in @capacitor/core, not a separate plugin.
+    let themeObserver: MutationObserver | undefined;
+    (async () => {
+      const { SystemBars, SystemBarsStyle } = await import("@capacitor/core");
+      const apply = () => {
+        const dark = document.documentElement.classList.contains("dark");
+        // Dark = light icons (for a dark bg); Light = dark icons (for a light bg).
+        const style = dark ? SystemBarsStyle.Dark : SystemBarsStyle.Light;
+        void SystemBars.setStyle({ style });
+      };
+      apply();
+      themeObserver = new MutationObserver(apply);
+      themeObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["class"],
+      });
+    })();
+
     let backHandle: PluginListenerHandle | undefined;
     let urlHandle: PluginListenerHandle | undefined;
     (async () => {
@@ -62,6 +88,7 @@ export function NativeShell() {
     return () => {
       void backHandle?.remove();
       void urlHandle?.remove();
+      themeObserver?.disconnect();
     };
   }, []);
 

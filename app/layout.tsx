@@ -146,6 +146,9 @@ const jsonLd = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // Draw under the notch + system bars (native edge-to-edge); content is padded
+  // back via env(safe-area-inset-*). Without this, those insets are always 0.
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#efeff0" },
     { media: "(prefers-color-scheme: dark)", color: "#0f0f12" },

@@ -1,15 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useTheme } from "next-themes";
 import { Capacitor } from "@capacitor/core";
-import { ChevronRight, History, MessageSquareText, CheckCircle2, Lightbulb, RotateCcw, LifeBuoy } from "lucide-react";
+import { ChevronRight, History, MessageSquareText, CheckCircle2, Lightbulb, RotateCcw, LifeBuoy, Sun, Moon } from "lucide-react";
 import UserAvatar from "@/components/profile/UserAvatar";
 import AvatarPickerSheet from "@/components/profile/AvatarPickerSheet";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
-import ThemeSelector from "@/components/profile/ThemeSelector";
 import AccentSelector from "@/components/profile/AccentSelector";
+import { useRegisterQuickAction } from "@/lib/providers/QuickActionProvider";
 import CurrencySelector from "@/components/profile/CurrencySelector";
 import NotificationSoundSelector from "@/components/profile/NotificationSoundSelector";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
@@ -28,6 +29,19 @@ import { SmsReader } from "@/lib/native/SmsReader";
 export default function ProfilePage() {
   const { data: profile } = useProfile();
   const tour = useTour();
+  const { resolvedTheme, setTheme } = useTheme();
+
+  // Quick-action dock on /profile = light/dark toggle. Icon reflects the
+  // theme you'd switch TO; re-registers when the theme changes.
+  const toggleTheme = useCallback(() => {
+    setTheme(resolvedTheme === "dark" ? "light" : "dark");
+  }, [resolvedTheme, setTheme]);
+  useRegisterQuickAction({
+    id: "profile",
+    label: "Toggle light / dark",
+    icon: resolvedTheme === "dark" ? Sun : Moon,
+    onTrigger: toggleTheme,
+  });
 
   const [confirm, setConfirm] = useState(true);
   const [insights, setInsights] = useState(true);
@@ -125,7 +139,6 @@ export default function ProfilePage() {
       {/* Preferences group */}
       <p className="t-label text-muted-foreground mt-1 ml-1">Preferences</p>
 
-      <ThemeSelector />
       <AccentSelector />
       <CurrencySelector />
 

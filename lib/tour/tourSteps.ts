@@ -107,12 +107,12 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       },
     },
     {
-      element: "#budget-fab-add",
+      element: "#add-category-inline",
       popover: {
         title: "Add Category",
         description:
           "Create a new budget category. Start with a name — you can set the icon, allocation amount, and individual items inside the category after.",
-        side: "top",
+        side: "bottom",
         align: "end",
       },
     },
@@ -203,13 +203,13 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       },
     },
     {
-      element: "#debt-quick-section",
+      element: "#quick-action-dock",
       popover: {
         title: "Quick Payment",
         description:
-          "Log a payment without opening the debt sheet. Pick the debt, enter how much you paid this month, and hit Mark Paid.",
+          "Tap here to log a payment without opening the debt sheet. Pick the debt, enter how much you paid this month, and hit Mark Paid.",
         side: "top",
-        align: "start",
+        align: "end",
       },
     },
   ],
@@ -256,12 +256,12 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       },
     },
     {
-      element: "#net-worth-add-btn",
+      element: "#quick-action-dock",
       popover: {
         title: "Add an Asset",
         description:
-          "Track a new asset — bank account, stock portfolio, property, vehicle, anything with value. Set an initial value and update it over time.",
-        side: "bottom",
+          "Tap here to track a new asset — bank account, stock portfolio, property, vehicle, anything with value. Set an initial value and update it over time.",
+        side: "top",
         align: "end",
       },
     },

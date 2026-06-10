@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useState } from "react";
+import { HandCoins } from "lucide-react";
 import { DebtDetailSheet } from "./DebtDetailSheet";
+import { DebtPaymentSheet } from "./DebtPaymentSheet";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { useHaptic } from "@/lib/hooks/useHaptic";
+import { useRegisterQuickAction } from "@/lib/providers/QuickActionProvider";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Progress } from "@/components/ui/Progress";
 import { Card } from "@/components/ui/Card";
@@ -15,17 +18,13 @@ import {
   useAddDebt,
   useUpdateDebt,
   useDeleteDebt,
-  useMakePayment,
   useUpdateDebtIcon,
   useDebtPaymentTrend,
 } from "@/lib/hooks/useDebt";
 import LentListView from "./LentListView";
-import { CurrencySymbol } from "@/components/ui/CurrencySymbol";
-import { useFormatCurrency } from "@/lib/hooks/useFormatCurrency";
 import DebtEmptyState from "./DebtEmptyState";
 import EmojiPickerModal from "@/components/ui/EmojiPickerModal";
 import { CurrencyText } from "@/components/ui/CurrencyText";
-import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 
 type Debt = {
   id: string;
@@ -51,13 +50,11 @@ function monthCaption() {
 }
 
 export default function DebtPage({ data }: { data: Debt[] }) {
-  const fmtCurrency = useFormatCurrency();
   const [activeTab, setActiveTab] = useState<"internal" | "external" | "closed">("external");
-  const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentDebtId, setPaymentDebtId] = useState("");
   const [showLentList, setShowLentList] = useState(false);
   const [debtToDelete, setDebtToDelete] = useState<string | null>(null);
   const [pickerDebtId, setPickerDebtId] = useState<string | null>(null);
+  const [paymentOpen, setPaymentOpen] = useState(false);
   // Sheet state
   const [sheetMode, setSheetMode] = useState<"add" | "edit">("add");
   const [sheetDebt, setSheetDebt] = useState<Debt | undefined>(undefined);
@@ -67,7 +64,6 @@ export default function DebtPage({ data }: { data: Debt[] }) {
   const addDebtMutation = useAddDebt();
   const updateDebtMutation = useUpdateDebt();
   const deleteDebtMutation = useDeleteDebt();
-  const makePaymentMutation = useMakePayment();
   const updateDebtIconMutation = useUpdateDebtIcon();
   const { data: trendData } = useDebtPaymentTrend();
 
@@ -99,12 +95,13 @@ export default function DebtPage({ data }: { data: Debt[] }) {
   // Quick payment — all active non-lent debts
   const quickPayDebts = data.filter((d) => !d.isClosed && d.type !== "lent");
 
-  useEffect(() => {
-    if (quickPayDebts.length > 0 && !quickPayDebts.find((d) => d.id === paymentDebtId)) {
-      setPaymentDebtId(quickPayDebts[0].id);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.length]);
+  // Quick-action dock: log a debt payment (only when there's something to pay).
+  const openPayment = useCallback(() => setPaymentOpen(true), []);
+  useRegisterQuickAction(
+    quickPayDebts.length > 0
+      ? { id: "debt", label: "Make payment", icon: HandCoins, onTrigger: openPayment }
+      : null,
+  );
 
   function openAddSheet() {
     setSheetMode("add");
@@ -164,17 +161,6 @@ export default function DebtPage({ data }: { data: Debt[] }) {
   function handleDeleteDebt(id: string) {
     setDebtToDelete(id);
   }
-
-  function handleMakePayment() {
-    const amount = parseFloat(paymentAmount);
-    if (isNaN(amount) || amount <= 0 || !paymentDebtId) return;
-    haptic.success();
-    makePaymentMutation.mutate(
-      { id: paymentDebtId, amount },
-      { onSuccess: () => setPaymentAmount("") }
-    );
-  }
-
 
   const trendPct = trendData?.trendPct ?? 0;
   const trendLabel = trendPct === 0
@@ -261,73 +247,6 @@ export default function DebtPage({ data }: { data: Debt[] }) {
             </div>
           )}
         </Card>
-
-        {/* Quick payment */}
-        {quickPayDebts.length > 0 && (
-          <Card id="debt-quick-section">
-            <div className="flex justify-between items-center">
-              <span className="t-label text-muted-foreground">Quick payment</span>
-              <span className="text-[11px] font-semibold text-muted-foreground">Select debt</span>
-            </div>
-
-            {/* Debt picker */}
-            <div className="mt-3">
-              <BottomSheetSelect
-                title="Select Debt"
-                options={quickPayDebts.map((d) => {
-                  const repayable = d.totalRepayable > 0 ? d.totalRepayable : d.principal;
-                  const remaining = Math.max(0, repayable - d.totalPaid);
-                  return {
-                    value: d.id,
-                    label: d.name,
-                    description: fmtCurrency(remaining) + " remaining",
-                    icon: d.icon ?? undefined,
-                  };
-                })}
-                value={paymentDebtId}
-                onChange={setPaymentDebtId}
-                className="flex items-center justify-between rounded-[13px] border border-border bg-card px-3.5 py-3 text-sm font-semibold text-foreground"
-              />
-            </div>
-
-            {/* Selected debt remaining */}
-            {(() => {
-              const sel = quickPayDebts.find((d) => d.id === paymentDebtId);
-              if (!sel) return null;
-              const repayable = sel.totalRepayable > 0 ? sel.totalRepayable : sel.principal;
-              const remaining = Math.max(0, repayable - sel.totalPaid);
-              const paidPct = repayable > 0 ? sel.totalPaid / repayable : 0;
-              return (
-                <div className="mt-2.5 text-[11px] font-semibold text-muted-foreground">
-                  {Math.round(paidPct * 100)}% paid · remaining{" "}
-                  <span className="text-foreground"><CurrencyText value={remaining} /></span>
-                </div>
-              );
-            })()}
-
-            {/* Amount + action */}
-            <div className="mt-3 flex items-center gap-2.5">
-              <div className="flex flex-1 items-baseline gap-1.5 rounded-[13px] border border-border bg-card px-3.5 py-3">
-                <span className="currency-symbol text-muted-foreground" style={{ fontSize: "18px" }}><CurrencySymbol /></span>
-                <input
-                  type="number"
-                  min="0"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value.replace(/[^0-9.]/g, ""))}
-                  placeholder="0"
-                  className="figure w-full bg-transparent border-none outline-none text-[20px] text-foreground p-0 placeholder:text-muted-foreground"
-                />
-              </div>
-              <Button
-                variant="primary"
-                onClick={handleMakePayment}
-                disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
-              >
-                Mark paid →
-              </Button>
-            </div>
-          </Card>
-        )}
 
         {/* Tabs */}
         <div id="debt-tabs">
@@ -498,6 +417,12 @@ export default function DebtPage({ data }: { data: Debt[] }) {
       <div className="h-28 md:h-12" />
 
       {/* Sheets & Modals */}
+      <DebtPaymentSheet
+        open={paymentOpen}
+        onClose={() => setPaymentOpen(false)}
+        debts={quickPayDebts}
+      />
+
       <DebtDetailSheet
         mode={sheetMode}
         debt={sheetDebt}

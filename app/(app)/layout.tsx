@@ -1,6 +1,7 @@
-import BottomNav from "@/components/BottomNav";
+import BottomDock from "@/components/BottomDock";
 import SidebarNav from "@/components/SidebarNav";
 import { SyncProvider } from "@/lib/providers/SyncProvider";
+import { QuickActionProvider } from "@/lib/providers/QuickActionProvider";
 import { SyncStatusBadge } from "@/components/ui/SyncStatusBadge";
 import { InstallPrompt } from "@/components/ui/InstallPrompt";
 import { BadgeUpdater } from "@/components/pwa/BadgeUpdater";
@@ -21,6 +22,7 @@ export default async function AppLayout({
     <TourProvider>
     <SyncProvider>
     <CurrencyProvider>
+    <QuickActionProvider>
       <div className="relative flex flex-col min-h-[100dvh] w-full max-w-[480px] mx-auto md:max-w-full md:flex-row bg-background overflow-x-hidden md:overflow-x-visible">
         {/* Sync status indicator — top-right, only visible when offline or syncing */}
         <div className="fixed top-3 right-4 z-50">
@@ -39,8 +41,9 @@ export default async function AppLayout({
         <TourPrompt />
         <NativeSetup />
         <BadgeUpdater />
-        <BottomNav />
+        <BottomDock />
       </div>
+    </QuickActionProvider>
     </CurrencyProvider>
     </SyncProvider>
     </TourProvider>

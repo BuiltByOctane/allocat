@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { TrendingUp } from "lucide-react";
+import { useCallback, useState } from "react";
+import { TrendingUp, PiggyBank } from "lucide-react";
+import { useRegisterQuickAction } from "@/lib/providers/QuickActionProvider";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { DonutChart } from "@/components/ui/charts/DonutChart";
@@ -167,6 +168,18 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
     setAddDefaultCategoryId(categoryId ?? null);
     setAddSheetOpen(true);
   }
+
+  // Quick-action dock: add an asset. Dock owns the haptic, so skip it here.
+  const openAddFromDock = useCallback(() => {
+    setAddDefaultCategoryId(null);
+    setAddSheetOpen(true);
+  }, []);
+  useRegisterQuickAction({
+    id: "net-worth",
+    label: "Add asset",
+    icon: PiggyBank,
+    onTrigger: openAddFromDock,
+  });
 
   // Shared header row
   const header = (
@@ -348,18 +361,6 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
 
       {/* Bottom spacer for mobile nav */}
       <div className="h-28 md:h-12" />
-
-      {/* FAB */}
-      <div className="fixed bottom-28 right-5 z-40 md:hidden">
-        <button
-          id="net-worth-add-btn"
-          onClick={() => openAddSheet()}
-          className="flex size-14 items-center justify-center rounded-full bg-[var(--pill)] text-[var(--pill-foreground)] shadow-lg shadow-black/20 active:scale-95 transition-transform"
-          aria-label="Add asset"
-        >
-          <span className="material-symbols-outlined text-[28px]">add</span>
-        </button>
-      </div>
 
       <AddAssetSheet
         open={addSheetOpen}

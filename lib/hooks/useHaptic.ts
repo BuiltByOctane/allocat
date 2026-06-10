@@ -61,6 +61,20 @@ function play(style: HapticStyle) {
   }
 }
 
+// Continuous selection feedback (iOS UISelectionFeedbackGenerator / Android
+// tick) — purpose-built for sliders & pickers. Call `selectionStart` once when
+// the gesture begins, `selectionChanged` on each step, `selectionEnd` on release.
+function nativeSelection(phase: "start" | "changed" | "end") {
+  if (Capacitor.isNativePlatform()) {
+    if (phase === "start") void Haptics.selectionStart().catch(() => {});
+    else if (phase === "changed") void Haptics.selectionChanged().catch(() => {});
+    else void Haptics.selectionEnd().catch(() => {});
+    return;
+  }
+  // Web fallback: a crisp tick on each step (start/end are silent).
+  if (phase === "changed") play("selection");
+}
+
 export function useHaptic() {
   return {
     /** Trigger haptic feedback (default: "light"). */
@@ -73,5 +87,11 @@ export function useHaptic() {
     success: () => play("success"),
     error: () => play("error"),
     selection: () => play("selection"),
+    /** Begin a continuous selection gesture (slider/picker). */
+    selectionStart: () => nativeSelection("start"),
+    /** One selection step — fire on each item crossed. */
+    selectionChanged: () => nativeSelection("changed"),
+    /** End the selection gesture. */
+    selectionEnd: () => nativeSelection("end"),
   };
 }

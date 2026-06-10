@@ -1,4 +1,5 @@
 import { getDB, type SyncQueueItem, type SyncTable } from "@/lib/db";
+import { reconcileInsertReplacement } from "@/lib/sync/reconcile";
 import {
   addBudgetCategory,
   updateBudgetTotal,
@@ -489,8 +490,16 @@ export class SyncEngine {
   ): Promise<void> {
     const db = getDB();
     const tbl = db.table(table);
+    // Read the local row first: it may carry optimistic state the user advanced
+    // after the optimistic insert (e.g. an sms_transaction categorized before
+    // its INSERT synced) that the server's INSERT response predates.
+    const local = (await tbl.get(tempId)) as
+      | Record<string, unknown>
+      | undefined;
     await tbl.delete(tempId);
-    await tbl.put({ ...serverRecord, id: realId });
+    await tbl.put(
+      reconcileInsertReplacement(table, local, serverRecord, realId)
+    );
   }
 
   private async rollback(item: SyncQueueItem): Promise<void> {

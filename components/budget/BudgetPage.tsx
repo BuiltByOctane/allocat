@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Drawer } from "vaul";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Receipt } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useHaptic } from "@/lib/hooks/useHaptic";
+import { useRegisterQuickAction } from "@/lib/providers/QuickActionProvider";
+import QuickSpendInput from "@/components/dashboard/QuickSpendInput";
 import { useAddBudgetCategory, useUpdateBudgetTotal, budgetKey } from "@/lib/hooks/useBudget";
 import { DASHBOARD_KEY } from "@/lib/hooks/useDashboard";
 import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
@@ -57,6 +60,15 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [isSetupOpen, setIsSetupOpen] = useState(false);
+  const [spendOpen, setSpendOpen] = useState(false);
+
+  // Quick-action dock: log an expense against a budget item (when categories exist).
+  const openSpend = useCallback(() => setSpendOpen(true), []);
+  useRegisterQuickAction(
+    data.categories.length > 0
+      ? { id: "budget", label: "Log expense", icon: Receipt, onTrigger: openSpend }
+      : null,
+  );
 
   const totalAllocated = data.categories.reduce((s, c) => s + c.allocated, 0);
   const totalSpent = data.categories.reduce((s, c) => s + c.spent, 0);
@@ -264,18 +276,6 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
       {/* Bottom spacer for mobile nav */}
       <div className="h-28 md:h-12" />
 
-      {/* FAB */}
-      <div className="fixed bottom-28 right-5 z-40 md:hidden">
-        <button
-          id="budget-fab-add"
-          type="button"
-          onClick={openAddCategory}
-          className="flex size-14 items-center justify-center rounded-full bg-[var(--pill)] text-[var(--pill-foreground)] shadow-lg shadow-black/20 active:scale-95 transition-transform"
-        >
-          <span className="material-symbols-outlined text-[28px]">add</span>
-        </button>
-      </div>
-
       <BudgetSetupSheet
         isOpen={isSetupOpen}
         onClose={() => setIsSetupOpen(false)}
@@ -356,6 +356,28 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
                 </button>
               </div>
             </form>
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
+
+      {/* Quick-log expense sheet (opened from the dock button) */}
+      <Drawer.Root open={spendOpen} onOpenChange={setSpendOpen}>
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
+          <Drawer.Content
+            aria-describedby="quick-spend-description"
+            className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none max-h-[90dvh]"
+          >
+            <div className="flex justify-center pt-3 pb-1 shrink-0">
+              <div className="w-9 h-1 bg-border rounded-full" />
+            </div>
+            <Drawer.Title className="sr-only">Log expense</Drawer.Title>
+            <p id="quick-spend-description" className="sr-only">
+              Pick a category and item, then enter an amount to log a spend.
+            </p>
+            <div className="overflow-y-auto flex-1 px-6 pt-2 pb-8">
+              <QuickSpendInput categories={data.categories} />
+            </div>
           </Drawer.Content>
         </Drawer.Portal>
       </Drawer.Root>

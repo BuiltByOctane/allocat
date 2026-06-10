@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import dynamic from "next/dynamic";
-import ChatFAB from "@/components/ai/ChatFAB";
+import { useRegisterQuickAction } from "@/lib/providers/QuickActionProvider";
 
 // Lazy-load the heavy drawer so it doesn't block initial page render
 const ChatDrawer = dynamic(() => import("@/components/ai/ChatDrawer"), {
@@ -11,11 +11,15 @@ const ChatDrawer = dynamic(() => import("@/components/ai/ChatDrawer"), {
 
 export default function AIOverlay() {
   const [open, setOpen] = useState(false);
+  const openChat = useCallback(() => setOpen(true), []);
 
-  return (
-    <>
-      <ChatFAB onClick={() => setOpen(true)} />
-      <ChatDrawer open={open} onClose={() => setOpen(false)} />
-    </>
-  );
+  // Dashboard's quick-action dock button opens AlloCat AI chat.
+  useRegisterQuickAction({
+    id: "dashboard",
+    label: "Open AlloCat AI",
+    icon: "paw",
+    onTrigger: openChat,
+  });
+
+  return <ChatDrawer open={open} onClose={() => setOpen(false)} />;
 }

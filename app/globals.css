@@ -77,8 +77,8 @@
     --chip: #ffffff;
     --pill: #111113;
     --pill-foreground: #ffffff;
-    --navpill: #111113;
-    --navpill-foreground: #ffffff;
+    --navpill: var(--accent);
+    --navpill-foreground: var(--accent-ink);
     --nav-circle: #ffffff;
     --nav-circle-foreground: #7e7e86;
     --dock: rgba(244, 244, 248, 0.55);

@@ -50,12 +50,16 @@ export function SegmentedControl<T extends string>({
               onClick={() => select(opt.value)}
               className={`flex-1 shrink-0 px-3 py-2 rounded-xl text-[11.5px] font-semibold transition-colors ${
                 active
-                  ? "bg-[var(--pill)] text-[var(--pill-foreground)] border border-transparent"
-                  : "bg-card text-muted-foreground border border-border hover:text-foreground"
+                  ? "bg-accent text-[var(--accent-ink)] border border-transparent"
+                  : "bg-card text-foreground border border-border hover:bg-muted"
               }`}
             >
               {opt.label}
-              {opt.count !== undefined && ` ${opt.count}`}
+              {opt.count !== undefined && (
+                <span className={active ? "ml-1 opacity-70" : "ml-1 opacity-50"}>
+                  {opt.count}
+                </span>
+              )}
             </button>
           );
         })}

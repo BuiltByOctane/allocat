@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutGroup } from "motion/react";
+import { LayoutGroup, motion } from "motion/react";
 import BottomNav from "@/components/BottomNav";
 import QuickActionDock from "@/components/QuickActionDock";
 
@@ -12,10 +12,19 @@ import QuickActionDock from "@/components/QuickActionDock";
  * The FAB registers in an effect (after hydration), so it appears a beat after
  * the nav. LayoutGroup coordinates the two so the nav *slides* to its shifted
  * position while the FAB scales in — instead of a sudden recenter jump.
+ *
+ * `layoutScroll layoutRoot` is essential: the dock is `position: fixed` but the
+ * page scrolls at the document level (mobile). Without them, Motion resolves the
+ * nav/pill layout boxes against the document scroll offset — so after a nav tap
+ * resets the scroll to top, the whole dock animates in "from below" by the
+ * scroll delta. `layoutScroll` makes Motion measure children relative to this
+ * (scroll-independent) fixed element, and `layoutRoot` marks it as the root.
  */
 export default function BottomDock() {
   return (
-    <div
+    <motion.div
+      layoutScroll
+      layoutRoot
       className="md:hidden fixed left-1/2 -translate-x-1/2 z-50 flex items-center gap-2"
       style={{ bottom: "calc(14px + env(safe-area-inset-bottom))" }}
     >
@@ -23,6 +32,6 @@ export default function BottomDock() {
         <BottomNav />
         <QuickActionDock />
       </LayoutGroup>
-    </div>
+    </motion.div>
   );
 }

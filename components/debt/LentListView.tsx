@@ -540,9 +540,6 @@ export default function LentListView({ lents, onBack }: { lents: Lent[]; onBack:
         </>
       )}
 
-      {/* Bottom spacer for mobile nav */}
-      <div className="h-28 md:h-12" />
-
       {/* ── Sheets ────────────────────────────────────────────────── */}
       <LentDetailSheet
         mode={sheetMode}

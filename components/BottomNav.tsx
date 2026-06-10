@@ -101,7 +101,7 @@ export default function BottomNav() {
     }
     scrubbingRef.current = true;
     setScrubbing(true);
-    haptic.medium();
+    haptic.light();
     haptic.selectionStart();
     const r = nav.getBoundingClientRect();
     activeIdx.current = zoneFor(lastX.current - r.left, r.width);
@@ -162,8 +162,8 @@ export default function BottomNav() {
       onPointerUp={endGesture}
       onPointerCancel={endGesture}
       animate={reduce ? undefined : { scale: scrubbing ? 1.04 : 1 }}
-      className="flex min-h-14 items-center gap-[5px] p-1.5 rounded-nav glass-dock"
-      style={{ touchAction: "none", willChange: "transform" }}
+      className="flex min-h-14 items-center gap-[5px] p-1.5 rounded-nav glass-dock backdrop-filter backdrop-blur-sm bg-opacity-0"
+      style={{ touchAction: "none" }}
     >
       {navItems.map((item) => {
         const isActive = active === item.href;

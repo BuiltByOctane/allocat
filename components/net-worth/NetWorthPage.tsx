@@ -207,7 +207,6 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
           {header}
           <NetWorthEmptyState onAddAsset={() => openAddSheet()} />
         </div>
-        <div className="h-28 md:h-12" />
         <AddAssetSheet open={addSheetOpen} onClose={() => setAddSheetOpen(false)} />
       </>
     );
@@ -358,9 +357,6 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
           })}
         </div>
       </div>
-
-      {/* Bottom spacer for mobile nav */}
-      <div className="h-28 md:h-12" />
 
       <AddAssetSheet
         open={addSheetOpen}

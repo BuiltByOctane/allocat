@@ -43,7 +43,7 @@ export default function QuickActionDock() {
           exit={{ opacity: 0, scale: 0.4 }}
           whileTap={{ scale: 0.92 }}
           transition={spring}
-          className="md:hidden flex items-center justify-center size-14 rounded-full glass-dock text-foreground"
+          className="md:hidden flex items-center justify-center size-14 rounded-full glass-dock backdrop-filter backdrop-blur-sm bg-opacity-0 text-foreground"
         >
           {action.icon === "paw" ? (
             <span aria-hidden className="size-7 bg-current" style={PAW_MASK} />

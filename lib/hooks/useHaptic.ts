@@ -24,10 +24,28 @@ const PATTERNS: Record<HapticStyle, number | number[]> = {
   heavy: 35,
   success: [15, 60, 15],
   error: [20, 40, 20, 40, 20],
-  selection: 8,
+  selection: 4,
+};
+
+const isAndroid = () => Capacitor.getPlatform() === "android";
+
+// Android's impact/notification/selection generators fire heavy predefined
+// effects (EFFECT_HEAVY_CLICK etc.) that feel too strong. Use short explicit
+// vibrations instead for a mild tick. iOS keeps its crisp Taptic generators.
+const ANDROID_MS: Record<HapticStyle, number> = {
+  light: 10,
+  medium: 16,
+  heavy: 24,
+  success: 16,
+  error: 28,
+  selection: 7,
 };
 
 function nativeHaptic(style: HapticStyle) {
+  if (isAndroid()) {
+    void Haptics.vibrate({ duration: ANDROID_MS[style] }).catch(() => {});
+    return;
+  }
   switch (style) {
     case "light":
     case "selection":
@@ -66,6 +84,12 @@ function play(style: HapticStyle) {
 // the gesture begins, `selectionChanged` on each step, `selectionEnd` on release.
 function nativeSelection(phase: "start" | "changed" | "end") {
   if (Capacitor.isNativePlatform()) {
+    // Android: mild short tick per step (the native selection generator is too
+    // strong); start/end stay silent. iOS uses its dedicated selection Taptic.
+    if (isAndroid()) {
+      if (phase === "changed") void Haptics.vibrate({ duration: ANDROID_MS.selection }).catch(() => {});
+      return;
+    }
     if (phase === "start") void Haptics.selectionStart().catch(() => {});
     else if (phase === "changed") void Haptics.selectionChanged().catch(() => {});
     else void Haptics.selectionEnd().catch(() => {});

@@ -147,7 +147,6 @@ export default function ActivityPage({ overrideLogs }: ActivityPageProps) {
         ))}
       </div>
 
-      <div className="h-28 md:h-12" />
 
       <ActivityDetailSheet
         log={selectedLog}

@@ -413,9 +413,6 @@ export default function DebtPage({ data }: { data: Debt[] }) {
         </button>
       </div>
 
-      {/* Bottom spacer for mobile nav */}
-      <div className="h-28 md:h-12" />
-
       {/* Sheets & Modals */}
       <DebtPaymentSheet
         open={paymentOpen}

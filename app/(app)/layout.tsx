@@ -29,7 +29,10 @@ export default async function AppLayout({
           <SyncStatusBadge />
         </div>
         <SidebarNav />
-        <main className="flex-1 overflow-y-auto pb-28 md:pb-0 no-scrollbar md:h-screen w-full relative">
+        {/* Mobile scrolls at the document level (not an inner overflow container)
+            so the fixed glass dock's backdrop-filter can actually sample the
+            page content behind it. Desktop keeps its own h-screen scroller. */}
+        <main className="flex-1 pb-28 md:pb-0 no-scrollbar md:h-screen md:overflow-y-auto w-full relative">
           <PullToRefresh>
             <div className="md:max-w-5xl md:mx-auto w-full pb-10">
               {children}

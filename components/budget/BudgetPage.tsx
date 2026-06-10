@@ -272,10 +272,7 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
           </div>
         )}
       </div>
-
-      {/* Bottom spacer for mobile nav */}
-      <div className="h-28 md:h-12" />
-
+      
       <BudgetSetupSheet
         isOpen={isSetupOpen}
         onClose={() => setIsSetupOpen(false)}

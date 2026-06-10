@@ -320,8 +320,6 @@ export default function ProfilePage() {
           Built by © 2026 Octane Innovations
         </p>
       </footer>
-
-      <div className="h-28 md:h-12" />
     </div>
   );
 }

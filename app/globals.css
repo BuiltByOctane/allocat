@@ -81,7 +81,9 @@
     --navpill-foreground: #ffffff;
     --nav-circle: #ffffff;
     --nav-circle-foreground: #7e7e86;
-    --dock: rgba(232, 232, 236, 0.82);
+    --dock: rgba(244, 244, 248, 0.55);
+    --dock-border: rgba(255, 255, 255, 0.6);
+    --dock-highlight: rgba(255, 255, 255, 0.65);
 
     /* Semantic */
     --pos: #3f7a5c;
@@ -130,7 +132,9 @@
     --navpill-foreground: #15170a;
     --nav-circle: #26262c;
     --nav-circle-foreground: #a2a2aa;
-    --dock: rgba(36, 36, 42, 0.85);
+    --dock: rgba(30, 30, 36, 0.5);
+    --dock-border: rgba(255, 255, 255, 0.12);
+    --dock-highlight: rgba(255, 255, 255, 0.16);
 
     /* Semantic */
     --pos: #6fae8f;
@@ -248,9 +252,14 @@ input[type="date"] {
 /* Glassy floating-dock surface + shadow (bottom nav) */
 .glass-dock {
   background: var(--dock);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid var(--dock-border);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.18),
+    0 2px 8px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 var(--dock-highlight),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.04);
 }
 
 /* Faint repeating cat-paw watermark for the lime hero card */

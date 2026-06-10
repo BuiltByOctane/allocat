@@ -691,9 +691,6 @@ function CategoryDetailContent({
         })}
       </div>
 
-      {/* Bottom spacer */}
-      <div className="h-28 md:h-12" />
-
       <EmojiPickerModal
         isOpen={isPickerOpen}
         onClose={() => setIsPickerOpen(false)}

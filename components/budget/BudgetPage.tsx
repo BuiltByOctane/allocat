@@ -72,9 +72,10 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
 
   const totalAllocated = data.categories.reduce((s, c) => s + c.allocated, 0);
   const totalSpent = data.categories.reduce((s, c) => s + c.spent, 0);
-  const totalRemaining = totalAllocated - totalSpent;
+  const leftOfBudget = data.totalBudget - totalSpent;
+  const overspent = leftOfBudget < 0;
   const unallocatedBudget = data.totalBudget - totalAllocated;
-  const spentPct = totalAllocated > 0 ? Math.round((totalSpent / totalAllocated) * 100) : 0;
+  const spentPct = data.totalBudget > 0 ? Math.round((totalSpent / data.totalBudget) * 100) : 0;
 
   function handleMonthChange(newMonthIndex: number) {
     router.push(`?month=${newMonthIndex + 1}&year=${defaultYear}`);
@@ -160,12 +161,12 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
           <div id="budget-spend-meter">
             <div className="flex justify-between items-end">
               <div>
-                <span className="t-label text-muted-foreground">Spent</span>
+                <span className="t-label text-muted-foreground">{overspent ? "Over" : "Left"}</span>
                 <div
                   className="figure text-[32px] mt-1"
-                  style={{ color: totalRemaining < 0 ? "var(--neg)" : "var(--foreground)" }}
+                  style={{ color: overspent ? "var(--neg)" : "var(--foreground)" }}
                 >
-                  <CurrencyText value={totalSpent} />
+                  <CurrencyText value={Math.abs(leftOfBudget)} />
                 </div>
               </div>
               <div className="text-right">
@@ -179,15 +180,24 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
               <p className="mt-2 text-[11px] text-neg text-right">{budgetTotalError}</p>
             )}
             <div id="budget-tick-ruler" className="mt-3.5">
-              <Progress value={Math.min(spentPct, 100)} state={totalSpent > totalAllocated ? "over" : "normal"} />
+              <Progress value={Math.min(spentPct, 100)} state={overspent ? "over" : "normal"} />
             </div>
             <div className="text-[11px] font-semibold text-muted-foreground mt-2.5">
               {spentPct}% used ·{" "}
               <span className="text-foreground">
-                <CurrencyText value={Math.abs(unallocatedBudget)} />{" "}
-                {unallocatedBudget < 0 ? "over" : "still free"}
+                <CurrencyText value={totalSpent} /> spent
               </span>
             </div>
+            {unallocatedBudget !== 0 && (
+              <div
+                className={`text-[11px] font-semibold mt-1 ${
+                  unallocatedBudget < 0 ? "text-neg" : "text-muted-foreground"
+                }`}
+              >
+                <CurrencyText value={Math.abs(unallocatedBudget)} />{" "}
+                {unallocatedBudget < 0 ? "over-allocated" : "not allocated yet"}
+              </div>
+            )}
           </div>
         </Card>
 

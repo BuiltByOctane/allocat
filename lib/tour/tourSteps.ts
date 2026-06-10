@@ -69,9 +69,9 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
     {
       element: "#budget-hero-section",
       popover: {
-        title: "Total Budget",
+        title: "Budget Left",
         description:
-          "Your total income for the month. Tap the large number to edit it. Below shows how much is allocated across categories and what's still free to assign.",
+          "How much of your monthly budget is still left to spend. Tap the smaller number on the right to edit your total budget.",
         side: "bottom",
         align: "start",
       },
@@ -81,7 +81,7 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       popover: {
         title: "Spend Meter",
         description:
-          "Shows total spent vs total allocated across all categories. The tick ruler fills as you log expenses — taller ticks mark 25% milestones.",
+          "Shows how much of your total budget you've spent. The tick ruler fills as you log expenses — taller ticks mark 25% milestones.",
         side: "top",
         align: "start",
       },

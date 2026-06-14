@@ -4,7 +4,11 @@ import { getDB } from "@/lib/db";
 import { PROFILE_KEY } from "@/lib/hooks/useProfile";
 import { startTrial } from "@/lib/actions/subscription";
 import { getDeviceId } from "@/lib/native/deviceId";
-import { purchase, syncEntitlementToServer } from "@/lib/native/adapty";
+import {
+  purchase,
+  restorePurchases,
+  syncEntitlementToServer,
+} from "@/lib/native/adapty";
 
 /**
  * Start the opt-in 40-day free trial. Calls the server action (source of truth),
@@ -51,6 +55,26 @@ export function useStartCheckout() {
     mutationFn: async (plan: "monthly" | "yearly") => {
       if (!Capacitor.isNativePlatform()) return { ok: false as const };
       const ok = await purchase(plan);
+      if (ok) await syncEntitlementToServer();
+      return { ok };
+    },
+    onSuccess: (res) => {
+      if (res.ok) qc.invalidateQueries({ queryKey: PROFILE_KEY });
+    },
+  });
+}
+
+/**
+ * Restore prior purchases (native only) — e.g. reinstall or new device. On a
+ * successful restore, reconciles entitlement to the server and refreshes.
+ */
+export function useRestorePurchases() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!Capacitor.isNativePlatform()) return { ok: false as const };
+      const ok = await restorePurchases();
       if (ok) await syncEntitlementToServer();
       return { ok };
     },

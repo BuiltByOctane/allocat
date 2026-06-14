@@ -10,6 +10,7 @@ import AvatarPickerSheet from "@/components/profile/AvatarPickerSheet";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
 import AccentSelector from "@/components/profile/AccentSelector";
+import SubscriptionCard from "@/components/profile/SubscriptionCard";
 import { useRegisterQuickAction } from "@/lib/providers/QuickActionProvider";
 import CurrencySelector from "@/components/profile/CurrencySelector";
 import NotificationSoundSelector from "@/components/profile/NotificationSoundSelector";
@@ -109,6 +110,9 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* Subscription group */}
+      <SubscriptionCard />
 
       {/* Account group */}
       <p className="t-label text-muted-foreground mt-1 ml-1">Account</p>

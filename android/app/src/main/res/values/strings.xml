@@ -3,5 +3,5 @@
     <string name="app_name">AlloCat</string>
     <string name="title_activity_main">AlloCat</string>
     <string name="package_name">com.octane.allocat</string>
-    <string name="custom_url_scheme">app.allocat.mobile</string>
+    <string name="custom_url_scheme">com.octane.allocat</string>
 </resources>

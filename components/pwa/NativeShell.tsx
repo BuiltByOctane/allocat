@@ -9,7 +9,7 @@ import type { PluginListenerHandle } from "@capacitor/core";
  *  - Android hardware/gesture back button navigates browser history instead of
  *    closing the app, exiting only when there's nowhere left to go back to.
  *  - OAuth deep-link: Google sign-in opens in a Custom Tab and returns via the
- *    app.allocat.mobile://auth/callback?code=... scheme. We close the tab and
+ *    com.octane.allocat://auth/callback?code=... scheme. We close the tab and
  *    route the code through the in-WebView /auth/callback so the server exchange
  *    runs in the WebView cookie jar (where the PKCE verifier lives).
  */
@@ -66,7 +66,7 @@ export function NativeShell() {
       });
 
       urlHandle = await App.addListener("appUrlOpen", async ({ url }) => {
-        if (!url.startsWith("app.allocat.mobile://auth/callback")) return;
+        if (!url.startsWith("com.octane.allocat://auth/callback")) return;
         const { Browser } = await import("@capacitor/browser");
         void Browser.close();
 

@@ -29,9 +29,16 @@ import org.json.JSONObject;
 @CapacitorPlugin(
     name = "SmsReader",
     permissions = {
+        // Only RECEIVE_SMS is declared in AndroidManifest (the app never reads the
+        // existing inbox; READ_SMS is intentionally absent for Play-policy
+        // compliance). The alias must list ONLY declared permissions: including
+        // READ_SMS here meant getPermissionState("sms") could never be GRANTED (an
+        // undeclared permission is auto-denied), so requestPermission always
+        // resolved granted=false — the "Allow SMS access" button never flipped to
+        // "Granted" and the prompt appeared to do nothing.
         @Permission(
             alias = "sms",
-            strings = { Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS }
+            strings = { Manifest.permission.RECEIVE_SMS }
         )
     }
 )

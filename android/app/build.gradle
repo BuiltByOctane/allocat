@@ -1,4 +1,4 @@
-i have apply plugin: 'com.android.application'
+apply plugin: 'com.android.application'
 
 // Release signing: provide a keystore.properties (gitignored) at android/app/ with
 // storeFile / storePassword / keyAlias / keyPassword to sign release builds. When

@@ -15,7 +15,15 @@ const config: CapacitorConfig = {
   // Required by the CLI even in remote mode (no assets are bundled).
   webDir: "public",
   server: {
-    url: process.env.CAP_SERVER_URL || "https://allocat.xyz/auth/login",
+    // /dashboard is the offline-first landing:
+    //   - online + authed  → app loads normally from this URL
+    //   - online + unauthed → server middleware (proxy.ts) redirects to /auth/login
+    //   - offline + authed  → Serwist NetworkFirst serves the cached /dashboard
+    //                         document shell; React Query re-hydrates from IndexedDB
+    // Starting at /auth/login stranded offline users on the login screen because
+    // the login page has no meaningful offline fallback and they could never
+    // navigate to their cached, IndexedDB-backed app.
+    url: process.env.CAP_SERVER_URL || "https://allocat.xyz/dashboard",
     androidScheme: "https",
     // Allow cleartext only when overriding with an http LAN dev URL.
     cleartext: (process.env.CAP_SERVER_URL ?? "").startsWith("http://"),

@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- tools:replace overrides Adapty SDK's backup attributes (it sets
+         fullBackupContent=@xml/adapty_backup_rules) so our no-backup policy wins. -->
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        tools:replace="android:allowBackup,android:fullBackupContent"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -63,4 +68,10 @@
          caught via the broadcast receiver and parsed on-device. The app never
          reads the existing SMS inbox, so READ_SMS is intentionally NOT declared. -->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
+
+    <!-- Adapty pulls in the advertising-ID permission for attribution. AlloCat
+         runs no ads and does not use the advertising ID, so strip it from the
+         merged manifest — lets us answer "No" to Play's advertising-ID question. -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID"
+        tools:node="remove" />
 </manifest>

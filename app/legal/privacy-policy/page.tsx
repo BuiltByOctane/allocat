@@ -112,10 +112,15 @@ export default function PrivacyPolicyPage() {
       <Section title="Your choices and data deletion">
         <p>
           You can withdraw SMS or notification permission at any time in Android
-          settings; the related features simply stop. You may delete your account
-          and all associated data by contacting us at the address below or using
-          the in-app account-deletion option where available. Deleting the app also
-          removes all locally stored data, including any raw SMS text.
+          settings; the related features simply stop. You may permanently delete
+          your account and all associated data in-app under{" "}
+          <strong>Profile → Delete account</strong>, or by following the steps on
+          our{" "}
+          <Link className="underline" href="/legal/delete-account">
+            account-deletion page
+          </Link>
+          . Deleting the app also removes all locally stored data, including any
+          raw SMS text.
         </p>
       </Section>
 

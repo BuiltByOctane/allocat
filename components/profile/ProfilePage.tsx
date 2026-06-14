@@ -14,7 +14,8 @@ import { useRegisterQuickAction } from "@/lib/providers/QuickActionProvider";
 import CurrencySelector from "@/components/profile/CurrencySelector";
 import NotificationSoundSelector from "@/components/profile/NotificationSoundSelector";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
-import { signOut } from "@/lib/actions/auth";
+import { signOut, deleteAccount } from "@/lib/actions/auth";
+import { clearDB } from "@/lib/db/hydrate";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { useTour } from "@/lib/tour/useTour";
 import {
@@ -48,6 +49,9 @@ export default function ProfilePage() {
   const [isNative, setIsNative] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [avatarOpen, setAvatarOpen] = useState(false);
   useEffect(() => {
     setConfirm(confirmAutoAllocate());
@@ -286,6 +290,18 @@ export default function ProfilePage() {
         Logout
       </button>
 
+      {/* Delete account (permanent) — required by Play account-deletion policy */}
+      <button
+        type="button"
+        onClick={() => {
+          setDeleteError(null);
+          setDeleteOpen(true);
+        }}
+        className="w-full text-center text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground underline underline-offset-4 hover:text-destructive transition-colors py-1"
+      >
+        Delete account
+      </button>
+
       <ConfirmDrawer
         isOpen={logoutOpen}
         onClose={() => setLogoutOpen(false)}
@@ -297,6 +313,38 @@ export default function ProfilePage() {
         title="Log out?"
         description="You'll need to sign in again to access your account."
         confirmText={loggingOut ? "Logging out…" : "Log out"}
+        cancelText="Cancel"
+      />
+
+      <ConfirmDrawer
+        isOpen={deleteOpen}
+        onClose={() => !deleting && setDeleteOpen(false)}
+        onConfirm={async () => {
+          if (deleting) return;
+          setDeleting(true);
+          setDeleteError(null);
+          const res = await deleteAccount();
+          if ("error" in res) {
+            setDeleteError(res.error);
+            setDeleting(false);
+            return;
+          }
+          // Account gone server-side — wipe the local cache, then hard-navigate
+          // so all in-memory React Query / provider state is dropped too.
+          try {
+            await clearDB();
+          } catch {
+            /* ignore — best effort */
+          }
+          window.location.href = "/auth/login";
+        }}
+        title="Delete account?"
+        description={
+          deleteError
+            ? `Couldn't delete: ${deleteError}`
+            : "This permanently deletes your account and all your data — budgets, goals, debts, assets and transactions. This cannot be undone."
+        }
+        confirmText={deleting ? "Deleting…" : "Delete forever"}
         cancelText="Cancel"
       />
 

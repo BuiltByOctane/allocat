@@ -1,4 +1,4 @@
-package app.allocat.mobile;
+package com.octane.allocat;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;

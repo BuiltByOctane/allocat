@@ -1,4 +1,4 @@
-package app.allocat.mobile;
+package com.octane.allocat;
 
 import android.Manifest;
 import android.content.Context;

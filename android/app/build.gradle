@@ -12,9 +12,7 @@ if (hasKeystore) {
 }
 
 android {
-    // namespace = internal Java/code package (independent of the Play identity).
-    // Kept as-is so no source files move; only the Play-facing applicationId changes.
-    namespace = "app.allocat.mobile"
+    namespace = "com.octane.allocat"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "com.octane.allocat"

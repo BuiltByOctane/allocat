@@ -1,4 +1,4 @@
-package app.allocat.mobile;
+package com.octane.allocat;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;

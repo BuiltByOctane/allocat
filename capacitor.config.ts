@@ -10,7 +10,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
  *   CAP_SERVER_URL=http://192.168.1.20:3000 npx cap sync
  */
 const config: CapacitorConfig = {
-  appId: "app.allocat.mobile",
+  appId: "com.octane.allocat",
   appName: "AlloCat",
   // Required by the CLI even in remote mode (no assets are bundled).
   webDir: "public",

@@ -1,4 +1,4 @@
-package app.allocat.mobile;
+package com.octane.allocat;
 
 import android.content.Context;
 import android.content.SharedPreferences;

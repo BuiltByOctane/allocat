@@ -137,6 +137,8 @@ export function useUpdateBudgetTotal() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
       qc.invalidateQueries({ queryKey: ["budget"] });
+      // The category detail screen shows total budget (for over-allocation math).
+      qc.invalidateQueries({ queryKey: ["categoryData"] });
     },
   });
 }
@@ -226,6 +228,8 @@ export function useQuickLogSpend() {
       qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
       qc.invalidateQueries({ queryKey: ["budget"] });
       qc.invalidateQueries({ queryKey: ["categoryItems"] });
+      // A logged spend bumps the item's actual on the category detail screen too.
+      qc.invalidateQueries({ queryKey: ["categoryData"] });
     },
   });
 }

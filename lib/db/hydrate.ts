@@ -13,6 +13,62 @@ export async function isTableStale(table: string): Promise<boolean> {
 }
 
 /**
+ * Build, per table, the set of record ids that have un-synced local mutations
+ * in flight — so a blanket server pull won't clobber optimistic-but-unsynced
+ * state.
+ *
+ * The classic bug: the user allocates an `sms_transactions` row (status set to
+ * `categorized` optimistically) but the CATEGORIZE op hasn't drained yet; a
+ * hydrate then bulkPuts the server row (still `pending`) and reverts the local
+ * row, popping it back into the pending list until the next reconcile.
+ *
+ * A record is "protected" when a `pending`/`processing` sync_queue item targets
+ * it. We bucket by `item.table` and protect both:
+ *   - `item.recordId` (the local IDB id — a `temp_` id for un-flushed INSERTs,
+ *     or a real id for UPDATE/CATEGORIZE/etc.), and
+ *   - for a `temp_` recordId, its already-mapped real id (from `id_map`) — the
+ *     INSERT may have synced (temp→real swapped in IDB) while a follow-up op
+ *     for the same row is still queued under the temp recordId.
+ */
+async function buildProtectedIds(): Promise<Map<string, Set<string>>> {
+  const db = getDB();
+  const protectedByTable = new Map<string, Set<string>>();
+
+  const pending = await db.sync_queue
+    .where("status")
+    .anyOf(["pending", "processing"])
+    .toArray();
+
+  for (const item of pending) {
+    const set = protectedByTable.get(item.table) ?? new Set<string>();
+    set.add(item.recordId);
+    if (item.recordId.startsWith("temp_")) {
+      const mapped = await db.id_map.get(item.recordId);
+      if (mapped?.realId) set.add(mapped.realId);
+    }
+    protectedByTable.set(item.table, set);
+  }
+
+  return protectedByTable;
+}
+
+/**
+ * Drop server rows whose id is protected (an un-synced local mutation is in
+ * flight for it). We keep the local optimistic row untouched — the pending sync
+ * will reconcile it — instead of letting the server pull overwrite it. Local
+ * `temp_` rows are never present in the server payload, so they're inherently
+ * preserved here too.
+ */
+function filterProtected<T extends { id: string }>(
+  rows: T[] | null | undefined,
+  protectedIds: Set<string> | undefined,
+): T[] {
+  if (!rows) return [];
+  if (!protectedIds || protectedIds.size === 0) return rows;
+  return rows.filter((r) => !protectedIds.has(r.id));
+}
+
+/**
  * Fetches ALL tables from Supabase for the current user and bulk-writes into IDB.
  * Called once at app startup (SyncProvider mount). Uses bulkPut for upsert semantics.
  *
@@ -92,22 +148,40 @@ export async function hydrateAllTables(): Promise<void> {
 
   const now = Date.now();
 
+  // Protect optimistic-but-unsynced local rows from being clobbered by the
+  // blanket server pull (see buildProtectedIds). Rows whose id has an in-flight
+  // mutation are filtered OUT of the bulkPut below; the pending sync reconciles
+  // them. (temp_ rows aren't in the server payload, so they survive regardless.)
+  const protectedIds = await buildProtectedIds();
+  const keep = <T extends { id: string }>(
+    table: string,
+    rows: T[] | null | undefined,
+  ): T[] => filterProtected(rows, protectedIds.get(table));
+
   // Bulk-upsert all tables in parallel
   await Promise.all([
     profiles?.length ? db.profiles.bulkPut(profiles) : Promise.resolve(),
-    budgets?.length ? db.budgets.bulkPut(budgets) : Promise.resolve(),
-    categories?.length ? db.categories.bulkPut(categories) : Promise.resolve(),
-    budgetItems?.length
-      ? db.budget_items.bulkPut(budgetItems)
+    budgets?.length
+      ? db.budgets.bulkPut(keep("budgets", budgets))
       : Promise.resolve(),
-    assets?.length ? db.assets.bulkPut(assets) : Promise.resolve(),
+    categories?.length
+      ? db.categories.bulkPut(keep("categories", categories))
+      : Promise.resolve(),
+    budgetItems?.length
+      ? db.budget_items.bulkPut(keep("budget_items", budgetItems))
+      : Promise.resolve(),
+    assets?.length
+      ? db.assets.bulkPut(keep("assets", assets))
+      : Promise.resolve(),
     assetCategories?.length
-      ? db.asset_categories.bulkPut(assetCategories)
+      ? db.asset_categories.bulkPut(keep("asset_categories", assetCategories))
       : Promise.resolve(),
     assetValueHistory?.length
-      ? db.asset_value_history.bulkPut(assetValueHistory)
+      ? db.asset_value_history.bulkPut(
+          keep("asset_value_history", assetValueHistory),
+        )
       : Promise.resolve(),
-    debts?.length ? db.debts.bulkPut(debts) : Promise.resolve(),
+    debts?.length ? db.debts.bulkPut(keep("debts", debts)) : Promise.resolve(),
     reports?.length ? db.reports.bulkPut(reports) : Promise.resolve(),
     snapshots?.length
       ? db.net_worth_snapshots.bulkPut(snapshots)
@@ -117,10 +191,10 @@ export async function hydrateAllTables(): Promise<void> {
       ? db.activity_logs.bulkPut(activityLogs as any)
       : Promise.resolve(),
     merchantRules?.length
-      ? db.merchant_rules.bulkPut(merchantRules)
+      ? db.merchant_rules.bulkPut(keep("merchant_rules", merchantRules))
       : Promise.resolve(),
     smsTransactions?.length
-      ? db.sms_transactions.bulkPut(smsTransactions)
+      ? db.sms_transactions.bulkPut(keep("sms_transactions", smsTransactions))
       : Promise.resolve(),
   ]);
 
@@ -177,7 +251,10 @@ export async function refreshTableIfStale(
 
   const { data } = await query;
   if (data?.length) {
-    await db.table(table).bulkPut(data);
+    // Same protection as hydrateAllTables — never overwrite a row with an
+    // in-flight local mutation queued against it.
+    const protectedIds = (await buildProtectedIds()).get(table);
+    await db.table(table).bulkPut(filterProtected(data, protectedIds));
   }
   await db.sync_meta.put({ table, lastSynced: Date.now() });
 }
@@ -208,7 +285,10 @@ export async function forceRefreshTable(
   const db = getDB();
   const { data } = await supabase.from(table).select("*").eq("user_id", user.id);
   if (data?.length) {
-    await db.table(table).bulkPut(data);
+    // Same protection as hydrateAllTables — never overwrite a row with an
+    // in-flight local mutation queued against it.
+    const protectedIds = (await buildProtectedIds()).get(table);
+    await db.table(table).bulkPut(filterProtected(data, protectedIds));
   }
   await db.sync_meta.put({ table, lastSynced: Date.now() });
 }

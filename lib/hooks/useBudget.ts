@@ -114,6 +114,8 @@ export function useUpdateBudgetTotal() {
     onSuccess: (_data, { month, year }) => {
       qc.invalidateQueries({ queryKey: budgetKey(month, year) });
       qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
+      // The category detail screen shows total budget (for over-allocation math).
+      qc.invalidateQueries({ queryKey: ["categoryData"] });
     },
   });
 }
@@ -165,6 +167,8 @@ export function useAddBudgetCategory() {
     onSuccess: (_data, { month, year }) => {
       qc.invalidateQueries({ queryKey: budgetKey(month, year) });
       qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
+      // A new category changes "otherAllocated" on every category detail screen.
+      qc.invalidateQueries({ queryKey: ["categoryData"] });
     },
   });
 }
@@ -197,6 +201,8 @@ export function useUpdateCategoryAllocation() {
     },
     onSuccess: (_data, { month, year }) => {
       qc.invalidateQueries({ queryKey: budgetKey(month, year) });
+      // The category detail screen reads the allocation too.
+      qc.invalidateQueries({ queryKey: ["categoryData"] });
     },
   });
 }
@@ -229,6 +235,8 @@ export function useUpdateCategoryIcon() {
     },
     onSuccess: (_data, { month, year }) => {
       qc.invalidateQueries({ queryKey: budgetKey(month, year) });
+      // The category detail screen reads the icon too.
+      qc.invalidateQueries({ queryKey: ["categoryData"] });
     },
   });
 }
@@ -261,6 +269,8 @@ export function useUpdateCategoryColor() {
     },
     onSuccess: (_data, { month, year }) => {
       qc.invalidateQueries({ queryKey: budgetKey(month, year) });
+      // The category detail screen reads the color too.
+      qc.invalidateQueries({ queryKey: ["categoryData"] });
     },
   });
 }
@@ -317,6 +327,9 @@ export function useAddBudgetItem() {
     },
     onSuccess: (_data, { month, year }) => {
       qc.invalidateQueries({ queryKey: budgetKey(month, year) });
+      // A new item shows on the category detail screen + Quick-Spend dropdown.
+      qc.invalidateQueries({ queryKey: ["categoryData"] });
+      qc.invalidateQueries({ queryKey: ["categoryItems"] });
     },
   });
 }
@@ -400,6 +413,9 @@ export function useUpdateBudgetItem() {
     onSuccess: async (_result, { month, year, updates }) => {
       qc.invalidateQueries({ queryKey: budgetKey(month, year) });
       qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
+      // The category detail screen + Quick-Spend dropdown read this item too.
+      qc.invalidateQueries({ queryKey: ["categoryData"] });
+      qc.invalidateQueries({ queryKey: ["categoryItems"] });
       // Force refetch unconditionally on actual_amount changes so cross-section
       // caches reflect the cascade — covers legacy IDB rows where link_type
       // hadn't been rewritten yet.
@@ -437,6 +453,9 @@ export function useDeleteBudgetItem() {
     onSuccess: (_data, { month, year }) => {
       qc.invalidateQueries({ queryKey: budgetKey(month, year) });
       qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
+      // A deleted item must also drop off the category detail screen + dropdown.
+      qc.invalidateQueries({ queryKey: ["categoryData"] });
+      qc.invalidateQueries({ queryKey: ["categoryItems"] });
     },
   });
 }

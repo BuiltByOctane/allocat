@@ -131,6 +131,19 @@ export default function SmsPage() {
     categoryId: string;
   } | null>(null);
 
+  // Surfaced when an allocate (from the sheet or a notification deep-link) fails
+  // — AllocateSheet doesn't catch rejections itself, so a dead "Allocate" button
+  // would otherwise give no feedback. Cleared whenever a flow (re)starts.
+  const [allocError, setAllocError] = useState<string | null>(null);
+
+  // Retry-safety for the create-new flow: once an item is created for a given
+  // create flow, remember its id so a retry (e.g. after a transient categorize
+  // failure) reuses it instead of inserting a duplicate budget item. Keyed by
+  // the flow's txn id so a different transaction starts fresh.
+  const createdItemRef = useRef<{ flowTxnId: string; itemId: string } | null>(
+    null,
+  );
+
   // Asset/debt link targets for the full item editor (loaded once).
   const [linkTargets, setLinkTargets] = useState<{
     assets: LinkTarget[];
@@ -184,12 +197,25 @@ export default function SmsPage() {
 
     handledDeepLink.current = true;
     if (apply && item) {
-      // One-tap allocate straight from the notification action button.
-      void categorize.mutateAsync({
-        txnId: target.id,
-        budgetItemId: item,
-        rememberRule: true,
-      });
+      // One-tap allocate straight from the notification action button. On
+      // failure (e.g. a stale captured txn id), fall back to opening the sheet
+      // so the user can retry instead of the tap silently doing nothing.
+      const t = target;
+      void (async () => {
+        try {
+          await categorize.mutateAsync({
+            txnId: t.id,
+            budgetItemId: item,
+            rememberRule: true,
+          });
+        } catch (err) {
+          console.error("[SmsPage] deep-link allocate failed:", err);
+          setAllocError(
+            err instanceof Error ? err.message : "Couldn't allocate. Try again.",
+          );
+          setAllocateTxn(t);
+        }
+      })();
       return;
     }
     // Syncing an external deep-link (notification URL) into state on mount.
@@ -199,23 +225,40 @@ export default function SmsPage() {
 
   async function handleAllocate(budgetItemId: string, remember: boolean) {
     if (!allocateTxn) return;
-    await categorize.mutateAsync({
-      txnId: allocateTxn.id,
-      budgetItemId,
-      rememberRule: remember,
-    });
-    setAllocateTxn(null);
+    setAllocError(null);
+    try {
+      await categorize.mutateAsync({
+        txnId: allocateTxn.id,
+        budgetItemId,
+        rememberRule: remember,
+      });
+      setAllocateTxn(null);
+    } catch (err) {
+      // Keep the sheet open so the user can retry; surface the reason.
+      console.error("[SmsPage] allocate failed:", err);
+      setAllocError(
+        err instanceof Error ? err.message : "Couldn't allocate. Try again.",
+      );
+    }
   }
 
   function handleCreateNew(categoryId: string) {
     const txn = allocateTxn;
     setAllocateTxn(null);
+    setAllocError(null);
+    // Fresh flow → drop any item memo from a previous create flow.
+    createdItemRef.current = null;
     if (txn) setCreateFlow({ txn, categoryId });
   }
 
   // Create the new item, then allocate the transaction to it. Routing the
   // spend through categorize (not the item's actual_amount) is what cascades
   // to a linked asset/debt. Thrown errors surface in the ItemDetailSheet.
+  //
+  // Retry-safe: the item is created at most once per create flow. If a retry
+  // reaches here (e.g. the first categorize failed), we reuse the already-created
+  // item id instead of inserting a duplicate. categorize itself resolves a stale
+  // (temp→real rewritten) txn id, so the happy path now allocates exactly once.
   async function handleCreateItem(data: {
     name: string;
     planned_amount: number;
@@ -227,20 +270,35 @@ export default function SmsPage() {
       data.link_type && data.link_id
         ? { link_type: data.link_type, link_id: data.link_id }
         : null;
-    const { id: tempId } = await addItem.mutateAsync({
-      categoryId: createFlow.categoryId,
-      name: data.name,
-      planned: data.planned_amount,
-      link,
-      month,
-      year,
-    });
+
+    const memo = createdItemRef.current;
+    let itemId: string;
+    if (memo && memo.flowTxnId === createFlow.txn.id) {
+      itemId = memo.itemId;
+    } else {
+      const created = await addItem.mutateAsync({
+        categoryId: createFlow.categoryId,
+        name: data.name,
+        planned: data.planned_amount,
+        link,
+        month,
+        year,
+      });
+      itemId = created.id;
+      createdItemRef.current = { flowTxnId: createFlow.txn.id, itemId };
+    }
+
+    // If categorize throws, the memo above survives so a retry reuses the item.
     await categorize.mutateAsync({
       txnId: createFlow.txn.id,
-      budgetItemId: tempId,
+      budgetItemId: itemId,
       rememberRule: true,
     });
+
+    // Allocated successfully — drop the memo so a later flow can't reuse a stale
+    // id. ItemDetailSheet closes itself (calls onClose → setCreateFlow(null)).
     qc.invalidateQueries({ queryKey: SMS_PICKER_KEY });
+    createdItemRef.current = null;
   }
 
   const createMeta = createFlow
@@ -267,6 +325,16 @@ export default function SmsPage() {
           </p>
         </div>
       </div>
+
+      {/* Allocate failure (e.g. a stale notification deep-link) */}
+      {allocError ? (
+        <p
+          role="alert"
+          className="rounded-xl border border-neg/30 bg-neg/10 px-3 py-2 text-xs font-medium text-neg"
+        >
+          {allocError}
+        </p>
+      ) : null}
 
       {/* Pending list */}
       <section className="flex flex-col gap-3">
@@ -300,7 +368,10 @@ export default function SmsPage() {
 
                 <div className="flex gap-2.5 mt-3.5">
                   <button
-                    onClick={() => setAllocateTxn(txn)}
+                    onClick={() => {
+                      setAllocError(null);
+                      setAllocateTxn(txn);
+                    }}
                     className="flex-1 h-[42px] rounded-pill bg-[var(--pill)] text-[var(--pill-foreground)] text-sm font-bold active:scale-[0.98] transition-transform"
                   >
                     Allocate
@@ -359,7 +430,11 @@ export default function SmsPage() {
         }}
         linkTargets={linkTargets}
         hideActual
-        onClose={() => setCreateFlow(null)}
+        onClose={() => {
+          // Abandoning (or finishing) the flow drops the create-item memo.
+          createdItemRef.current = null;
+          setCreateFlow(null);
+        }}
         onCreate={handleCreateItem}
         onSave={async () => {}}
         onDelete={() => {}}

@@ -139,7 +139,7 @@ export default function ActivityDetailSheet({
 
   return (
     <Drawer open={open} onOpenChange={(v) => !v && onClose()}>
-      <DrawerContent className="max-h-[85dvh] bg-card border-border">
+      <DrawerContent className="sheet-3q bg-card border-border">
         {log && (
           <>
             <DrawerHeader className="text-left px-5 pt-2 pb-0">

@@ -120,8 +120,7 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
           onClick={handleClose}
         />
         <Drawer.Content
-          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-background outline-none"
-          style={{ height: "92dvh" }}
+          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-background outline-none sheet-3q"
           aria-label="AlloCat AI Chat"
         >
           {/* Drag handle */}

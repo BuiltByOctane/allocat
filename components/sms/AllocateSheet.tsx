@@ -73,7 +73,7 @@ export function AllocateSheet({
         <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
         <Drawer.Content
           aria-describedby={undefined}
-          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card max-h-[85vh] focus:outline-none"
+          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card sheet-3q focus:outline-none"
         >
           {/* Drag handle */}
           <div className="flex justify-center pt-3 pb-1 shrink-0">

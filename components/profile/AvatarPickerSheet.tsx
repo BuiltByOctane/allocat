@@ -22,7 +22,7 @@ export default function AvatarPickerSheet({ open, onClose, current }: AvatarPick
 
   return (
     <Drawer open={open} onOpenChange={(o) => !o && onClose()}>
-      <DrawerContent className="max-h-[85vh]">
+      <DrawerContent className="sheet-3q">
         <DrawerHeader>
           <DrawerTitle>Choose your avatar</DrawerTitle>
           <DrawerDescription>Pick the cat that&apos;s most you.</DrawerDescription>

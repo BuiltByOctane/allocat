@@ -41,7 +41,7 @@ export default function EmojiPickerModal({ isOpen, onClose, onSelect }: EmojiPic
       onTouchStart={(e) => e.stopPropagation()}
     >
       <div
-        className="bg-card w-full max-w-md rounded-t-sheet sm:rounded-card p-4 shadow-xl animate-in slide-in-from-bottom flex flex-col max-h-[80vh] border border-border relative z-[101]"
+        className="bg-card w-full max-w-md rounded-t-sheet sm:rounded-card p-4 shadow-xl animate-in slide-in-from-bottom flex flex-col sheet-3q border border-border relative z-[101]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-3 px-2">
@@ -54,14 +54,14 @@ export default function EmojiPickerModal({ isOpen, onClose, onSelect }: EmojiPic
           </button>
         </div>
 
-        <div className="flex-1 overflow-hidden flex justify-center">
+        <div className="flex-1 min-h-0 overflow-hidden flex justify-center">
           <EmojiPicker
             onEmojiClick={handlePick}
             emojiStyle={EmojiStyle.NATIVE}
             theme={pickerTheme}
             lazyLoadEmojis
             width="100%"
-            height={420}
+            height="100%"
             previewConfig={{ showPreview: false }}
             skinTonesDisabled={false}
           />

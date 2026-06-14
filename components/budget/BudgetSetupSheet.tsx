@@ -421,7 +421,7 @@ export function BudgetSetupSheet({
         <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
         <Drawer.Content
           aria-describedby="setup-description"
-          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none max-h-[92dvh]"
+          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none sheet-3q"
         >
           <div className="flex justify-center pt-3 pb-1 shrink-0">
             <div className="mx-auto w-9 h-1 bg-border rounded-full" />

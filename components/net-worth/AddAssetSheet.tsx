@@ -130,7 +130,7 @@ export function AddAssetSheet({ open, defaultCategoryId, onClose }: AddAssetShee
           <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
           <Drawer.Content
             aria-describedby="add-asset-description"
-            className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none max-h-[90dvh]"
+            className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none sheet-3q"
           >
             <div className="flex justify-center pt-3 pb-1 shrink-0">
               <div className="mx-auto w-9 h-1 bg-border rounded-full" />

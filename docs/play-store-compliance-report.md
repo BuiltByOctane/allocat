@@ -1,6 +1,6 @@
 # Play Store Launch Compliance Report — AlloCat
 
-**App ID:** `app.allocat.mobile` · **versionCode:** 2 · **versionName:** 1.0.1
+**App ID:** `com.octane.allocat` · **versionCode:** 2 · **versionName:** 1.0.1
 **Date:** 2026-06-14 · **Target SDK:** 36 (Android 16) · **min SDK:** 24
 
 This report audits AlloCat against current Google Play policies and lists every

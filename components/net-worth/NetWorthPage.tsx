@@ -15,6 +15,9 @@ import NetWorthEmptyState from "./NetWorthEmptyState";
 import { AddAssetSheet } from "./AddAssetSheet";
 import { AssetDetailSheet, type AssetDetail } from "./AssetDetailSheet";
 import { useHaptic } from "@/lib/hooks/useHaptic";
+import { useEntitlement } from "@/lib/providers/EntitlementProvider";
+import { usePaywallGate } from "@/lib/providers/PaywallProvider";
+import { isAtLimit } from "@/lib/subscription/limits";
 
 interface Asset {
   id: string;
@@ -103,6 +106,11 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
   const allAssets = data.assets;
   const goalAssets = allAssets.filter((a) => a.is_goal);
   const assets = tab === "goals" ? goalAssets : allAssets;
+
+  // Asset cap counts non-goal holdings (goals have their own cap on the Goals page).
+  const { tier } = useEntitlement();
+  const paywallGate = usePaywallGate();
+  const nonGoalAssetCount = allAssets.filter((a) => !a.is_goal).length;
   const totalAssets = assets.reduce((s, a) => s + a.value, 0);
   const netWorth = totalAssets - data.totalLiabilities;
   const history = data.netWorthHistory ?? [];
@@ -165,15 +173,21 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
 
   function openAddSheet(categoryId?: string | null) {
     haptic.light();
+    if (!paywallGate(isAtLimit("assets", nonGoalAssetCount, tier), "assets")) {
+      return;
+    }
     setAddDefaultCategoryId(categoryId ?? null);
     setAddSheetOpen(true);
   }
 
   // Quick-action dock: add an asset. Dock owns the haptic, so skip it here.
   const openAddFromDock = useCallback(() => {
+    if (!paywallGate(isAtLimit("assets", nonGoalAssetCount, tier), "assets")) {
+      return;
+    }
     setAddDefaultCategoryId(null);
     setAddSheetOpen(true);
-  }, []);
+  }, [paywallGate, nonGoalAssetCount, tier]);
   useRegisterQuickAction({
     id: "net-worth",
     label: "Add asset",

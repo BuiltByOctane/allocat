@@ -1,4 +1,4 @@
-package app.allocat.mobile;
+package com.octane.allocat;
 
 /**
  * On-device gate: only financial-looking SMS may ever leave the device.

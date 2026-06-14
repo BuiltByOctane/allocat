@@ -1,6 +1,6 @@
 # Play Store Launch Compliance Report — AlloCat
 
-**App ID:** `app.allocat.mobile` · **versionCode:** 2 · **versionName:** 1.0.1
+**App ID:** `com.octane.allocat` · **versionCode:** 2 · **versionName:** 1.0.1
 **Date:** 2026-06-14 · **Target SDK:** 36 (Android 16) · **min SDK:** 24
 
 This report audits AlloCat against current Google Play policies and lists every
@@ -133,7 +133,7 @@ webview wrappers of a website.
 | 6.3 | `versionCode` increment per upload | 🟡 process | Currently 2. Bump on every Console upload. |
 | 6.4 | Doc URL inconsistency | 🟢 minor | `docs/sms-feature.md:54` says `allocat.app`; real URL is `allocat.xyz`. Fix to avoid confusion. |
 | 6.5 | Receiver `exported="true"` + `BROADCAST_SMS` permission | 🟢 ok | Correct/required for system SMS broadcast; protected by the system permission. |
-| 6.6 | OAuth deep-link scheme `app.allocat.mobile://auth` | 🟢 ok | Verify Google sign-in redirect is whitelisted in Supabase + Google Cloud console for prod. |
+| 6.6 | OAuth deep-link scheme `com.octane.allocat://auth` | 🟢 ok | Verify Google sign-in redirect is whitelisted in Supabase + Google Cloud console for prod. |
 
 ---
 

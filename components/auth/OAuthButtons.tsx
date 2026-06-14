@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 
 // Custom-scheme deep link the native shell intercepts (see NativeShell + AndroidManifest).
-const NATIVE_OAUTH_REDIRECT = "app.allocat.mobile://auth/callback";
+const NATIVE_OAUTH_REDIRECT = "com.octane.allocat://auth/callback";
 
 export function OAuthButtons() {
   const [isPending, setIsPending] = useState(false);

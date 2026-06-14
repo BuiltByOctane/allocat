@@ -12,13 +12,18 @@ if (hasKeystore) {
 }
 
 android {
-    namespace = "app.allocat.mobile"
+    namespace = "com.octane.allocat"
     compileSdk = rootProject.ext.compileSdkVersion
+    // AGP 8 disables BuildConfig generation by default; the SMS receiver uses
+    // BuildConfig.DEBUG for debug-only logging, so enable it explicitly.
+    buildFeatures {
+        buildConfig = true
+    }
     defaultConfig {
-        applicationId "app.allocat.mobile"
+        applicationId "com.octane.allocat"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
+        versionCode 3
         versionName "1.0.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

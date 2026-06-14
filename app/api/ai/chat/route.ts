@@ -2,6 +2,7 @@ import { buildFinancialContext } from "@/lib/actions/ai-chat";
 import { detectTopic } from "@/lib/ai-utils";
 import { createClient } from "@/lib/supabase/server";
 import { openRouterChat } from "@/lib/server/openrouter";
+import { getServerEntitlement } from "@/lib/actions/subscription";
 
 // Max number of previous messages to retain in the window (system prompt excluded)
 const HISTORY_WINDOW = 8;
@@ -23,6 +24,14 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  }
+
+  // AI chat is Premium-only — guard server-side so a tampered client can't bypass it.
+  const entitlement = await getServerEntitlement();
+  if (entitlement.tier !== "premium") {
+    return new Response(JSON.stringify({ error: "premium_required" }), {
+      status: 402,
+    });
   }
 
   const { messages }: { messages: ChatMessage[] } = await req.json();

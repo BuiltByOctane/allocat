@@ -17,6 +17,12 @@ export type Database = {
           is_onboarded: boolean
           currency: string
           avatar: string | null
+          subscription_status: "trial" | "active" | "expired" | null
+          trial_started_at: string | null
+          trial_ends_at: string | null
+          plan: "monthly" | "yearly" | null
+          subscription_expires_at: string | null
+          trial_device_id: string | null
           created_at: string
           updated_at: string
         }
@@ -27,6 +33,12 @@ export type Database = {
           is_onboarded?: boolean
           currency?: string
           avatar?: string | null
+          subscription_status?: "trial" | "active" | "expired" | null
+          trial_started_at?: string | null
+          trial_ends_at?: string | null
+          plan?: "monthly" | "yearly" | null
+          subscription_expires_at?: string | null
+          trial_device_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -36,6 +48,12 @@ export type Database = {
           is_onboarded?: boolean
           currency?: string
           avatar?: string | null
+          subscription_status?: "trial" | "active" | "expired" | null
+          trial_started_at?: string | null
+          trial_ends_at?: string | null
+          plan?: "monthly" | "yearly" | null
+          subscription_expires_at?: string | null
+          trial_device_id?: string | null
           updated_at?: string
         }
         Relationships: []

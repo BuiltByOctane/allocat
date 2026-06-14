@@ -1,4 +1,4 @@
-package app.allocat.mobile;
+package com.octane.allocat;
 
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -128,7 +128,7 @@ final class SmsNotifier {
                 ai.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                 ai.putExtra("deeplink", a[1]);
                 // Distinct action string so the PendingIntents don't collapse/merge extras.
-                ai.setAction("app.allocat.mobile.ACTION_" + id + "_" + n);
+                ai.setAction("com.octane.allocat.ACTION_" + id + "_" + n);
                 PendingIntent ap = PendingIntent.getActivity(c, id * 10 + n + 1, ai, piFlags);
                 b.addAction(0, a[0], ap);
                 n++;

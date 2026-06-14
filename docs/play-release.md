@@ -3,7 +3,7 @@
 Everything below is ready to paste into Play Console. The only manual steps are
 recording the demo video and clicking through the forms.
 
-- **App ID:** `app.allocat.mobile`
+- **App ID:** `com.octane.allocat`
 - **Restricted permission requested:** `RECEIVE_SMS` only (no `READ_SMS`).
 - **Eligible policy use case:** **SMS-based money management** (apps that track and
   manage budget) — Play [SMS/Call-Log policy](https://support.google.com/googleplay/android-developer/answer/10208820).

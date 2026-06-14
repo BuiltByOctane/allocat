@@ -23,6 +23,9 @@ import {
   useUpdateGoalIcon,
   useAchieveGoalAsset,
 } from "@/lib/hooks/useGoals";
+import { useEntitlement } from "@/lib/providers/EntitlementProvider";
+import { usePaywallGate } from "@/lib/providers/PaywallProvider";
+import { isAtLimit } from "@/lib/subscription/limits";
 
 type GoalRow = {
   id: string;
@@ -89,6 +92,9 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
   const [quickGoalId, setQuickGoalId] = useState("");
   const [quickAmount, setQuickAmount] = useState("");
 
+  const { tier } = useEntitlement();
+  const paywallGate = usePaywallGate();
+
   useEffect(() => {
     if (activeGoals.length > 0 && !activeGoals.find((g) => g.id === quickGoalId)) {
       setQuickGoalId(activeGoals[0].id);
@@ -97,6 +103,10 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
   }, [activeGoals.length]);
 
   function openAddSheet() {
+    // Free tier: cap active goals. Premium (paid/trial) is unlimited.
+    if (!paywallGate(isAtLimit("goals", activeGoals.length, tier), "goals")) {
+      return;
+    }
     setSheetMode("add");
     setSheetGoal(undefined);
     setSheetOpen(true);

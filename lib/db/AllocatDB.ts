@@ -195,5 +195,13 @@ export class AllocatDB extends Dexie {
     this.version(10).upgrade(async (tx) => {
       await tx.table("sync_meta").delete("budget_items");
     });
+
+    // v11: subscription/trial columns added to profiles (subscription_status,
+    // trial_started_at, trial_ends_at, plan, subscription_expires_at,
+    // trial_device_id). Non-indexed → profiles schema string unchanged; the bump
+    // only forces re-hydration so the new columns land on cached profile rows.
+    this.version(11).upgrade(async (tx) => {
+      await tx.table("sync_meta").delete("profiles");
+    });
   }
 }

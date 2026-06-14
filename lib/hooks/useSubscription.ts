@@ -7,8 +7,29 @@ import { getDeviceId } from "@/lib/native/deviceId";
 import {
   purchase,
   restorePurchases,
-  syncEntitlementToServer,
+  type EntitlementSnapshot,
 } from "@/lib/native/adapty";
+
+/**
+ * Optimistically reflect an Adapty entitlement in the local IDB profile so the
+ * native UI flips immediately. The Adapty webhook is the authoritative writer to
+ * Supabase; this is local-only for snappiness (the server value lands on the next
+ * hydrate). `plan` is only known for a fresh purchase, not a restore.
+ */
+async function reflectEntitlementLocally(
+  snap: EntitlementSnapshot,
+  plan?: "monthly" | "yearly",
+) {
+  const db = getDB();
+  const all = await db.profiles.toArray();
+  const local = all[0];
+  if (!local) return;
+  await db.profiles.update(local.id, {
+    subscription_status: snap.isActive ? "active" : "expired",
+    subscription_expires_at: snap.expiresAt,
+    ...(plan ? { plan } : {}),
+  });
+}
 
 /**
  * Start the opt-in 40-day free trial. Calls the server action (source of truth),
@@ -44,8 +65,8 @@ export function useStartTrial() {
 
 /**
  * Begin checkout for a plan. Native (Android) runs the Adapty/Play purchase flow
- * client-side; on success the Adapty webhook flips entitlement server-side and we
- * also push a belt-and-suspenders sync + invalidate the profile. Web has no buy
+ * client-side; on success we reflect entitlement locally for immediacy while the
+ * signed Adapty webhook persists the authoritative server state. Web has no buy
  * button (purchases happen in the Android app), so this no-ops there.
  */
 export function useStartCheckout() {
@@ -54,9 +75,9 @@ export function useStartCheckout() {
   return useMutation({
     mutationFn: async (plan: "monthly" | "yearly") => {
       if (!Capacitor.isNativePlatform()) return { ok: false as const };
-      const ok = await purchase(plan);
-      if (ok) await syncEntitlementToServer();
-      return { ok };
+      const snap = await purchase(plan);
+      if (snap?.isActive) await reflectEntitlementLocally(snap, plan);
+      return { ok: Boolean(snap?.isActive) };
     },
     onSuccess: (res) => {
       if (res.ok) qc.invalidateQueries({ queryKey: PROFILE_KEY });
@@ -65,8 +86,9 @@ export function useStartCheckout() {
 }
 
 /**
- * Restore prior purchases (native only) — e.g. reinstall or new device. On a
- * successful restore, reconciles entitlement to the server and refreshes.
+ * Restore prior purchases (native only) — e.g. reinstall or new device. Reflects
+ * the restored entitlement locally; the server already holds the authoritative
+ * value from the original purchase webhook.
  */
 export function useRestorePurchases() {
   const qc = useQueryClient();
@@ -74,9 +96,9 @@ export function useRestorePurchases() {
   return useMutation({
     mutationFn: async () => {
       if (!Capacitor.isNativePlatform()) return { ok: false as const };
-      const ok = await restorePurchases();
-      if (ok) await syncEntitlementToServer();
-      return { ok };
+      const snap = await restorePurchases();
+      if (snap?.isActive) await reflectEntitlementLocally(snap);
+      return { ok: Boolean(snap?.isActive) };
     },
     onSuccess: (res) => {
       if (res.ok) qc.invalidateQueries({ queryKey: PROFILE_KEY });

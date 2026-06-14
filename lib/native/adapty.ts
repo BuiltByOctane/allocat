@@ -1,95 +1,126 @@
 /**
- * Adapty (Google Play Billing) integration point — native Android only.
+ * Adapty (Google Play Billing) — native Android only.
  *
- * STATUS: scaffold. `@adapty/capacitor` is NOT installed yet and no Adapty
- * project / Play Console products exist. Every function here is guarded by
- * `Capacitor.isNativePlatform()` and currently no-ops (warns) so the app builds
- * and runs unchanged on web and on a native shell without the SDK.
+ * Purchases run client-side here. The SERVER source of truth is updated only by
+ * the signed Adapty webhook (/api/adapty/webhook); the client never writes
+ * `active` to Supabase (a tampered client must not be able to self-grant
+ * premium). After a successful native purchase the caller reflects entitlement
+ * optimistically in local IDB for immediacy, and the webhook persists it to
+ * Supabase within seconds (which the web app then reads on next hydrate).
  *
- * TO ACTIVATE (Phase 3):
- *   1. `pnpm add @adapty/capacitor` and `npx cap sync android`.
- *   2. Create the Adapty project; put the public SDK key in
- *      NEXT_PUBLIC_ADAPTY_PUBLIC_KEY.
- *   3. Google Play Console: create subscription product `allocat_premium`
- *      with base plans whose ids match PRODUCT_IDS below; link them in Adapty.
- *   4. Uncomment the real SDK calls in each function (the commented blocks).
- *   5. Set ADAPTY_WEBHOOK_SECRET and point the Adapty webhook at
- *      /api/adapty/webhook so server entitlement stays the source of truth.
- *
- * Purchases MUST run client-side here (the billing flow lives in the native
- * bridge); the server only reconciles via the webhook.
+ * Web has no native billing — every method here guards on isNativePlatform and
+ * the `@adapty/capacitor` plugin throws "not implemented" on web if called.
  */
 import { Capacitor } from "@capacitor/core";
+import { adapty } from "@adapty/capacitor";
+import {
+  ACCESS_LEVEL,
+  PLACEMENT_ID,
+  PRODUCT_IDS,
+} from "@/lib/subscription/adaptyConfig";
 
-/** Map our plan ids to the Play / Adapty vendor product (base-plan) ids. */
-export const PRODUCT_IDS: Record<"monthly" | "yearly", string> = {
-  monthly: "allocat_premium_monthly",
-  yearly: "allocat_premium_yearly",
-};
+export { ACCESS_LEVEL, PLACEMENT_ID, PRODUCT_IDS };
 
 const PUBLIC_KEY = process.env.NEXT_PUBLIC_ADAPTY_PUBLIC_KEY;
+
+export interface EntitlementSnapshot {
+  isActive: boolean;
+  expiresAt: string | null;
+}
 
 function native(): boolean {
   return Capacitor.isNativePlatform();
 }
 
-/** True once the SDK is installed, keyed, and running on a native shell. */
+/** True when the SDK can actually run (native shell + key configured). */
 export function isAdaptyReady(): boolean {
-  return native() && !!PUBLIC_KEY && false; // flip to `true` when SDK wired
+  return native() && !!PUBLIC_KEY;
 }
 
-/** Activate the SDK once on app launch (native only). */
-export async function activateAdapty(): Promise<void> {
-  if (!native() || !PUBLIC_KEY) return;
-  // const { adapty } = await import("@adapty/capacitor");
-  // await adapty.activate({ apiKey: PUBLIC_KEY });
-  console.info("[adapty] activate (stub) — SDK not installed");
+/** Activate the SDK once on app launch. Safe to call on web (no-ops). */
+export async function activateAdapty(userId?: string): Promise<void> {
+  if (!isAdaptyReady()) return;
+  try {
+    await adapty.activate({
+      apiKey: PUBLIC_KEY!,
+      params: userId ? { customerUserId: userId } : undefined,
+    });
+  } catch (e) {
+    console.warn("[adapty] activate failed", e);
+  }
 }
 
 /** Bind purchases to the Supabase account so entitlement maps across devices. */
 export async function identifyAdapty(userId: string): Promise<void> {
-  if (!native() || !PUBLIC_KEY) return;
-  // const { adapty } = await import("@adapty/capacitor");
-  // await adapty.identify({ customerUserId: userId });
-  console.info(`[adapty] identify ${userId} (stub)`);
-}
-
-/**
- * Run the purchase flow for a plan. Returns true on a successful purchase.
- * On success the Adapty webhook flips profiles.subscription_status server-side;
- * we also call syncEntitlementToServer() as a belt-and-suspenders refresh.
- */
-export async function purchase(plan: "monthly" | "yearly"): Promise<boolean> {
-  if (!native()) return false;
-  // const { adapty } = await import("@adapty/capacitor");
-  // const paywall = await adapty.getPaywall({ placementId: "premium" });
-  // const products = await adapty.getPaywallProducts({ paywall });
-  // const product = products.find(p => p.vendorProductId === PRODUCT_IDS[plan]);
-  // if (!product) return false;
-  // const result = await adapty.makePurchase({ product });
-  // return result.type === "success";
-  console.info(`[adapty] purchase ${PRODUCT_IDS[plan]} (stub)`);
-  return false;
-}
-
-/** Restore prior purchases (e.g. reinstall / new device). */
-export async function restorePurchases(): Promise<boolean> {
-  if (!native()) return false;
-  // const { adapty } = await import("@adapty/capacitor");
-  // const profile = await adapty.restorePurchases();
-  // return Boolean(profile.accessLevels?.premium?.isActive);
-  console.info("[adapty] restore (stub)");
-  return false;
-}
-
-/**
- * Read the live Adapty profile and, if it disagrees with the server, push the
- * current entitlement to Supabase. Called on native app open so a purchase that
- * the webhook missed still unlocks the web app. (Implemented in Phase 3.)
- */
-export async function syncEntitlementToServer(): Promise<void> {
   if (!isAdaptyReady()) return;
-  // const { adapty } = await import("@adapty/capacitor");
-  // const profile = await adapty.getProfile();
-  // → POST minimal entitlement to a server action that updates profiles.
+  try {
+    await adapty.identify({ customerUserId: userId });
+  } catch (e) {
+    console.warn("[adapty] identify failed", e);
+  }
+}
+
+function snapshotFromProfile(profile: unknown): EntitlementSnapshot {
+  // profile.accessLevels[ACCESS_LEVEL] → { isActive, expiresAt }
+  const level = (
+    profile as {
+      accessLevels?: Record<string, { isActive?: boolean; expiresAt?: string | null }>;
+    }
+  )?.accessLevels?.[ACCESS_LEVEL];
+  return {
+    isActive: Boolean(level?.isActive),
+    expiresAt: level?.expiresAt ?? null,
+  };
+}
+
+/**
+ * Run the purchase flow for a plan. Returns the resulting entitlement snapshot
+ * (or null if cancelled/pending/failed). The webhook persists the authoritative
+ * server state; the caller only uses this to reflect locally.
+ */
+export async function purchase(
+  plan: "monthly" | "yearly",
+): Promise<EntitlementSnapshot | null> {
+  if (!isAdaptyReady()) return null;
+  try {
+    const paywall = await adapty.getPaywall({ placementId: PLACEMENT_ID });
+    const products = await adapty.getPaywallProducts({ paywall });
+    const product = products.find(
+      (p) => p.vendorProductId === PRODUCT_IDS[plan],
+    );
+    if (!product) {
+      console.warn(`[adapty] product not found for ${plan}`);
+      return null;
+    }
+    const result = await adapty.makePurchase({ product });
+    if (result.type !== "success") return null;
+    return snapshotFromProfile(result.profile);
+  } catch (e) {
+    console.warn("[adapty] purchase failed", e);
+    return null;
+  }
+}
+
+/** Restore prior purchases (reinstall / new device). */
+export async function restorePurchases(): Promise<EntitlementSnapshot | null> {
+  if (!isAdaptyReady()) return null;
+  try {
+    const profile = await adapty.restorePurchases();
+    return snapshotFromProfile(profile);
+  } catch (e) {
+    console.warn("[adapty] restore failed", e);
+    return null;
+  }
+}
+
+/** Read the live entitlement from Adapty (native only). */
+export async function getEntitlementSnapshot(): Promise<EntitlementSnapshot | null> {
+  if (!isAdaptyReady()) return null;
+  try {
+    const profile = await adapty.getProfile();
+    return snapshotFromProfile(profile);
+  } catch (e) {
+    console.warn("[adapty] getProfile failed", e);
+    return null;
+  }
 }

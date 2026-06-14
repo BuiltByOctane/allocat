@@ -3,17 +3,13 @@
 import { useEffect } from "react";
 import { Capacitor } from "@capacitor/core";
 import { createClient } from "@/lib/supabase/client";
-import {
-  activateAdapty,
-  identifyAdapty,
-  syncEntitlementToServer,
-} from "@/lib/native/adapty";
+import { activateAdapty, identifyAdapty } from "@/lib/native/adapty";
 
 /**
  * Native-only bridge for Adapty (Google Play Billing). On mount it activates the
- * SDK, binds purchases to the Supabase account (so entitlement maps across
- * devices), and reconciles entitlement to the server on open. No-op on web and
- * inert until the SDK is installed (see lib/native/adapty.ts). Renders nothing.
+ * SDK and binds purchases to the Supabase account (so entitlement maps across
+ * devices). No-op on web; inert until the SDK key is configured. The webhook is
+ * the authoritative server writer, so nothing is reconciled here. Renders nothing.
  */
 export function AdaptyBridge() {
   useEffect(() => {
@@ -21,17 +17,15 @@ export function AdaptyBridge() {
 
     let cancelled = false;
     (async () => {
-      await activateAdapty();
-      if (cancelled) return;
-
       const supabase = createClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (cancelled || !user) return;
+      if (cancelled) return;
 
+      await activateAdapty(user?.id);
+      if (cancelled || !user) return;
       await identifyAdapty(user.id);
-      await syncEntitlementToServer();
     })();
 
     return () => {

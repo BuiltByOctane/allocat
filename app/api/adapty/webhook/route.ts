@@ -14,7 +14,7 @@
  * simply rejects unauthenticated calls.
  */
 import { createServiceClient } from "@/lib/supabase/service";
-import { PRODUCT_IDS } from "@/lib/native/adapty";
+import { PRODUCT_IDS } from "@/lib/subscription/adaptyConfig";
 
 // Event types that mean the subscription is currently entitled.
 const ACTIVE_EVENTS = new Set([

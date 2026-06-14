@@ -38,18 +38,19 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
 
         String text = body.toString();
         String from = sender == null ? "" : sender;
-        Log.e("AllocatSMS", "onReceive from=" + from + " body=" + text);
+        // Privacy: never log raw SMS body or sender (PII, readable via logcat).
+        log("onReceive (len=" + text.length() + ")");
 
         // Compliance gate — non-financial SMS never proceeds past this point.
         if (!SmsFilter.isLikelyTransaction(from, text)) {
-            Log.e("AllocatSMS", "FILTERED OUT (not transaction-like)");
+            log("FILTERED OUT (not transaction-like)");
             return;
         }
 
         SmsParser.Parsed parsed = SmsParser.parse(text);
         // Only track debits (spends). Credits are ignored entirely.
         if ("credit".equals(parsed.direction)) {
-            Log.e("AllocatSMS", "credit — ignored");
+            log("credit — ignored");
             return;
         }
 
@@ -61,7 +62,7 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
         if (SmsReaderPlugin.isWebViewAlive()) {
             // App is open → let JS parse + notify (avoids a duplicate notification).
             SmsReaderPlugin.emitIfAlive(from, text, ts);
-            Log.e("AllocatSMS", "queued + emitted (app open)");
+            log("queued + emitted (app open)");
         } else if (parsed.amount != null) {
             // App closed → notify natively right now.
             SmsRules.Match mr = SmsRules.match(context, parsed.merchantNormalized);
@@ -139,13 +140,18 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
             }
             if (!suppressNotif) {
                 SmsNotifier.notify(context, notifTitle, notifBody, url, progressPct, actions);
-                Log.e("AllocatSMS", "queued + native notification (app closed)");
+                log("queued + native notification (app closed)");
             } else {
-                Log.e("AllocatSMS", "queued + auto-allocated (confirmation off)");
+                log("queued + auto-allocated (confirmation off)");
             }
         } else {
-            Log.e("AllocatSMS", "queued (no amount; await app open)");
+            log("queued (no amount; await app open)");
         }
+    }
+
+    /** Debug-only diagnostic log. Never pass raw SMS body/sender here. */
+    private static void log(String msg) {
+        if (BuildConfig.DEBUG) Log.d("AllocatSMS", msg);
     }
 
     private static String ordinal(int n) {

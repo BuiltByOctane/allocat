@@ -13,8 +13,17 @@
  * Configure the secret + product ids before going live; until then this route
  * simply rejects unauthenticated calls.
  */
+import { timingSafeEqual } from "node:crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import { PRODUCT_IDS } from "@/lib/subscription/adaptyConfig";
+
+// Constant-time string compare — avoids leaking the secret via response timing.
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
 
 // Event types that mean the subscription is currently entitled.
 const ACTIVE_EVENTS = new Set([
@@ -60,7 +69,7 @@ export async function POST(req: Request) {
   }
 
   const auth = req.headers.get("authorization") ?? "";
-  if (auth !== `Bearer ${secret}`) {
+  if (!safeEqual(auth, `Bearer ${secret}`)) {
     return new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401,
     });

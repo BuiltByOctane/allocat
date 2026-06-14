@@ -7,9 +7,6 @@ import android.os.Bundle;
 import android.telephony.SmsMessage;
 import android.util.Log;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
  * Fires on every incoming SMS — including when the app is closed. It assembles
  * the message, drops anything that doesn't look like a financial transaction
@@ -135,18 +132,10 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
             } else {
                 notifTitle = "🐾 A wild spend appeared!";
                 notifBody = amt + " at " + merch + " — tap to give it a home.";
-                // Quick-allocate buttons → deep-link by dedupe key (the web layer
-                // creates the matching txn when it drains the queue on open).
+                // Deep-link by dedupe key so tapping the notification opens the SMS page.
+                // (The web layer creates the matching txn when it drains the queue on open.)
                 String dedupe = SmsHash.dedupeKey(from, text);
                 url = "/sms?dedupe=" + dedupe;
-                List<String[]> acts = new ArrayList<>();
-                for (SmsTargets.Target t : SmsTargets.get(context, 2)) {
-                    acts.add(new String[] {
-                        t.name, "/sms?dedupe=" + dedupe + "&item=" + t.id + "&apply=1"
-                    });
-                }
-                acts.add(new String[] { "Allocate…", "/sms?dedupe=" + dedupe });
-                actions = acts.toArray(new String[0][]);
             }
             if (!suppressNotif) {
                 SmsNotifier.notify(context, notifTitle, notifBody, url, progressPct, actions);

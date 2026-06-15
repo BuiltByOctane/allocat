@@ -87,7 +87,11 @@ export async function POST(req: Request) {
   try {
     body = (await req.json()) as AdaptyEvent;
   } catch {
-    return new Response(JSON.stringify({ error: "bad_json" }), { status: 400 });
+    // Adapty's save-time validation ping sends an empty/non-event body. It
+    // requires a 2XX to accept the endpoint, so ack instead of erroring.
+    return new Response(JSON.stringify({ ok: true, ping: true }), {
+      status: 200,
+    });
   }
 
   const eventType = body.event_type ?? "";
@@ -130,4 +134,12 @@ export async function POST(req: Request) {
   }
 
   return new Response(JSON.stringify({ ok: true }), { status: 200 });
+}
+
+// Liveness probe for endpoint-reachability checks (Adapty/uptime). No secret
+// required — returns no data, just confirms the route is deployed.
+export async function GET() {
+  return new Response(JSON.stringify({ ok: true, service: "adapty-webhook" }), {
+    status: 200,
+  });
 }

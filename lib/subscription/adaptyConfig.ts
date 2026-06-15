@@ -17,6 +17,6 @@ export const PLACEMENT_ID = "premium";
  * product's `vendorProductId`.
  */
 export const PRODUCT_IDS: Record<"monthly" | "yearly", string> = {
-  monthly: "allocat_premium_monthly",
-  yearly: "allocat_premium_yearly",
+  monthly: "allocat-premium-monthly",
+  yearly: "allocat-premium-yearly",
 };

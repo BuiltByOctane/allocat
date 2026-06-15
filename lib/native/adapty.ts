@@ -85,11 +85,34 @@ export async function purchase(
   try {
     const paywall = await adapty.getPaywall({ placementId: PLACEMENT_ID });
     const products = await adapty.getPaywallProducts({ paywall });
-    const product = products.find(
-      (p) => p.vendorProductId === PRODUCT_IDS[plan],
-    );
+    // Play subscriptions: a single store product (vendorProductId, e.g.
+    // "premium_plan_2026") carries the monthly/yearly distinction in its
+    // base-plan id. PRODUCT_IDS holds the base-plan ids, so match on those.
+    // The base-plan id lives at different paths across SDK shapes — probe all.
+    const basePlanOf = (p: unknown): string | undefined => {
+      const sub = (
+        p as {
+          subscription?: {
+            basePlanId?: string;
+            base_plan_id?: string;
+            android?: { basePlanId?: string; base_plan_id?: string };
+          };
+        }
+      )?.subscription;
+      return (
+        sub?.basePlanId ??
+        sub?.base_plan_id ??
+        sub?.android?.basePlanId ??
+        sub?.android?.base_plan_id
+      );
+    };
+    const want = PRODUCT_IDS[plan];
+    const product = products.find((p) => basePlanOf(p) === want);
     if (!product) {
-      console.warn(`[adapty] product not found for ${plan}`);
+      console.warn(
+        `[adapty] product not found for ${plan} (want basePlan=${want}); ` +
+          `available=${JSON.stringify(products.map(basePlanOf))}`,
+      );
       return null;
     }
     const result = await adapty.makePurchase({ product });

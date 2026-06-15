@@ -49,13 +49,21 @@ type AdaptyEvent = {
   event_properties?: Record<string, unknown> & {
     customer_user_id?: string;
     vendor_product_id?: string;
+    base_plan_id?: string;
     subscription_expires_at?: string;
   };
 };
 
-function planFromProduct(productId?: string): "monthly" | "yearly" | null {
-  if (productId === PRODUCT_IDS.monthly) return "monthly";
-  if (productId === PRODUCT_IDS.yearly) return "yearly";
+// PRODUCT_IDS holds Play base-plan ids (a single store product splits into
+// monthly/yearly base plans). Adapty sends the base plan in `base_plan_id`;
+// fall back to vendor_product_id for stores without base plans.
+function planFromProduct(
+  basePlanId?: string,
+  vendorProductId?: string,
+): "monthly" | "yearly" | null {
+  const id = basePlanId ?? vendorProductId;
+  if (id === PRODUCT_IDS.monthly) return "monthly";
+  if (id === PRODUCT_IDS.yearly) return "yearly";
   return null;
 }
 
@@ -97,7 +105,7 @@ export async function POST(req: Request) {
   if (ACTIVE_EVENTS.has(eventType)) {
     update.subscription_status = "active";
     update.subscription_expires_at = props.subscription_expires_at ?? null;
-    const plan = planFromProduct(props.vendor_product_id);
+    const plan = planFromProduct(props.base_plan_id, props.vendor_product_id);
     if (plan) update.plan = plan;
   } else if (EXPIRED_EVENTS.has(eventType)) {
     update.subscription_status = "expired";

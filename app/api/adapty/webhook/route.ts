@@ -17,6 +17,15 @@ import { timingSafeEqual } from "node:crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import { PRODUCT_IDS } from "@/lib/subscription/adaptyConfig";
 
+// JSON response with an explicit content-type — Adapty rejects endpoints whose
+// responses lack `Content-Type: application/json` (the default is text/plain).
+function json(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
 // Constant-time string compare — avoids leaking the secret via response timing.
 function safeEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a);
@@ -71,16 +80,12 @@ export async function POST(req: Request) {
   const secret = process.env.ADAPTY_WEBHOOK_SECRET;
   if (!secret) {
     // Not configured yet — fail closed so a misconfigured deploy can't be spoofed.
-    return new Response(JSON.stringify({ error: "not_configured" }), {
-      status: 503,
-    });
+    return json({ error: "not_configured" }, 503);
   }
 
   const auth = req.headers.get("authorization") ?? "";
   if (!safeEqual(auth, `Bearer ${secret}`)) {
-    return new Response(JSON.stringify({ error: "unauthorized" }), {
-      status: 401,
-    });
+    return json({ error: "unauthorized" }, 401);
   }
 
   let body: AdaptyEvent;
@@ -89,9 +94,7 @@ export async function POST(req: Request) {
   } catch {
     // Adapty's save-time validation ping sends an empty/non-event body. It
     // requires a 2XX to accept the endpoint, so ack instead of erroring.
-    return new Response(JSON.stringify({ ok: true, ping: true }), {
-      status: 200,
-    });
+    return json({ ok: true, ping: true });
   }
 
   const eventType = body.event_type ?? "";
@@ -100,9 +103,7 @@ export async function POST(req: Request) {
 
   if (!userId) {
     // No account binding — ack so Adapty doesn't retry forever, but do nothing.
-    return new Response(JSON.stringify({ ok: true, skipped: "no_user" }), {
-      status: 200,
-    });
+    return json({ ok: true, skipped: "no_user" });
   }
 
   const update: Record<string, unknown> = {};
@@ -116,9 +117,7 @@ export async function POST(req: Request) {
     update.subscription_expires_at = props.subscription_expires_at ?? null;
   } else {
     // Unhandled event — ack without mutating.
-    return new Response(JSON.stringify({ ok: true, ignored: eventType }), {
-      status: 200,
-    });
+    return json({ ok: true, ignored: eventType });
   }
 
   const supabase = createServiceClient();
@@ -128,18 +127,14 @@ export async function POST(req: Request) {
     .eq("id", userId);
 
   if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-    });
+    return json({ error: error.message }, 500);
   }
 
-  return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  return json({ ok: true });
 }
 
 // Liveness probe for endpoint-reachability checks (Adapty/uptime). No secret
 // required — returns no data, just confirms the route is deployed.
 export async function GET() {
-  return new Response(JSON.stringify({ ok: true, service: "adapty-webhook" }), {
-    status: 200,
-  });
+  return json({ ok: true, service: "adapty-webhook" });
 }

@@ -140,3 +140,42 @@ describe("ingestSmsClient — dedupe under concurrency (Bug 5)", () => {
     expect(enqueue).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("ingestSmsClient — OTP / non-debit rejection", () => {
+  beforeEach(() => {
+    freshTables();
+  });
+
+  it("skips an OTP / pre-auth SMS without recording a row", async () => {
+    const enqueue = vi.fn().mockResolvedValue(undefined);
+    const res = await ingestSmsClient(
+      { raw: "Confirm debit of Rs 5000 to Flipkart. OTP 123456.", sender: "HDFCBK" },
+      { enqueue },
+      { silent: true },
+    );
+    expect(res.skipped).toBe(true);
+    expect(res.reason).toBe("otp");
+    expect(tables.sms_transactions.rows).toHaveLength(0);
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it("skips an amount-only SMS with no debit cue (no isDebit fallback)", async () => {
+    const enqueue = vi.fn().mockResolvedValue(undefined);
+    const res = await ingestSmsClient(
+      { raw: "Your balance at SHOP is Rs 200", sender: "XX" },
+      { enqueue },
+      { silent: true },
+    );
+    expect(res.skipped).toBe(true);
+    expect(res.reason).toBe("no-debit");
+    expect(tables.sms_transactions.rows).toHaveLength(0);
+  });
+
+  it("still records a genuine debit SMS (regression guard)", async () => {
+    const enqueue = vi.fn().mockResolvedValue(undefined);
+    const res = await ingestSmsClient(SMS, { enqueue }, { silent: true });
+    expect(res.skipped).toBeFalsy();
+    expect(tables.sms_transactions.rows).toHaveLength(1);
+    expect(enqueue).toHaveBeenCalledTimes(1);
+  });
+});

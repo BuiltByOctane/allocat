@@ -48,9 +48,11 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
         }
 
         SmsParser.Parsed parsed = SmsParser.parse(text);
-        // Only track debits (spends). Credits are ignored entirely.
-        if ("credit".equals(parsed.direction)) {
-            log("credit — ignored");
+        // Only track CONFIRMED debits (spends). Credits and ambiguous messages
+        // with no debit cue are ignored — mirrors the require-debit gate in
+        // lib/sms/ingestClient.ts so the closed-app path can't log phantoms.
+        if (!"debit".equals(parsed.direction)) {
+            log("non-debit — ignored");
             return;
         }
 

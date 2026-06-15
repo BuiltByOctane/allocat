@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { quickLogSpend } from "@/lib/actions/budget";
+import { quickLogSpend, reverseSpend } from "@/lib/actions/budget";
 import { notifyUser } from "@/lib/server/push-notify";
 import { logActivity, getUserCurrency, fmt } from "@/lib/server/activity-logger";
 import {
@@ -165,6 +165,8 @@ export interface CategorizeSmsInput {
   /** Persist a merchant rule so future SMS from this merchant auto-apply. */
   rememberRule?: boolean;
   matchType?: "exact" | "contains" | "regex";
+  /** Optional human-readable name for the transaction (overrides merchant_raw in lists). */
+  label?: string | null;
 }
 
 /** Apply a user's category choice to a pending SMS txn, optionally learning a rule. */
@@ -220,6 +222,7 @@ export async function categorizeSmsTransaction(input: CategorizeSmsInput) {
       status: "categorized",
       budget_item_id: input.budgetItemId,
       matched_rule_id: ruleId,
+      ...(input.label !== undefined ? { label: input.label } : {}),
     })
     .eq("id", input.txnId)
     .eq("user_id", user.id);
@@ -228,6 +231,140 @@ export async function categorizeSmsTransaction(input: CategorizeSmsInput) {
   await notifyIfNearLimit(supabase, user.id, input.budgetItemId, cur);
 
   return { ok: true, ruleCreated: Boolean(ruleId) };
+}
+
+export interface RecategorizeSmsInput {
+  txnId: string;
+  newBudgetItemId: string;
+  label?: string | null;
+}
+
+/** Delete an SMS txn. If categorized, refund its amount to the budget item first. */
+export async function deleteSmsTransaction(txnId: string) {
+  const { supabase, user } = await getAuthed();
+
+  const { data: txn } = await supabase
+    .from("sms_transactions")
+    .select("*")
+    .eq("id", txnId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!txn) return { ok: true as const };
+
+  if (txn.status === "categorized" && txn.budget_item_id && typeof txn.amount === "number" && txn.amount > 0) {
+    try {
+      await reverseSpend(txn.budget_item_id, txn.amount, {
+        kind: "sms",
+        merchant: txn.merchant_raw || txn.merchant_normalized || null,
+      });
+    } catch {
+      // Budget item gone or cascade failed — still remove the txn row.
+    }
+  }
+
+  const { error } = await supabase
+    .from("sms_transactions")
+    .delete()
+    .eq("id", txnId)
+    .eq("user_id", user.id);
+  if (error) throw new Error(error.message);
+
+  const cur = await getUserCurrency(supabase, user.id);
+  const merchant = txn.label || txn.merchant_raw || txn.merchant_normalized || "Unknown";
+  await logActivity(supabase, user.id, {
+    action_type: "sms_txn_deleted",
+    category: "budget",
+    title: `Deleted SMS transaction${typeof txn.amount === "number" ? ` ${fmt(txn.amount, cur)}` : ""}`,
+    description: `Removed transaction at ${merchant}`,
+    metadata: { txnId, merchant, amount: txn.amount, wasCategorized: txn.status === "categorized" },
+  });
+
+  return { ok: true as const };
+}
+
+/** Reverse a categorized txn's spend and move it back to pending. */
+export async function unallocateSmsTransaction(txnId: string) {
+  const { supabase, user } = await getAuthed();
+
+  const { data: txn } = await supabase
+    .from("sms_transactions")
+    .select("*")
+    .eq("id", txnId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!txn) throw new Error("Transaction not found");
+  if (txn.status !== "categorized") return { ok: true as const, already: true as const };
+
+  if (txn.budget_item_id && typeof txn.amount === "number" && txn.amount > 0) {
+    await reverseSpend(txn.budget_item_id, txn.amount, {
+      kind: "sms",
+      merchant: txn.merchant_raw || txn.merchant_normalized || null,
+    });
+  }
+
+  const { error } = await supabase
+    .from("sms_transactions")
+    .update({ status: "pending", budget_item_id: null, matched_rule_id: null })
+    .eq("id", txnId)
+    .eq("user_id", user.id);
+  if (error) throw new Error(error.message);
+
+  await logActivity(supabase, user.id, {
+    action_type: "sms_txn_unallocated",
+    category: "budget",
+    title: `Unallocated SMS transaction`,
+    description: `Transaction returned to pending`,
+    metadata: { txnId, amount: txn.amount },
+  });
+
+  return { ok: true as const };
+}
+
+/** Move a categorized txn to a different budget item (reverse old, apply new). */
+export async function recategorizeSmsTransaction(input: RecategorizeSmsInput) {
+  const { supabase, user } = await getAuthed();
+
+  const { data: txn } = await supabase
+    .from("sms_transactions")
+    .select("*")
+    .eq("id", input.txnId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!txn) throw new Error("Transaction not found");
+  if (txn.status !== "categorized" || !txn.budget_item_id)
+    throw new Error("Transaction is not allocated");
+
+  const sameItem = input.newBudgetItemId === txn.budget_item_id;
+
+  if (!sameItem && typeof txn.amount === "number" && txn.amount > 0) {
+    const merchant = txn.merchant_raw || txn.merchant_normalized || null;
+    // Reverse first to avoid a transient double-count.
+    await reverseSpend(txn.budget_item_id, txn.amount, { kind: "sms", merchant });
+    await quickLogSpend(input.newBudgetItemId, txn.amount, { kind: "sms", merchant });
+  }
+
+  const { error } = await supabase
+    .from("sms_transactions")
+    .update({
+      budget_item_id: input.newBudgetItemId,
+      ...(input.label !== undefined ? { label: input.label } : {}),
+    })
+    .eq("id", input.txnId)
+    .eq("user_id", user.id);
+  if (error) throw new Error(error.message);
+
+  const cur = await getUserCurrency(supabase, user.id);
+  await logActivity(supabase, user.id, {
+    action_type: "sms_txn_recategorized",
+    category: "budget",
+    title: sameItem ? `Renamed SMS transaction` : `Re-allocated SMS transaction`,
+    description: sameItem
+      ? `Transaction renamed`
+      : `Moved ${typeof txn.amount === "number" ? fmt(txn.amount, cur) : "transaction"} to another budget item`,
+    metadata: { txnId: input.txnId, newBudgetItemId: input.newBudgetItemId, amount: txn.amount },
+  });
+
+  return { ok: true as const };
 }
 
 /** Dismiss a pending SMS txn without logging a spend. */

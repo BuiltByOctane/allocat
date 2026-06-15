@@ -97,6 +97,7 @@ export function ItemDetailSheet({
   const [name, setName] = useState("");
   const [emoji, setEmoji] = useState<string | null>(null);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [contentNode, setContentNode] = useState<HTMLDivElement | null>(null);
   const [planned, setPlanned] = useState("");
   const [actual, setActual] = useState("");
   const [isCompleted, setIsCompleted] = useState(false);
@@ -264,6 +265,7 @@ export function ItemDetailSheet({
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
         <Drawer.Content
+          ref={setContentNode}
           aria-describedby="item-sheet-description"
           className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none sheet-3q"
         >
@@ -626,6 +628,7 @@ export function ItemDetailSheet({
       isOpen={emojiPickerOpen}
       onClose={() => setEmojiPickerOpen(false)}
       onSelect={(e) => setEmoji(e)}
+      container={contentNode}
     />
     </>
   );

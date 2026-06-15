@@ -527,6 +527,7 @@ export type Database = {
           status: "pending" | "categorized" | "ignored" | "duplicate"
           matched_rule_id: string | null
           budget_item_id: string | null
+          label: string | null
           created_at: string
         }
         Insert: {
@@ -544,6 +545,7 @@ export type Database = {
           status?: "pending" | "categorized" | "ignored" | "duplicate"
           matched_rule_id?: string | null
           budget_item_id?: string | null
+          label?: string | null
           created_at?: string
         }
         Update: {
@@ -551,6 +553,7 @@ export type Database = {
           matched_rule_id?: string | null
           budget_item_id?: string | null
           merchant_normalized?: string | null
+          label?: string | null
         }
         Relationships: [
           {

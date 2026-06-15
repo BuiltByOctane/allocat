@@ -22,6 +22,7 @@ export function AddAssetSheet({ open, defaultCategoryId, onClose }: AddAssetShee
 
   const [name, setName] = useState("");
   const [value, setValue] = useState("");
+  const [contentNode, setContentNode] = useState<HTMLDivElement | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(defaultCategoryId ?? null);
   const [icon, setIcon] = useState<string | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -129,6 +130,7 @@ export function AddAssetSheet({ open, defaultCategoryId, onClose }: AddAssetShee
         <Drawer.Portal>
           <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
           <Drawer.Content
+            ref={setContentNode}
             aria-describedby="add-asset-description"
             className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none sheet-3q"
           >
@@ -316,12 +318,14 @@ export function AddAssetSheet({ open, defaultCategoryId, onClose }: AddAssetShee
         isOpen={emojiOpen}
         onClose={() => setEmojiOpen(false)}
         onSelect={(emoji) => { setIcon(emoji); setEmojiOpen(false); }}
+        container={contentNode}
       />
 
       <EmojiPickerModal
         isOpen={newCatEmojiOpen}
         onClose={() => setNewCatEmojiOpen(false)}
         onSelect={(emoji) => { setNewCatIcon(emoji); setNewCatEmojiOpen(false); }}
+        container={contentNode}
       />
     </>
   );

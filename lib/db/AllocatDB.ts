@@ -41,7 +41,9 @@ export type SyncOperation =
   | "BULK_SETUP"
   | "ACHIEVE"
   | "CATEGORIZE"
-  | "IGNORE";
+  | "IGNORE"
+  | "UNALLOCATE"
+  | "RECATEGORIZE";
 
 export type SyncStatus = "pending" | "processing" | "done" | "failed";
 
@@ -202,6 +204,13 @@ export class AllocatDB extends Dexie {
     // only forces re-hydration so the new columns land on cached profile rows.
     this.version(11).upgrade(async (tx) => {
       await tx.table("sync_meta").delete("profiles");
+    });
+
+    // v12: sms_transactions.label added (custom display name for a txn).
+    // Non-indexed → schema string unchanged; the bump forces re-hydration so the
+    // new column lands on cached sms_transactions rows.
+    this.version(12).upgrade(async (tx) => {
+      await tx.table("sync_meta").delete("sms_transactions");
     });
   }
 }

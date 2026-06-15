@@ -19,8 +19,13 @@ final class SmsFilter {
             ".*(debited|credited|debit|credit|spent|sent|paid|received|withdrawn|purchase|txn|transaction|upi|a/c|acct).*");
         boolean hasDigits = b.matches(".*\\d{2,}.*");
         boolean amountCue = b.matches(".*(rs\\.?|inr|₹)\\s*\\d.*") || (txnWord && hasDigits);
-        boolean otpOnly = b.contains("otp") && !txnWord;
+        // OTP / verification / pre-auth SMS are NOT transactions even when they
+        // carry an amount + a txn keyword ("Confirm debit of ₹5000 … OTP 1234").
+        // Mirrors OTP_RE in lib/ai/parseSmsTransaction.ts — reject regardless of
+        // txnWord. High-precision tokens only (no bare "do not share"/"confirm").
+        boolean otpLike = b.matches(
+            ".*\\b(otp|one[\\s-]?time[\\s-]?(password|passcode|pin)|verification code|security code|secure code|passcode)\\b.*");
 
-        return amountCue && !otpOnly;
+        return amountCue && !otpLike;
     }
 }

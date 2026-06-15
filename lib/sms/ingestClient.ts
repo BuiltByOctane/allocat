@@ -10,7 +10,7 @@
  */
 import { getDB } from "@/lib/db";
 import type { SyncQueueItem } from "@/lib/db";
-import { parseTransactionSms } from "@/lib/ai/parseSmsTransaction";
+import { parseTransactionSms, isOtpOrVerification } from "@/lib/ai/parseSmsTransaction";
 import { normalizeMerchant, matchMerchantRule, txnDedupeKey } from "@/lib/sms/match";
 import type { MerchantRule } from "@/lib/sms/match";
 import { randomUUID } from "@/lib/utils/uuid";
@@ -49,6 +49,10 @@ export async function ingestSmsClient(
   const sender = input.sender ?? null;
   if (!raw) return { skipped: true, reason: "empty" };
 
+  // OTP / verification / pre-auth SMS are not transactions — drop early so a
+  // pre-auth "Confirm debit … OTP" can't duplicate the real debit that follows.
+  if (isOtpOrVerification(raw)) return { skipped: true, reason: "otp" };
+
   // Dedupe against anything already captured on this device.
   const dedupeKey = txnDedupeKey({ sender, raw });
 
@@ -79,8 +83,13 @@ export async function ingestSmsClient(
       return { skipped: true, reason: "no-amount" };
     }
 
-    // Only track debits (spends). Credits (income / received money) are ignored.
-    if (direction === "credit") return { skipped: true, reason: "credit" };
+    // Only track confirmed debits (spends). Credits are ignored; an ambiguous
+    // SMS with an amount but no debit/credit cue is NOT assumed to be a spend
+    // (that fallback let OTP/verification noise through). Card spends still pass
+    // — extractDirection returns "debit" for them via CARD_SPEND_RE.
+    if (direction !== "debit") {
+      return { skipped: true, reason: direction === "credit" ? "credit" : "no-debit" };
+    }
 
     const isDebit = true;
     const merchantNormalized = merchant ? normalizeMerchant(merchant) : null;
@@ -135,6 +144,7 @@ export async function ingestSmsClient(
           status,
           matched_rule_id: autoApplied ? (rule?.id ?? null) : null,
           budget_item_id: autoApplied ? (rule?.budget_item_id ?? null) : null,
+          label: null,
           created_at: now,
         });
 

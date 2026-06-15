@@ -22,6 +22,20 @@ export interface ParsedTxn {
 
 const CURRENCY_MAP: Array<[RegExp, string]> = [[/₹|\bRs\.?\b|\bINR\b/i, "INR"]];
 
+// OTP / payment-verification / pre-authorization SMS are NOT completed
+// transactions — they often carry an amount (the pending debit being
+// authorized) and trip the parser, then duplicate the real debit SMS that
+// follows. High-precision markers only: tokens that virtually never appear in a
+// completed-debit alert. Excludes bare "do not share"/"confirm"/"verify" (too
+// broad — some real debit footers say "never share your details").
+const OTP_RE =
+  /\b(otp|one[\s-]?time[\s-]?(?:password|passcode|pin)|verification\s+code|security\s+code|secure\s+code|passcode)\b/i;
+
+/** True when the SMS is an OTP / verification / pre-auth message, not a spend. */
+export function isOtpOrVerification(text: string): boolean {
+  return OTP_RE.test(text);
+}
+
 // "debited/spent/sent" → the user's account lost money. Checked before credit
 // because many debit SMS also say "<payee> credited".
 const DEBIT_RE =
@@ -148,6 +162,12 @@ function scoreConfidence(p: {
 
 export function parseTransactionSms(raw: string, _sender?: string): ParsedTxn {
   const text = raw.trim();
+
+  // OTP / verification / pre-auth → never a transaction. Zero everything so any
+  // caller treats it as non-spendable (single source of truth).
+  if (isOtpOrVerification(text)) {
+    return { amount: null, currency: null, merchant: null, direction: null, occurredAt: null, confidence: 0, raw: text };
+  }
 
   const currency = extractCurrency(text);
   const direction = extractDirection(text);

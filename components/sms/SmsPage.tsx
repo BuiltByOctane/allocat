@@ -12,6 +12,10 @@ import {
   usePendingSms,
   useCategorizeSms,
   useIgnoreSms,
+  useCategorizedSms,
+  useDeleteSms,
+  useUnallocateSms,
+  useRecategorizeSms,
 } from "@/lib/hooks/useSmsTransactions";
 import { useAddBudgetItem } from "@/lib/hooks/useBudget";
 import {
@@ -111,9 +115,17 @@ function txnDate(row: SmsTransactionRow): string | null {
 export default function SmsPage() {
   const qc = useQueryClient();
   const { data: pending, isLoading } = usePendingSms();
+  const { data: categorized } = useCategorizedSms();
   const categorize = useCategorizeSms();
   const ignore = useIgnoreSms();
+  const del = useDeleteSms();
+  const unallocate = useUnallocateSms();
+  const recategorize = useRecategorizeSms();
   const addItem = useAddBudgetItem();
+
+  const [tab, setTab] = useState<"pending" | "allocated">("pending");
+  // The categorized txn being moved/renamed via the reallocate sheet.
+  const [reallocTxn, setReallocTxn] = useState<SmsTransactionRow | null>(null);
 
   const { data: pickerData } = useQuery({
     queryKey: SMS_PICKER_KEY,
@@ -223,7 +235,7 @@ export default function SmsPage() {
     setAllocateTxn(target);
   }, [pending]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function handleAllocate(budgetItemId: string, remember: boolean) {
+  async function handleAllocate(budgetItemId: string, remember: boolean, label?: string | null) {
     if (!allocateTxn) return;
     setAllocError(null);
     try {
@@ -231,6 +243,7 @@ export default function SmsPage() {
         txnId: allocateTxn.id,
         budgetItemId,
         rememberRule: remember,
+        label: label ?? null,
       });
       setAllocateTxn(null);
     } catch (err) {
@@ -239,6 +252,36 @@ export default function SmsPage() {
       setAllocError(
         err instanceof Error ? err.message : "Couldn't allocate. Try again.",
       );
+    }
+  }
+
+  // Move an already-categorized txn to a different item and/or rename it.
+  async function handleReallocate(budgetItemId: string, _remember: boolean, label?: string | null) {
+    if (!reallocTxn) return;
+    setAllocError(null);
+    try {
+      await recategorize.mutateAsync({
+        txnId: reallocTxn.id,
+        newBudgetItemId: budgetItemId,
+        label: label ?? null,
+      });
+      setReallocTxn(null);
+    } catch (err) {
+      console.error("[SmsPage] reallocate failed:", err);
+      setAllocError(
+        err instanceof Error ? err.message : "Couldn't update. Try again.",
+      );
+    }
+  }
+
+  async function handleDelete(txn: SmsTransactionRow) {
+    if (!window.confirm("Delete this transaction? Its amount will be removed from the budget.")) return;
+    setAllocError(null);
+    try {
+      await del.mutateAsync(txn.id);
+    } catch (err) {
+      console.error("[SmsPage] delete failed:", err);
+      setAllocError(err instanceof Error ? err.message : "Couldn't delete. Try again.");
     }
   }
 
@@ -305,6 +348,26 @@ export default function SmsPage() {
     ? pickerData?.metaById[createFlow.categoryId]
     : undefined;
 
+  // Resolve an allocated txn's budget item for the Allocated tab grouping.
+  const itemMetaById = new Map(
+    (pickerData?.items ?? []).map((i) => [i.id, i] as const),
+  );
+  // Group categorized txns by budget item, preserving newest-first order.
+  const allocatedGroups: Array<{ itemId: string; item?: AllocatePickerItem; txns: SmsTransactionRow[] }> = [];
+  {
+    const index = new Map<string, number>();
+    for (const t of categorized ?? []) {
+      const key = t.budget_item_id ?? "__unknown__";
+      let pos = index.get(key);
+      if (pos === undefined) {
+        pos = allocatedGroups.length;
+        index.set(key, pos);
+        allocatedGroups.push({ itemId: key, item: itemMetaById.get(key), txns: [] });
+      }
+      allocatedGroups[pos].txns.push(t);
+    }
+  }
+
   return (
     <div className="px-4 pt-4 flex flex-col gap-3">
       {/* Header */}
@@ -321,9 +384,28 @@ export default function SmsPage() {
             Transactions
           </h1>
           <p className="text-[11px] font-medium text-muted-foreground mt-1">
-            Awaiting allocation{!isLoading && pending ? ` · ${pending.length}` : ""}
+            {tab === "pending"
+              ? `Awaiting allocation${!isLoading && pending ? ` · ${pending.length}` : ""}`
+              : `Allocated${categorized ? ` · ${categorized.length}` : ""}`}
           </p>
         </div>
+      </div>
+
+      {/* Pending / Allocated tabs */}
+      <div className="flex gap-1 rounded-pill border border-border bg-card p-1">
+        {(["pending", "allocated"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`flex-1 h-9 rounded-pill text-[13px] font-bold capitalize transition-colors ${
+              tab === t
+                ? "bg-[var(--pill)] text-[var(--pill-foreground)]"
+                : "text-muted-foreground"
+            }`}
+          >
+            {t}
+          </button>
+        ))}
       </div>
 
       {/* Allocate failure (e.g. a stale notification deep-link) */}
@@ -337,6 +419,7 @@ export default function SmsPage() {
       ) : null}
 
       {/* Pending list */}
+      {tab === "pending" && (
       <section className="flex flex-col gap-3">
         {isLoading ? (
           <p className="text-sm text-muted-foreground px-1">Loading…</p>
@@ -392,6 +475,84 @@ export default function SmsPage() {
           Spends from SMS land here for one-tap budgeting.
         </p>
       </section>
+      )}
+
+      {/* Allocated list — grouped by budget item, with edit/unallocate/delete */}
+      {tab === "allocated" && (
+        <section className="flex flex-col gap-3">
+          {!categorized || categorized.length === 0 ? (
+            <Card className="flex flex-col items-center gap-2 py-12 text-center">
+              <div className="flex size-12 items-center justify-center rounded-[14px] bg-tile text-muted-foreground mb-1">
+                <Inbox size={24} strokeWidth={1.7} />
+              </div>
+              <p className="text-sm font-bold text-foreground">No allocated transactions yet.</p>
+              <p className="text-xs text-muted-foreground">
+                Allocated SMS spends and where they landed show up here.
+              </p>
+            </Card>
+          ) : (
+            allocatedGroups.map((group) => (
+              <Card key={group.itemId} className="flex flex-col gap-2.5">
+                <div className="flex items-center gap-2 border-b border-border pb-2">
+                  {group.item?.icon && (
+                    <span className="text-lg leading-none shrink-0">{group.item.icon}</span>
+                  )}
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-bold text-foreground">
+                      {group.item?.itemName ?? "Unknown / deleted item"}
+                    </p>
+                    {group.item?.categoryName && (
+                      <p className="text-[11px] text-muted-foreground">{group.item.categoryName}</p>
+                    )}
+                  </div>
+                </div>
+
+                {group.txns.map((txn) => {
+                  const when = txnDate(txn);
+                  return (
+                    <div key={txn.id} className="flex flex-col gap-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 flex-col">
+                          <span className="truncate text-sm font-bold text-foreground">
+                            {txn.label || txn.merchant_raw || "Unknown"}
+                          </span>
+                          {when && (
+                            <span className="text-[11px] text-muted-foreground mt-0.5">{when}</span>
+                          )}
+                        </div>
+                        <span className="figure text-[17px] text-foreground shrink-0">{money(txn)}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => {
+                            setAllocError(null);
+                            setReallocTxn(txn);
+                          }}
+                          className="h-8 px-3 rounded-pill border border-border text-xs font-semibold text-foreground active:scale-[0.98] transition-transform"
+                        >
+                          Edit / Move
+                        </button>
+                        <button
+                          onClick={() => unallocate.mutate(txn.id)}
+                          className="h-8 px-3 rounded-pill border border-border text-xs font-semibold text-muted-foreground active:scale-[0.98] transition-transform"
+                        >
+                          Unallocate
+                        </button>
+                        <button
+                          onClick={() => handleDelete(txn)}
+                          className="h-8 px-3 rounded-pill border border-neg/30 text-xs font-semibold text-neg active:scale-[0.98] transition-transform"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </Card>
+            ))
+          )}
+        </section>
+      )}
 
       <div className="h-28 md:h-12" />
 
@@ -405,6 +566,19 @@ export default function SmsPage() {
         onCreateNew={handleCreateNew}
         onClose={() => setAllocateTxn(null)}
         isPending={categorize.isPending}
+      />
+
+      {/* Reallocate flow — move/rename an already-allocated txn */}
+      <AllocateSheet
+        txn={reallocTxn}
+        amountLabel={reallocTxn ? money(reallocTxn) : ""}
+        items={pickerData?.items ?? []}
+        categories={pickerData?.categories ?? []}
+        onAllocate={handleReallocate}
+        onCreateNew={() => {}}
+        onClose={() => setReallocTxn(null)}
+        isPending={recategorize.isPending}
+        mode="reallocate"
       />
 
       {/* Create-new item — full editor, scoped to the chosen category */}

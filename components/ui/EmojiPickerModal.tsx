@@ -13,9 +13,15 @@ interface EmojiPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelect: (emoji: string) => void;
+  /**
+   * Portal target. Defaults to document.body. When opened from inside a Vaul
+   * drawer, pass the drawer's content node so the picker lands inside Vaul's
+   * react-remove-scroll whitelist — otherwise its internal list can't scroll.
+   */
+  container?: Element | null;
 }
 
-export default function EmojiPickerModal({ isOpen, onClose, onSelect }: EmojiPickerModalProps) {
+export default function EmojiPickerModal({ isOpen, onClose, onSelect, container }: EmojiPickerModalProps) {
   const haptic = useHaptic();
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
@@ -70,6 +76,6 @@ export default function EmojiPickerModal({ isOpen, onClose, onSelect }: EmojiPic
 
       <div className="absolute inset-0" onClick={onClose} />
     </div>,
-    document.body
+    container ?? document.body
   );
 }

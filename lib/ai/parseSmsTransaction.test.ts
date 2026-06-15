@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseTransactionSms } from "./parseSmsTransaction";
+import { parseTransactionSms, isOtpOrVerification } from "./parseSmsTransaction";
 
 describe("parseTransactionSms — amount + currency", () => {
   it("extracts amount, INR currency and debit direction from an HDFC debit SMS", () => {
@@ -90,6 +90,37 @@ describe("parseTransactionSms — non-transaction SMS", () => {
       "Rs.1,500.00 debited from a/c **1234 on 02-06-26 to VPA amazon@ybl. Avl Bal Rs.10,000.00";
     const r = parseTransactionSms(sms, "HDFCBK");
     expect(r.confidence).toBeGreaterThanOrEqual(0.8);
+  });
+});
+
+describe("parseTransactionSms — OTP / verification reject", () => {
+  it("drops a pre-auth 'Confirm debit … OTP' message despite the amount + debit word", () => {
+    const sms = "Confirm debit of Rs 5000 to Flipkart. OTP 123456. Do not share.";
+    expect(isOtpOrVerification(sms)).toBe(true);
+    const r = parseTransactionSms(sms, "HDFCBK");
+    expect(r.amount).toBeNull();
+    expect(r.direction).toBeNull();
+    expect(r.confidence).toBe(0);
+  });
+
+  it("drops an OTP-with-amount message", () => {
+    const sms = "123456 is your OTP for Rs 999 payment at Amazon";
+    expect(isOtpOrVerification(sms)).toBe(true);
+    expect(parseTransactionSms(sms).amount).toBeNull();
+  });
+
+  it("drops a verification-code message", () => {
+    const sms = "Your verification code is 987654.";
+    expect(isOtpOrVerification(sms)).toBe(true);
+    expect(parseTransactionSms(sms).amount).toBeNull();
+  });
+
+  it("does NOT flag a genuine debit SMS as OTP", () => {
+    const sms = "Rs 500 debited from a/c X1 on 02-06-26. Avl Bal Rs 5000";
+    expect(isOtpOrVerification(sms)).toBe(false);
+    const r = parseTransactionSms(sms, "HDFCBK");
+    expect(r.amount).toBe(500);
+    expect(r.direction).toBe("debit");
   });
 });
 

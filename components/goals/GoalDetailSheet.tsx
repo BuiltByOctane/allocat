@@ -59,6 +59,7 @@ export function GoalDetailSheet({
   const [color, setColor] = useState<CatKey | null>(null);
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [contentNode, setContentNode] = useState<HTMLDivElement | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
@@ -152,6 +153,7 @@ export function GoalDetailSheet({
         <Drawer.Portal>
           <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
           <Drawer.Content
+            ref={setContentNode}
             aria-describedby="goal-sheet-desc"
             className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none sheet-3q"
           >
@@ -299,6 +301,7 @@ export function GoalDetailSheet({
         isOpen={showEmojiPicker}
         onClose={() => setShowEmojiPicker(false)}
         onSelect={handleEmojiSelect}
+        container={contentNode}
       />
     </>
   );

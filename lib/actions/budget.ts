@@ -9,7 +9,7 @@ import {
   actualOnManualComplete,
 } from "@/lib/utils/budget-completion";
 import { addAssetEntry } from "@/lib/actions/asset-history";
-import { makePayment } from "@/lib/actions/debt";
+import { makePayment, reverseDebtPayment } from "@/lib/actions/debt";
 
 type LinkType = "asset" | "debt";
 
@@ -862,6 +862,113 @@ export async function quickLogSpend(
     planned: updatedItem.planned_amount,
     actual: updatedItem.actual_amount,
     cascade: cascadeSummary,
+  };
+}
+
+/**
+ * Inverse of quickLogSpend — decrements actual_amount and reverses the
+ * asset/debt cascade. Used when deleting / unallocating / re-categorizing an
+ * SMS txn. No-ops (returns reversed:false) when the item was already deleted,
+ * so callers can still drop the txn.
+ */
+export async function reverseSpend(
+  itemId: string,
+  amount: number,
+  source?: { kind: "sms"; merchant?: string | null },
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const { data: item } = await supabase
+    .from("budget_items")
+    .select("*")
+    .eq("id", itemId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  // Item gone — nothing to decrement. Caller still removes the txn.
+  if (!item) return { reversed: false as const };
+
+  const previousActual = Number(item.actual_amount);
+  const previousCompleted = Boolean(item.is_completed);
+  const newActual = Math.max(0, previousActual - Number(amount));
+  const planned = Number(item.planned_amount);
+  // Reopen when actual drops below planned ("this spend didn't happen").
+  const nextCompleted = planned > 0 ? newActual >= planned : previousCompleted;
+
+  const { data: updatedItem, error } = await supabase
+    .from("budget_items")
+    .update({ actual_amount: newActual, is_completed: nextCompleted })
+    .eq("id", itemId)
+    .eq("user_id", user.id)
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  // Cascade reversal. If it fails, revert the item update.
+  const linkType = item.link_type as LinkType | null | undefined;
+  const linkId = item.link_id as string | null | undefined;
+
+  if (linkType && linkId) {
+    try {
+      if (linkType === "asset") {
+        const { data: asset } = await supabase
+          .from("assets")
+          .select("name")
+          .eq("id", linkId)
+          .eq("user_id", user.id)
+          .maybeSingle();
+        // Skip a missing asset rather than fail the whole reversal.
+        if (asset) {
+          await addAssetEntry(linkId, "withdraw", Number(amount), `Budget reversal: ${item.name}`, undefined, { suppressLog: true });
+        }
+      } else if (linkType === "debt") {
+        const { data: debt } = await supabase
+          .from("debts")
+          .select("name")
+          .eq("id", linkId)
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (debt) {
+          await reverseDebtPayment(linkId, Number(amount), { suppressLog: true });
+        }
+      }
+    } catch (cascadeErr) {
+      await supabase
+        .from("budget_items")
+        .update({ actual_amount: previousActual, is_completed: previousCompleted })
+        .eq("id", itemId)
+        .eq("user_id", user.id);
+      throw cascadeErr;
+    }
+  }
+
+  const cur = await getUserCurrency(supabase, user.id);
+  const fromSms = source?.kind === "sms";
+  const smsMerchant = fromSms ? (source?.merchant ?? null) : null;
+  await logActivity(supabase, user.id, {
+    action_type: "spend_reversed",
+    category: "budget",
+    title: `Reversed ${fmt(amount, cur)} on "${updatedItem.name}"${fromSms ? " from SMS" : ""}`,
+    description: `${fmt(amount, cur)} reversed on "${updatedItem.name}"${fromSms ? ` — SMS auto-track removed${smsMerchant ? ` (${smsMerchant})` : ""}` : ""}`,
+    metadata: {
+      itemId,
+      itemName: updatedItem.name,
+      amount,
+      currency: cur,
+      newTotal: updatedItem.actual_amount,
+      ...(fromSms ? { source: "sms", merchant: smsMerchant } : {}),
+    },
+  });
+
+  return {
+    reversed: true as const,
+    itemName: updatedItem.name,
+    remaining: updatedItem.planned_amount - updatedItem.actual_amount,
+    planned: updatedItem.planned_amount,
+    actual: updatedItem.actual_amount,
   };
 }
 

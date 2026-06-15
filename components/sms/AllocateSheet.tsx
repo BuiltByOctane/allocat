@@ -25,10 +25,16 @@ interface AllocateSheetProps {
   amountLabel: string;
   items: AllocatePickerItem[];
   categories: AllocateCategory[];
-  onAllocate: (budgetItemId: string, remember: boolean) => void;
+  onAllocate: (budgetItemId: string, remember: boolean, label?: string | null) => void;
   onCreateNew: (categoryId: string) => void;
   onClose: () => void;
   isPending: boolean;
+  /**
+   * "allocate" (default): first-time allocate of a pending txn — offers
+   * remember-rule + create-new. "reallocate": move an already-categorized txn —
+   * existing items only, no rule learning.
+   */
+  mode?: "allocate" | "reallocate";
 }
 
 type View = "items" | "pick-category";
@@ -42,10 +48,13 @@ export function AllocateSheet({
   onCreateNew,
   onClose,
   isPending,
+  mode = "allocate",
 }: AllocateSheetProps) {
+  const isReallocate = mode === "reallocate";
   const [view, setView] = useState<View>("items");
   const [chosenItem, setChosenItem] = useState("");
   const [remember, setRemember] = useState(true);
+  const [label, setLabel] = useState("");
 
   // Reset to a clean state every time a new transaction opens the sheet.
   // Idiomatic "adjust state during render on prop change" — no effect needed.
@@ -55,12 +64,14 @@ export function AllocateSheet({
     setPrevId(txnId);
     if (txnId) {
       setView("items");
-      setChosenItem("");
+      setChosenItem(txn?.budget_item_id ?? "");
       setRemember(true);
+      setLabel(txn?.label ?? "");
     }
   }
 
   const merchant = txn?.merchant_raw ?? "Unknown merchant";
+  const labelTrimmed = label.trim();
 
   return (
     <Drawer.Root
@@ -97,33 +108,35 @@ export function AllocateSheet({
                   </span>
                 </div>
                 <Drawer.Title className="mt-3 t-label text-muted-foreground m-0">
-                  Allocate to
+                  {isReallocate ? "Move to" : "Allocate to"}
                 </Drawer.Title>
               </div>
 
               {/* Scrollable list */}
               <div className="overflow-y-auto overscroll-contain flex-1">
                 <ul className="px-2 py-2 space-y-0.5">
-                  {/* Create-new — for spends not in the budget yet */}
-                  <li>
-                    <button
-                      type="button"
-                      onClick={() => setView("pick-category")}
-                      className="w-full flex items-center gap-3 px-4 py-3.5 rounded-tile text-left border border-dashed border-border text-foreground hover:bg-muted/50 active:bg-muted transition-colors"
-                    >
-                      <span className="material-symbols-outlined text-[20px] shrink-0">
-                        add
-                      </span>
-                      <div>
-                        <span className="text-sm font-medium block">
-                          Create new item
+                  {/* Create-new — for spends not in the budget yet (allocate only) */}
+                  {!isReallocate && (
+                    <li>
+                      <button
+                        type="button"
+                        onClick={() => setView("pick-category")}
+                        className="w-full flex items-center gap-3 px-4 py-3.5 rounded-tile text-left border border-dashed border-border text-foreground hover:bg-muted/50 active:bg-muted transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[20px] shrink-0">
+                          add
                         </span>
-                        <span className="text-[11px] text-muted-foreground block mt-0.5">
-                          Not in your budget? Add it here.
-                        </span>
-                      </div>
-                    </button>
-                  </li>
+                        <div>
+                          <span className="text-sm font-medium block">
+                            Create new item
+                          </span>
+                          <span className="text-[11px] text-muted-foreground block mt-0.5">
+                            Not in your budget? Add it here.
+                          </span>
+                        </div>
+                      </button>
+                    </li>
+                  )}
 
                   {items.length === 0 ? (
                     <li className="px-4 py-6 text-center text-xs text-muted-foreground">
@@ -171,35 +184,45 @@ export function AllocateSheet({
                 </ul>
               </div>
 
-              {/* Footer — remember + actions */}
+              {/* Footer — name + remember + actions */}
               <div className="shrink-0 border-t border-border px-5 pt-3 pb-safe">
-                <button
-                  type="button"
-                  onClick={() => setRemember((v) => !v)}
-                  className="flex items-center gap-2 w-full py-2 text-left"
-                >
-                  <span
-                    className={`material-symbols-outlined text-[20px] ${
-                      remember ? "text-accent-strong" : "text-muted-foreground"
-                    }`}
-                    style={{
-                      fontVariationSettings: remember ? "'FILL' 1" : "'FILL' 0",
-                    }}
+                <input
+                  type="text"
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  maxLength={80}
+                  placeholder={`Name this transaction (e.g. ${merchant})`}
+                  className="w-full h-[42px] rounded-tile border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent-strong"
+                />
+                {!isReallocate && (
+                  <button
+                    type="button"
+                    onClick={() => setRemember((v) => !v)}
+                    className="flex items-center gap-2 w-full py-2 text-left"
                   >
-                    {remember ? "check_box" : "check_box_outline_blank"}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    Remember this merchant for future transactions
-                  </span>
-                </button>
+                    <span
+                      className={`material-symbols-outlined text-[20px] ${
+                        remember ? "text-accent-strong" : "text-muted-foreground"
+                      }`}
+                      style={{
+                        fontVariationSettings: remember ? "'FILL' 1" : "'FILL' 0",
+                      }}
+                    >
+                      {remember ? "check_box" : "check_box_outline_blank"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Remember this merchant for future transactions
+                    </span>
+                  </button>
+                )}
                 <div className="flex gap-2 pt-2 pb-3">
                   <button
                     type="button"
                     disabled={!chosenItem || isPending}
-                    onClick={() => onAllocate(chosenItem, remember)}
+                    onClick={() => onAllocate(chosenItem, remember, labelTrimmed || null)}
                     className="flex-1 h-[48px] rounded-pill bg-[var(--pill)] text-[var(--pill-foreground)] text-sm font-bold disabled:opacity-40 active:scale-[0.98] transition-all"
                   >
-                    {isPending ? "Allocating…" : "Allocate"}
+                    {isPending ? (isReallocate ? "Saving…" : "Allocating…") : isReallocate ? "Save" : "Allocate"}
                   </button>
                   <button
                     type="button"

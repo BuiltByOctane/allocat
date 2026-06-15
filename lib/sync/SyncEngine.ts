@@ -45,8 +45,12 @@ import {
   ingestSmsTransaction,
   categorizeSmsTransaction,
   ignoreSmsTransaction,
+  deleteSmsTransaction,
+  unallocateSmsTransaction,
+  recategorizeSmsTransaction,
   type IngestSmsInput,
   type CategorizeSmsInput,
+  type RecategorizeSmsInput,
 } from "@/lib/actions/sms";
 
 const MAX_RETRIES = 3;
@@ -197,6 +201,10 @@ export class SyncEngine {
       CATEGORIZE: (p) =>
         categorizeSmsTransaction(p as unknown as CategorizeSmsInput),
       IGNORE: (p) => ignoreSmsTransaction(p.txnId as string),
+      DELETE: (p) => deleteSmsTransaction(p.txnId as string),
+      UNALLOCATE: (p) => unallocateSmsTransaction(p.txnId as string),
+      RECATEGORIZE: (p) =>
+        recategorizeSmsTransaction(p as unknown as RecategorizeSmsInput),
     },
   };
 

@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { logActivity, fmt, getUserCurrency } from "@/lib/server/activity-logger";
 import { calcTotalRepayable } from "@/lib/utils/debt-calc";
+import { upsertTodaySnapshot } from "@/lib/actions/asset-history";
 
 export async function getDebtData() {
   const supabase = await createClient();
@@ -260,6 +261,55 @@ export async function makePayment(id: string, amount: number, options?: { suppre
       category: "debts",
       title: `Paid ${fmt(amount, cur)} toward "${debt.name}"`,
       description: `Payment of ${fmt(amount, cur)} made on "${debt.name}"`,
+      metadata: { debtId: id, debtName: debt.name, amount, totalPaid: newTotalPaid, currency: cur },
+    });
+  }
+
+  return data;
+}
+
+/** Inverse of makePayment — refunds a payment (e.g. when reversing an SMS spend). */
+export async function reverseDebtPayment(id: string, amount: number, options?: { suppressLog?: boolean }) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const { data: debt } = await supabase
+    .from("debts")
+    .select("*")
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .single();
+
+  if (!debt) throw new Error("Debt not found");
+
+  const newTotalPaid = Math.max(0, Number(debt.total_paid) - Number(amount));
+  const repayableTarget = Number(debt.total_repayable) > 0
+    ? Number(debt.total_repayable)
+    : Number(debt.principal);
+  // Dropping below the target reopens the debt.
+  const isClosed = newTotalPaid >= repayableTarget;
+
+  const { data, error } = await supabase
+    .from("debts")
+    .update({ total_paid: newTotalPaid, is_closed: isClosed })
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  // Net-worth liability = principal − total_paid, so a refund moves it.
+  await upsertTodaySnapshot();
+
+  if (!options?.suppressLog) {
+    const cur = await getUserCurrency(supabase, user.id);
+    await logActivity(supabase, user.id, {
+      action_type: "debt_payment_reversed",
+      category: "debts",
+      title: `Reversed ${fmt(amount, cur)} payment on "${debt.name}"`,
+      description: `Payment of ${fmt(amount, cur)} reversed on "${debt.name}"`,
       metadata: { debtId: id, debtName: debt.name, amount, totalPaid: newTotalPaid, currency: cur },
     });
   }

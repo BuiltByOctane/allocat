@@ -21,7 +21,13 @@ type BulkSetupCategoryInput = {
   icon: string | null;
   type: "needs" | "wants" | "investments" | "misc";
   allocated_amount: number;
-  items: Array<{ tempId: string; name: string; planned: number }>;
+  items: Array<{
+    tempId: string;
+    name: string;
+    planned: number;
+    linkType?: "asset" | "debt" | null;
+    linkId?: string | null;
+  }>;
 };
 import {
   addAsset,

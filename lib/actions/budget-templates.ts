@@ -72,6 +72,36 @@ export async function saveBudgetTemplate(
   return rowToTemplate(data);
 }
 
+/** Update an existing custom template in place; returns the saved row. */
+export async function updateBudgetTemplate(
+  id: string,
+  input: SaveTemplateInput
+): Promise<BudgetTemplate> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const name = input.name.trim();
+  if (!name) throw new Error("Template name is required");
+
+  const { data, error } = await supabase
+    .from("budget_templates")
+    .update({
+      name,
+      description: input.description?.trim() || null,
+      preview: input.preview ?? [],
+      categories: input.categories as never,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .select("id, name, description, preview, categories, created_at")
+    .single();
+
+  if (error) throw new Error(error.message);
+  return rowToTemplate(data);
+}
+
 /** Delete a custom template by id (RLS scopes to the owner). */
 export async function deleteBudgetTemplate(id: string): Promise<void> {
   const supabase = await createClient();

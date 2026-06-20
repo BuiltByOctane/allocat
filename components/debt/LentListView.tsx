@@ -283,11 +283,12 @@ export function PaymentSheet({
         <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
         <Drawer.Content
           aria-describedby="pay-sheet-desc"
-          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none"
+          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none sheet-3q"
         >
           <div className="flex justify-center pt-3 pb-1 shrink-0">
             <div className="mx-auto w-9 h-1 bg-border rounded-full" />
           </div>
+          <div className="flex-1 overflow-y-auto overscroll-contain">
           <div className="px-6 pt-2 pb-4">
             <Drawer.Title className="font-display text-[20px] font-bold tracking-[-0.02em] text-foreground">
               Log payment
@@ -312,7 +313,8 @@ export function PaymentSheet({
               />
             </div>
           </div>
-          <div className="px-6 pb-8 pt-4 flex gap-2">
+          </div>
+          <div className="px-6 pb-8 pt-4 flex gap-2 shrink-0">
             <button
               onClick={onClose}
               className="flex-1 h-[48px] rounded-pill text-sm font-semibold bg-muted text-foreground"

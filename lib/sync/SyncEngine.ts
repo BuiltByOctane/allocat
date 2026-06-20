@@ -48,6 +48,7 @@ import {
   deleteSmsTransaction,
   unallocateSmsTransaction,
   recategorizeSmsTransaction,
+  reportSmsMistake,
   type IngestSmsInput,
   type CategorizeSmsInput,
   type RecategorizeSmsInput,
@@ -205,6 +206,16 @@ export class SyncEngine {
       UNALLOCATE: (p) => unallocateSmsTransaction(p.txnId as string),
       RECATEGORIZE: (p) =>
         recategorizeSmsTransaction(p as unknown as RecategorizeSmsInput),
+    },
+    sms_blocklist: {
+      INSERT: (p) =>
+        reportSmsMistake(
+          p as unknown as {
+            txnId: string;
+            templateKey: string;
+            sampleLabel?: string | null;
+          },
+        ),
     },
   };
 

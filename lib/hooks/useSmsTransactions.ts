@@ -4,6 +4,7 @@ import { getDB } from "@/lib/db";
 import type { SmsTransactionRow } from "@/lib/db";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { ingestSmsClient } from "@/lib/sms/ingestClient";
+import { smsTemplateKey } from "@/lib/sms/match";
 import { nearLimitFromIDB } from "@/lib/sms/nearLimit";
 import { randomUUID } from "@/lib/utils/uuid";
 import { notifyLocal } from "@/lib/native/notify";
@@ -292,6 +293,68 @@ export function useDeleteSms() {
         recordId: txnId,
         payload: { txnId },
       });
+      return { ok: true };
+    },
+    onSuccess: () => invalidateSmsCaches(qc),
+  });
+}
+
+/**
+ * "Report wrong SMS": blocklist the SMS *template* (so future SMS of the same
+ * kind are skipped at ingest), then refund + delete the wrongly-captured txn.
+ * mutate takes a single txnId. The raw SMS body stays on-device — only the
+ * one-way template hash is synced.
+ */
+export function useReportSmsMistake() {
+  const qc = useQueryClient();
+  const enqueue = useEnqueue();
+  return useMutation({
+    mutationFn: async (txnId: string) => {
+      const db = getDB();
+      const { txnId: resolvedId, txn } = await resolveTxn(db, txnId);
+      if (!txn) return { ok: true };
+
+      const templateKey = smsTemplateKey({
+        sender: txn.sender,
+        raw: txn.raw_text ?? "",
+      });
+      const sampleLabel = txn.merchant_raw ?? null;
+      const now = new Date().toISOString();
+      const blocklistTempId = `temp_${randomUUID()}`;
+
+      // Optimistic: record the blocklist row so the next matching SMS is skipped
+      // locally before the server confirms.
+      await db.sms_blocklist.add({
+        id: blocklistTempId,
+        user_id: "__pending__",
+        template_key: templateKey,
+        sample_label: sampleLabel,
+        created_at: now,
+      });
+
+      // Refund the spend optimistically (categorized only), then drop the txn.
+      if (
+        txn.status === "categorized" &&
+        txn.budget_item_id &&
+        typeof txn.amount === "number"
+      ) {
+        const item = await db.budget_items.get(txn.budget_item_id);
+        if (item) {
+          await db.budget_items.update(txn.budget_item_id, {
+            actual_amount: Math.max(0, Number(item.actual_amount) - txn.amount),
+          });
+        }
+      }
+      await db.sms_transactions.delete(resolvedId);
+
+      await enqueue({
+        table: "sms_blocklist",
+        operation: "INSERT",
+        recordId: blocklistTempId,
+        tempId: blocklistTempId,
+        payload: { txnId: resolvedId, templateKey, sampleLabel },
+      });
+
       return { ok: true };
     },
     onSuccess: () => invalidateSmsCaches(qc),

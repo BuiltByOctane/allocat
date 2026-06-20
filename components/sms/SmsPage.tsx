@@ -16,6 +16,7 @@ import {
   useDeleteSms,
   useUnallocateSms,
   useRecategorizeSms,
+  useReportSmsMistake,
 } from "@/lib/hooks/useSmsTransactions";
 import { useAddBudgetItem } from "@/lib/hooks/useBudget";
 import {
@@ -121,6 +122,7 @@ export default function SmsPage() {
   const del = useDeleteSms();
   const unallocate = useUnallocateSms();
   const recategorize = useRecategorizeSms();
+  const report = useReportSmsMistake();
   const addItem = useAddBudgetItem();
 
   const [tab, setTab] = useState<"pending" | "allocated">("pending");
@@ -282,6 +284,17 @@ export default function SmsPage() {
     } catch (err) {
       console.error("[SmsPage] delete failed:", err);
       setAllocError(err instanceof Error ? err.message : "Couldn't delete. Try again.");
+    }
+  }
+
+  async function handleReport(txn: SmsTransactionRow) {
+    if (!window.confirm("Stop tracking this kind of SMS?")) return;
+    setAllocError(null);
+    try {
+      await report.mutateAsync(txn.id);
+    } catch (err) {
+      console.error("[SmsPage] report failed:", err);
+      setAllocError(err instanceof Error ? err.message : "Couldn't update. Try again.");
     }
   }
 
@@ -449,7 +462,7 @@ export default function SmsPage() {
                   {meta && <Chip tone="neutral">{meta}</Chip>}
                 </div>
 
-                <div className="flex gap-2.5 mt-3.5">
+                <div className="flex flex-wrap gap-2.5 mt-3.5">
                   <button
                     onClick={() => {
                       setAllocError(null);
@@ -464,6 +477,13 @@ export default function SmsPage() {
                     className="h-[42px] px-5 rounded-pill border border-border text-sm font-semibold text-muted-foreground active:scale-[0.98] transition-transform"
                   >
                     Ignore
+                  </button>
+                  <button
+                    onClick={() => handleReport(txn)}
+                    disabled={report.isPending}
+                    className="h-[42px] px-5 rounded-pill border border-neg/30 text-sm font-semibold text-neg active:scale-[0.98] transition-transform"
+                  >
+                    Not a transaction
                   </button>
                 </div>
               </Card>
@@ -543,6 +563,13 @@ export default function SmsPage() {
                           className="h-8 px-3 rounded-pill border border-neg/30 text-xs font-semibold text-neg active:scale-[0.98] transition-transform"
                         >
                           Delete
+                        </button>
+                        <button
+                          onClick={() => handleReport(txn)}
+                          disabled={report.isPending}
+                          className="h-8 px-3 rounded-pill border border-neg/30 text-xs font-semibold text-neg active:scale-[0.98] transition-transform"
+                        >
+                          Not a transaction
                         </button>
                       </div>
                     </div>

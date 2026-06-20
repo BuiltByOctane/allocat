@@ -17,6 +17,8 @@ export type ActivityLogRow = Database["public"]["Tables"]["activity_logs"]["Row"
 export type MerchantRuleRow = Database["public"]["Tables"]["merchant_rules"]["Row"];
 export type SmsTransactionRow =
   Database["public"]["Tables"]["sms_transactions"]["Row"];
+export type SmsBlocklistRow =
+  Database["public"]["Tables"]["sms_blocklist"]["Row"];
 
 // ─── Sync infrastructure types ────────────────────────────────────────────────
 export type SyncTable =
@@ -31,7 +33,8 @@ export type SyncTable =
   | "reports"
   | "net_worth_snapshots"
   | "merchant_rules"
-  | "sms_transactions";
+  | "sms_transactions"
+  | "sms_blocklist";
 
 export type SyncOperation =
   | "INSERT"
@@ -92,6 +95,7 @@ export class AllocatDB extends Dexie {
   activity_logs!: Table<ActivityLogRow, string>;
   merchant_rules!: Table<MerchantRuleRow, string>;
   sms_transactions!: Table<SmsTransactionRow, string>;
+  sms_blocklist!: Table<SmsBlocklistRow, string>;
 
   sync_queue!: Table<SyncQueueItem, number>;
   id_map!: Table<IdMapEntry, string>;
@@ -211,6 +215,12 @@ export class AllocatDB extends Dexie {
     // new column lands on cached sms_transactions rows.
     this.version(12).upgrade(async (tx) => {
       await tx.table("sync_meta").delete("sms_transactions");
+    });
+
+    // v13: sms_blocklist — per-user list of SMS *template* keys the user reported
+    // as wrongly captured, so future SMS matching the same template are skipped.
+    this.version(13).stores({
+      sms_blocklist: "id, user_id, template_key, created_at",
     });
   }
 }

@@ -56,6 +56,15 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
             return;
         }
 
+        // User-reported template blocklist: skip whole "kinds" of SMS the user
+        // flagged as mistakes (same key the web layer computes). Blocked
+        // templates neither notify nor queue.
+        String tkey = SmsSignature.templateKey(from, text);
+        if (SmsBlocklist.contains(context, tkey)) {
+            log("blocked kind — ignored");
+            return;
+        }
+
         long ts = System.currentTimeMillis();
         // Always queue the raw SMS so the web layer does the authoritative ingest
         // (logging + sync) on next open. Dedupe there makes this safe.

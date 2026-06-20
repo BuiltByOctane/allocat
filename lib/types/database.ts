@@ -565,6 +565,27 @@ export type Database = {
           }
         ]
       }
+      sms_blocklist: {
+        Row: {
+          id: string
+          user_id: string
+          template_key: string
+          sample_label: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          template_key: string
+          sample_label?: string | null
+          created_at?: string
+        }
+        Update: {
+          template_key?: string
+          sample_label?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

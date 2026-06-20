@@ -61,11 +61,12 @@ export function TrialWelcomeModal() {
     <Drawer.Root open={open} onOpenChange={(o) => !o && dismiss()}>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 bg-black/60 z-40" />
-        <Drawer.Content className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card px-5 pt-3 pb-safe focus:outline-none max-w-[480px] mx-auto">
+        <Drawer.Content className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card px-5 pt-3 pb-safe focus:outline-none max-w-[480px] mx-auto sheet-3q">
           <div className="flex justify-center pb-4 shrink-0">
             <div className="w-9 h-1 bg-border rounded-full" />
           </div>
 
+          <div className="flex-1 overflow-y-auto overscroll-contain">
           <div className="text-center mb-6">
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-accent/15 mb-3">
               <span className="material-symbols-outlined text-accent text-[28px]">
@@ -80,8 +81,9 @@ export function TrialWelcomeModal() {
               history — free for {TRIAL_DAYS} days. No card needed.
             </p>
           </div>
+          </div>
 
-          <div className="flex flex-col gap-3 pb-6">
+          <div className="flex flex-col gap-3 pb-6 shrink-0">
             <button
               disabled={startTrial.isPending}
               onClick={begin}

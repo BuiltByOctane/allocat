@@ -78,6 +78,41 @@ export function txnDedupeKey(p: { sender?: string | null; raw: string }): string
 }
 
 /**
+ * Stable "template" key for an SMS — identifies the *kind* of message rather
+ * than the specific transaction. Two instances of the same bank template
+ * (different amounts / dates / ref numbers / payees) collapse to the same key,
+ * so a user who reports one wrongly-captured message can have that whole
+ * template skipped in future.
+ *
+ * Built by masking the variable parts (digits, currency amounts, masked account
+ * tails, UPI handles) while keeping the alphabetic words — so a credit template
+ * never collides with the same bank's debit template (the verb differs). Like
+ * `txnDedupeKey`, the result is a one-way HASH of sender + skeleton, so the raw
+ * SMS content stays on-device and only the hash is ever synced.
+ *
+ * NOTE: kept in sync with the Java port in SmsSignature.java (native closed-app
+ * path) — change both together.
+ */
+export function smsTemplateKey(p: { sender?: string | null; raw: string }): string {
+  const sender = (p.sender ?? "").toLowerCase().trim();
+  const skeleton = smsSkeleton(p.raw);
+  return hash53(`${sender}|${skeleton}`);
+}
+
+/** Mask the variable parts of an SMS body, leaving the structural skeleton. */
+function smsSkeleton(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/\b[\w.\-]+@[\w.\-]+\b/g, "@") // UPI / VPA handles
+    .replace(/[*x]{1,}\d+/g, "#") // masked account tails: **1234, xx12
+    .replace(/[\d,]*\d/g, "#") // any number run (amounts, dates, refs)
+    .replace(/#(?:[.\-/:]#)+/g, "#") // collapse number groups like #-#-# (dates)
+    .replace(/#+/g, "#")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
  * cyrb53 — fast, well-distributed 53-bit string hash. Deterministic across
  * runs/devices, not reversible to the original SMS. Returned as a hex string.
  */

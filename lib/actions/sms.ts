@@ -38,6 +38,11 @@ export interface IngestSmsInput {
   /** ISO date/timestamp string. */
   occurredAt?: string | null;
   dedupeKey: string;
+  /**
+   * One-way hash of the SMS *template* (sender + masked skeleton). If the user
+   * has reported this template as wrongly captured, the server no-ops the ingest.
+   */
+  templateKey?: string | null;
 }
 
 /**
@@ -62,6 +67,18 @@ export async function ingestSmsTransaction(input: IngestSmsInput) {
     .eq("dedupe_key", input.dedupeKey)
     .maybeSingle();
   if (existing) return existing;
+
+  // 1b. Template blocklist — the user reported this kind of SMS as wrongly
+  // captured. No-op so the same template never re-appears as a transaction.
+  if (input.templateKey) {
+    const { data: blocked } = await supabase
+      .from("sms_blocklist")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("template_key", input.templateKey)
+      .maybeSingle();
+    if (blocked) return { ok: true as const, blocked: true as const };
+  }
 
   const merchantNormalized = input.merchantRaw
     ? normalizeMerchant(input.merchantRaw)
@@ -239,17 +256,23 @@ export interface RecategorizeSmsInput {
   label?: string | null;
 }
 
-/** Delete an SMS txn. If categorized, refund its amount to the budget item first. */
-export async function deleteSmsTransaction(txnId: string) {
-  const { supabase, user } = await getAuthed();
-
+/**
+ * Refund (if categorized) then delete an sms_transactions row. Shared by
+ * deleteSmsTransaction and reportSmsMistake. Returns the deleted row (or null if
+ * it didn't exist) so callers can log/derive labels from it. No-op if missing.
+ */
+async function refundAndDeleteTxn(
+  supabase: Supa,
+  userId: string,
+  txnId: string,
+): Promise<Record<string, unknown> | null> {
   const { data: txn } = await supabase
     .from("sms_transactions")
     .select("*")
     .eq("id", txnId)
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .maybeSingle();
-  if (!txn) return { ok: true as const };
+  if (!txn) return null;
 
   if (txn.status === "categorized" && txn.budget_item_id && typeof txn.amount === "number" && txn.amount > 0) {
     try {
@@ -266,17 +289,89 @@ export async function deleteSmsTransaction(txnId: string) {
     .from("sms_transactions")
     .delete()
     .eq("id", txnId)
-    .eq("user_id", user.id);
+    .eq("user_id", userId);
   if (error) throw new Error(error.message);
 
+  return txn as Record<string, unknown>;
+}
+
+/** Delete an SMS txn. If categorized, refund its amount to the budget item first. */
+export async function deleteSmsTransaction(txnId: string) {
+  const { supabase, user } = await getAuthed();
+
+  const txn = await refundAndDeleteTxn(supabase, user.id, txnId);
+  if (!txn) return { ok: true as const };
+
   const cur = await getUserCurrency(supabase, user.id);
-  const merchant = txn.label || txn.merchant_raw || txn.merchant_normalized || "Unknown";
+  const amount = txn.amount as number | null;
+  const merchant =
+    (txn.label as string | null) ||
+    (txn.merchant_raw as string | null) ||
+    (txn.merchant_normalized as string | null) ||
+    "Unknown";
   await logActivity(supabase, user.id, {
     action_type: "sms_txn_deleted",
     category: "budget",
-    title: `Deleted SMS transaction${typeof txn.amount === "number" ? ` ${fmt(txn.amount, cur)}` : ""}`,
+    title: `Deleted SMS transaction${typeof amount === "number" ? ` ${fmt(amount, cur)}` : ""}`,
     description: `Removed transaction at ${merchant}`,
-    metadata: { txnId, merchant, amount: txn.amount, wasCategorized: txn.status === "categorized" },
+    metadata: { txnId, merchant, amount, wasCategorized: txn.status === "categorized" },
+  });
+
+  return { ok: true as const };
+}
+
+export interface ReportSmsMistakeInput {
+  txnId: string;
+  /** One-way hash of the SMS template to block (sender + masked skeleton). */
+  templateKey: string;
+  /** Optional human-readable sample (e.g. merchant) for the blocklist UI. */
+  sampleLabel?: string | null;
+}
+
+/**
+ * "Report wrong SMS": record the SMS *template* in the user's blocklist (so
+ * future SMS of the same kind are skipped at ingest), then refund + delete the
+ * wrongly-captured transaction. Idempotent on the unique(user_id, template_key)
+ * constraint — re-reporting the same template silently no-ops the upsert.
+ */
+export async function reportSmsMistake(input: ReportSmsMistakeInput) {
+  const { supabase, user } = await getAuthed();
+
+  // Blocklist the template (idempotent — ignore the unique-constraint conflict).
+  const { error: blockErr } = await supabase
+    .from("sms_blocklist")
+    .upsert(
+      {
+        user_id: user.id,
+        template_key: input.templateKey,
+        sample_label: input.sampleLabel ?? null,
+      },
+      { onConflict: "user_id,template_key", ignoreDuplicates: true },
+    );
+  if (blockErr) throw new Error(blockErr.message);
+
+  // Refund (if categorized) + delete the offending transaction.
+  const txn = await refundAndDeleteTxn(supabase, user.id, input.txnId);
+
+  const cur = await getUserCurrency(supabase, user.id);
+  const amount = (txn?.amount as number | null) ?? null;
+  const merchant =
+    (txn?.label as string | null) ||
+    (txn?.merchant_raw as string | null) ||
+    (txn?.merchant_normalized as string | null) ||
+    input.sampleLabel ||
+    "Unknown";
+  await logActivity(supabase, user.id, {
+    action_type: "sms_txn_reported",
+    category: "budget",
+    title: `Reported wrong SMS${typeof amount === "number" ? ` ${fmt(amount, cur)}` : ""}`,
+    description: `Blocked this kind of SMS and removed it (at ${merchant})`,
+    metadata: {
+      txnId: input.txnId,
+      templateKey: input.templateKey,
+      merchant,
+      amount,
+    },
   });
 
   return { ok: true as const };

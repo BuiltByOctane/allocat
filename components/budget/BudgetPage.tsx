@@ -314,39 +314,41 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
               <div className="w-9 h-1 bg-border rounded-full" />
             </div>
 
-            <div className="px-6 py-4">
-              <Drawer.Title className="font-display text-[20px] font-bold tracking-[-0.02em] text-foreground">
-                Add category
-              </Drawer.Title>
-              <p id="add-category-description" className="mt-1 text-[13px] text-muted-foreground">
-                Start with a name. Set the icon, allocation, and items after.
-              </p>
-            </div>
-
-            <form onSubmit={handleCreateCategory} className="px-6 py-2 space-y-4 pb-10">
-              <div className="space-y-2">
-                <label
-                  htmlFor="new-category-name"
-                  className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground"
-                >
-                  Category name
-                </label>
-                <input
-                  ref={addCategoryInputRef}
-                  id="new-category-name"
-                  type="text"
-                  value={newCategoryName}
-                  onChange={(e) => setNewCategoryName(e.target.value)}
-                  placeholder="e.g. Groceries"
-                  className="w-full bg-card border border-border rounded-[13px] px-4 py-3 text-sm font-medium text-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
-                />
+            <form onSubmit={handleCreateCategory} className="flex flex-col min-h-0 flex-1">
+              <div className="px-6 py-4 shrink-0">
+                <Drawer.Title className="font-display text-[20px] font-bold tracking-[-0.02em] text-foreground">
+                  Add category
+                </Drawer.Title>
+                <p id="add-category-description" className="mt-1 text-[13px] text-muted-foreground">
+                  Start with a name. Set the icon, allocation, and items after.
+                </p>
               </div>
 
-              {addCategoryMutation.isError && (
-                <p className="text-[11px] font-medium text-neg">{addCategoryError}</p>
-              )}
+              <div className="flex-1 overflow-y-auto overscroll-contain px-6 py-2 space-y-4">
+                <div className="space-y-2">
+                  <label
+                    htmlFor="new-category-name"
+                    className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground"
+                  >
+                    Category name
+                  </label>
+                  <input
+                    ref={addCategoryInputRef}
+                    id="new-category-name"
+                    type="text"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    placeholder="e.g. Groceries"
+                    className="w-full bg-card border border-border rounded-[13px] px-4 py-3 text-sm font-medium text-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
+                  />
+                </div>
 
-              <div className="flex flex-col gap-3">
+                {addCategoryMutation.isError && (
+                  <p className="text-[11px] font-medium text-neg">{addCategoryError}</p>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-3 px-6 pt-2 pb-10 shrink-0">
                 <button
                   type="submit"
                   disabled={!newCategoryName.trim() || addCategoryMutation.isPending}

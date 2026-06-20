@@ -11,7 +11,7 @@
 import { getDB } from "@/lib/db";
 import type { SyncQueueItem } from "@/lib/db";
 import { parseTransactionSms, isOtpOrVerification } from "@/lib/ai/parseSmsTransaction";
-import { normalizeMerchant, matchMerchantRule, txnDedupeKey } from "@/lib/sms/match";
+import { normalizeMerchant, matchMerchantRule, txnDedupeKey, smsTemplateKey } from "@/lib/sms/match";
 import type { MerchantRule } from "@/lib/sms/match";
 import { randomUUID } from "@/lib/utils/uuid";
 import { notifyLocal } from "@/lib/native/notify";
@@ -55,6 +55,14 @@ export async function ingestSmsClient(
 
   // Dedupe against anything already captured on this device.
   const dedupeKey = txnDedupeKey({ sender, raw });
+
+  // Template key identifies the *kind* of SMS (not the specific txn). If the user
+  // has reported this template as wrongly captured, skip the whole template.
+  const templateKey = smsTemplateKey({ sender, raw });
+  const blocked = await db.sms_blocklist.toArray();
+  if (blocked.some((b) => b.template_key === templateKey)) {
+    return { skipped: true, reason: "blocked" };
+  }
 
   // In-memory guard: reject a concurrent ingest of the SAME SMS synchronously,
   // before its async dedupe check (which the first caller hasn't satisfied yet).
@@ -178,6 +186,7 @@ export async function ingestSmsClient(
         direction,
         occurredAt,
         dedupeKey,
+        templateKey,
       },
     });
 

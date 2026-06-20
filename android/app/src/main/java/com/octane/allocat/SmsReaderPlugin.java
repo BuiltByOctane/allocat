@@ -144,6 +144,14 @@ public class SmsReaderPlugin extends Plugin {
         call.resolve();
     }
 
+    /** JS pushes template keys the user reported as mistakes; the closed-app
+     * receiver skips any SMS whose template key is in this set. */
+    @PluginMethod
+    public void setBlocklist(PluginCall call) {
+        SmsBlocklist.set(getContext(), call.getString("keys", "[]"));
+        call.resolve();
+    }
+
     /** JS pushes the top budget items for the quick-allocate action buttons. */
     @PluginMethod
     public void setQuickTargets(PluginCall call) {

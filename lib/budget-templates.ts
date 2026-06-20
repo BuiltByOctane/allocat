@@ -2,6 +2,9 @@ export interface TemplateItem {
   name: string;
   /** Absolute planned amount in the user's display currency. Optional — predefined templates omit. */
   plannedAmount?: number;
+  /** Cross-section link preserved across applies. Predefined templates omit. */
+  linkType?: "asset" | "debt" | null;
+  linkId?: string | null;
 }
 
 export interface TemplateCategory {

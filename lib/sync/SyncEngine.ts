@@ -21,7 +21,13 @@ type BulkSetupCategoryInput = {
   icon: string | null;
   type: "needs" | "wants" | "investments" | "misc";
   allocated_amount: number;
-  items: Array<{ tempId: string; name: string; planned: number }>;
+  items: Array<{
+    tempId: string;
+    name: string;
+    planned: number;
+    linkType?: "asset" | "debt" | null;
+    linkId?: string | null;
+  }>;
 };
 import {
   addAsset,
@@ -41,6 +47,7 @@ import {
   deleteDebt,
   makePayment,
 } from "@/lib/actions/debt";
+import { upsertReport, type UpsertReportInput } from "@/lib/actions/reports";
 import {
   ingestSmsTransaction,
   categorizeSmsTransaction,
@@ -48,6 +55,7 @@ import {
   deleteSmsTransaction,
   unallocateSmsTransaction,
   recategorizeSmsTransaction,
+  reportSmsMistake,
   type IngestSmsInput,
   type CategorizeSmsInput,
   type RecategorizeSmsInput,
@@ -196,6 +204,26 @@ export class SyncEngine {
       DELETE: (p) => deleteDebt(p.id as string),
       PAYMENT: (p) => makePayment(p.id as string, p.amount as number),
     },
+    reports: {
+      // Notes-save is an upsert: both INSERT and UPDATE route to upsertReport,
+      // which resolves the (user_id, month, year) row server-side.
+      INSERT: (p) =>
+        upsertReport({
+          budgetId: p.budgetId as string,
+          month: p.month as number,
+          year: p.year as number,
+          notes: (p.notes as string) ?? "",
+          summaryData: p.summaryData as UpsertReportInput["summaryData"],
+        }),
+      UPDATE: (p) =>
+        upsertReport({
+          budgetId: p.budgetId as string,
+          month: p.month as number,
+          year: p.year as number,
+          notes: (p.notes as string) ?? "",
+          summaryData: p.summaryData as UpsertReportInput["summaryData"],
+        }),
+    },
     sms_transactions: {
       INSERT: (p) => ingestSmsTransaction(p as unknown as IngestSmsInput),
       CATEGORIZE: (p) =>
@@ -205,6 +233,16 @@ export class SyncEngine {
       UNALLOCATE: (p) => unallocateSmsTransaction(p.txnId as string),
       RECATEGORIZE: (p) =>
         recategorizeSmsTransaction(p as unknown as RecategorizeSmsInput),
+    },
+    sms_blocklist: {
+      INSERT: (p) =>
+        reportSmsMistake(
+          p as unknown as {
+            txnId: string;
+            templateKey: string;
+            sampleLabel?: string | null;
+          },
+        ),
     },
   };
 

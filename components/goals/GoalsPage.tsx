@@ -290,9 +290,14 @@ export default function GoalsPage({ overrideGoals }: GoalsPageProps) {
           </div>
         ) : list.length === 0 ? (
           <Card className="py-10 text-center">
-            <div className="text-[13px] font-medium text-muted-foreground mb-3">
-              {tab === "active" ? "No active goals" : "No achieved goals yet"}
+            <div className="text-[14px] font-bold text-foreground mb-1">
+              {tab === "active" ? "No goals yet" : "No achieved goals yet"}
             </div>
+            <p className="mx-auto mb-4 max-w-[260px] text-[12px] text-muted-foreground">
+              {tab === "active"
+                ? "Set a target you're saving toward — an emergency fund, a trip, a new phone — and track how close you are."
+                : "Goals you reach will be celebrated here."}
+            </p>
             {tab === "active" && (
               <button
                 onClick={() => { haptic.light(); openAddSheet(); }}

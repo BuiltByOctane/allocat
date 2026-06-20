@@ -11,6 +11,8 @@ import { useRegisterQuickAction } from "@/lib/providers/QuickActionProvider";
 import QuickSpendInput from "@/components/dashboard/QuickSpendInput";
 import { useAddBudgetCategory, useUpdateBudgetTotal, budgetKey } from "@/lib/hooks/useBudget";
 import { DASHBOARD_KEY } from "@/lib/hooks/useDashboard";
+import { ensureBudgetRow } from "@/lib/actions/budget";
+import { getDB } from "@/lib/db";
 import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { InlineEditableNumber } from "@/components/ui/InlineEditableNumber";
@@ -60,7 +62,38 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [isSetupOpen, setIsSetupOpen] = useState(false);
+  const [setupMode, setSetupMode] = useState<"create" | "saveTemplate">("create");
   const [spendOpen, setSpendOpen] = useState(false);
+  // When no budget row exists yet, data.id is "" (a virtual empty budget). The
+  // real row is created on the first write; resolvedId holds it for this session
+  // until the refetched data.id catches up. Always prefer data.id when present.
+  const [resolvedId, setResolvedId] = useState("");
+  const effectiveBudgetId = data.id || resolvedId;
+
+  const ensureBudgetId = useCallback(async (): Promise<string> => {
+    if (data.id) return data.id;
+    if (resolvedId) return resolvedId;
+    const row = await ensureBudgetRow(defaultMonth, defaultYear);
+    await getDB().budgets.put(row);
+    setResolvedId(row.id);
+    qc.invalidateQueries({ queryKey: budgetKey(defaultMonth, defaultYear) });
+    qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
+    return row.id;
+  }, [data.id, resolvedId, defaultMonth, defaultYear, qc]);
+
+  const openSetup = useCallback(async () => {
+    haptic.light();
+    await ensureBudgetId();
+    setSetupMode("create");
+    setIsSetupOpen(true);
+  }, [haptic, ensureBudgetId]);
+
+  // Capture the current month's budget as a reusable template (budget already exists).
+  const openSaveTemplate = useCallback(() => {
+    haptic.light();
+    setSetupMode("saveTemplate");
+    setIsSetupOpen(true);
+  }, [haptic]);
 
   // Quick-action dock: log an expense against a budget item (when categories exist).
   const openSpend = useCallback(() => setSpendOpen(true), []);
@@ -94,12 +127,15 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
   }
 
   function handleUpdateBudget(totalAmount: number) {
-    updateBudgetTotalMutation.mutate({
-      budgetId: data.id,
-      totalAmount,
-      month: defaultMonth,
-      year: defaultYear,
-    });
+    void (async () => {
+      const budgetId = await ensureBudgetId();
+      updateBudgetTotalMutation.mutate({
+        budgetId,
+        totalAmount,
+        month: defaultMonth,
+        year: defaultYear,
+      });
+    })();
   }
 
   async function handleCreateCategory(event?: FormEvent<HTMLFormElement>) {
@@ -107,8 +143,9 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
     const name = newCategoryName.trim();
     if (!name || addCategoryMutation.isPending) return;
     try {
+      const budgetId = await ensureBudgetId();
       const category = await addCategoryMutation.mutateAsync({
-        budgetId: data.id,
+        budgetId,
         name,
         month: defaultMonth,
         year: defaultYear,
@@ -207,30 +244,41 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
             Categories · {data.categories.length}
           </span>
           <div className="flex items-center gap-4">
-            {data.categories.length === 0 && (
+            {/* When empty, the empty-state primary CTA drives setup — keep this
+                header link low-key so it doesn't compete. ＋New is the accent
+                action only once categories exist. */}
+            {data.categories.length > 0 && (
               <button
                 type="button"
-                onClick={() => { haptic.light(); setIsSetupOpen(true); }}
-                className="text-[13px] font-bold text-muted-foreground"
+                onClick={openSaveTemplate}
+                className="flex items-center gap-1 text-[13px] font-bold text-muted-foreground"
+                aria-label="Save current budget as template"
               >
+                <span className="material-symbols-outlined text-base leading-none">
+                  bookmark_add
+                </span>
                 Template
               </button>
             )}
-            <button
-              id="add-category-inline"
-              type="button"
-              onClick={openAddCategory}
-              className="flex items-center gap-1 text-[13px] font-bold text-foreground"
-            >
-              <span className="text-accent-strong text-base leading-none">＋</span>New
-            </button>
+            {/* While empty, the empty-state card owns both CTAs — don't duplicate
+                "Add manually" here. ＋New only appears once categories exist. */}
+            {data.categories.length > 0 && (
+              <button
+                id="add-category-inline"
+                type="button"
+                onClick={openAddCategory}
+                className="flex items-center gap-1 text-[13px] font-bold text-foreground"
+              >
+                <span className="text-accent-strong text-base leading-none">＋</span>New
+              </button>
+            )}
           </div>
         </div>
 
         {/* Category list */}
         {data.categories.length === 0 ? (
           <BudgetEmptyState
-            onSetup={() => { haptic.light(); setIsSetupOpen(true); }}
+            onSetup={openSetup}
             onAddCategory={openAddCategory}
           />
         ) : (
@@ -286,7 +334,8 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
       <BudgetSetupSheet
         isOpen={isSetupOpen}
         onClose={() => setIsSetupOpen(false)}
-        budgetId={data.id}
+        mode={setupMode}
+        budgetId={effectiveBudgetId}
         existingTotalBudget={data.totalBudget}
         onDone={() => {
           qc.invalidateQueries({ queryKey: budgetKey(defaultMonth, defaultYear) });
@@ -314,39 +363,41 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
               <div className="w-9 h-1 bg-border rounded-full" />
             </div>
 
-            <div className="px-6 py-4">
-              <Drawer.Title className="font-display text-[20px] font-bold tracking-[-0.02em] text-foreground">
-                Add category
-              </Drawer.Title>
-              <p id="add-category-description" className="mt-1 text-[13px] text-muted-foreground">
-                Start with a name. Set the icon, allocation, and items after.
-              </p>
-            </div>
-
-            <form onSubmit={handleCreateCategory} className="px-6 py-2 space-y-4 pb-10">
-              <div className="space-y-2">
-                <label
-                  htmlFor="new-category-name"
-                  className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground"
-                >
-                  Category name
-                </label>
-                <input
-                  ref={addCategoryInputRef}
-                  id="new-category-name"
-                  type="text"
-                  value={newCategoryName}
-                  onChange={(e) => setNewCategoryName(e.target.value)}
-                  placeholder="e.g. Groceries"
-                  className="w-full bg-card border border-border rounded-[13px] px-4 py-3 text-sm font-medium text-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
-                />
+            <form onSubmit={handleCreateCategory} className="flex flex-col min-h-0 flex-1">
+              <div className="px-6 py-4 shrink-0">
+                <Drawer.Title className="font-display text-[20px] font-bold tracking-[-0.02em] text-foreground">
+                  Add category
+                </Drawer.Title>
+                <p id="add-category-description" className="mt-1 text-[13px] text-muted-foreground">
+                  Start with a name. Set the icon, allocation, and items after.
+                </p>
               </div>
 
-              {addCategoryMutation.isError && (
-                <p className="text-[11px] font-medium text-neg">{addCategoryError}</p>
-              )}
+              <div className="flex-1 overflow-y-auto overscroll-contain px-6 py-2 space-y-4">
+                <div className="space-y-2">
+                  <label
+                    htmlFor="new-category-name"
+                    className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground"
+                  >
+                    Category name
+                  </label>
+                  <input
+                    ref={addCategoryInputRef}
+                    id="new-category-name"
+                    type="text"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    placeholder="e.g. Groceries"
+                    className="w-full bg-card border border-border rounded-[13px] px-4 py-3 text-sm font-medium text-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
+                  />
+                </div>
 
-              <div className="flex flex-col gap-3">
+                {addCategoryMutation.isError && (
+                  <p className="text-[11px] font-medium text-neg">{addCategoryError}</p>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-3 px-6 pt-2 pb-10 shrink-0">
                 <button
                   type="submit"
                   disabled={!newCategoryName.trim() || addCategoryMutation.isPending}

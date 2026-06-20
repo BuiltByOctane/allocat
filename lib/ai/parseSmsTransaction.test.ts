@@ -52,6 +52,32 @@ describe("parseTransactionSms — direction", () => {
     expect(r.direction).toBe("credit");
     expect(r.amount).toBe(2000);
   });
+
+  it("treats a credit with a 'UPI txn ref' as credit, not debit", () => {
+    const sms = "Rs.5000 credited to a/c **12 on 02-06-26. UPI txn ref 998877";
+    const r = parseTransactionSms(sms, "HDFCBK");
+    expect(r.direction).toBe("credit");
+    expect(r.amount).toBe(5000);
+  });
+
+  it("treats a credit phrased with 'received'/'transferred to your a/c' as credit", () => {
+    const sms = "Rs.2000 received via UPI, transferred to your a/c";
+    const r = parseTransactionSms(sms, "HDFCBK");
+    expect(r.direction).toBe("credit");
+  });
+
+  it("keeps debit when both 'debited' and 'credited' appear", () => {
+    const sms = "Rs.200 debited from a/c, payee credited";
+    const r = parseTransactionSms(sms, "HDFCBK");
+    expect(r.direction).toBe("debit");
+  });
+
+  it("treats a credit-card spend phrasing as a debit", () => {
+    const sms =
+      "A transaction of Rs.1500 was made using your HDFC Credit Card at AMAZON";
+    const r = parseTransactionSms(sms, "HDFCBK");
+    expect(r.direction).toBe("debit");
+  });
 });
 
 describe("parseTransactionSms — merchant", () => {

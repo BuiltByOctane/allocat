@@ -25,8 +25,13 @@ final class SmsParser {
 
     private static final Pattern CURRENCY =
         Pattern.compile("₹|\\bRs\\.?\\b|\\bINR\\b", Pattern.CASE_INSENSITIVE);
-    private static final Pattern DEBIT =
-        Pattern.compile("\\b(debited|debit|spent|sent|paid|withdrawn|w/d|purchase|txn|transferred|auto[-\\s]?debit|e-?mandate)\\b", Pattern.CASE_INSENSITIVE);
+    // Strong debit markers: unambiguous "account lost money" tokens.
+    private static final Pattern STRONG_DEBIT =
+        Pattern.compile("\\b(debited|debit|spent|withdrawn|w/d|purchase|paid|auto[-\\s]?debit|e-?mandate)\\b", Pattern.CASE_INSENSITIVE);
+    // Weak debit markers: ambiguous tokens that also appear in credit SMS — only
+    // count as debit AFTER credit has been ruled out.
+    private static final Pattern WEAK_DEBIT =
+        Pattern.compile("\\b(txn|transferred|sent)\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern CREDIT =
         Pattern.compile("\\b(credited|credit|received|deposited|refund(?:ed)?)\\b", Pattern.CASE_INSENSITIVE);
     // Credit-card spend phrasing ("...made using your ... Card at X") has no debit keyword.
@@ -61,9 +66,13 @@ final class SmsParser {
         String t = body.replaceAll("\\s+", " ").trim();
 
         if (CURRENCY.matcher(t).find()) p.currency = "INR";
-        if (DEBIT.matcher(t).find()) p.direction = "debit";
+        // 1. Strong debit wins. 2. Card spend (its "Credit Card" wording must
+        // beat CREDIT). 3. Credit beats the weak/ambiguous tokens. 4. Weak debit
+        // (txn/transferred/sent) last.
+        if (STRONG_DEBIT.matcher(t).find()) p.direction = "debit";
         else if (CARD_SPEND.matcher(t).find()) p.direction = "debit";
         else if (CREDIT.matcher(t).find()) p.direction = "credit";
+        else if (WEAK_DEBIT.matcher(t).find()) p.direction = "debit";
 
         p.amount = extractAmount(t);
 

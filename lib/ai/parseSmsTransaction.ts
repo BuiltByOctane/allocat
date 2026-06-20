@@ -36,10 +36,14 @@ export function isOtpOrVerification(text: string): boolean {
   return OTP_RE.test(text);
 }
 
-// "debited/spent/sent" → the user's account lost money. Checked before credit
-// because many debit SMS also say "<payee> credited".
-const DEBIT_RE =
-  /\b(debited|debit|spent|sent|paid|withdrawn|w\/d|purchase|txn|transferred|auto[-\s]?debit|e-?mandate)\b/i;
+// Strong debit markers: tokens that unambiguously mean the user's account lost
+// money. Checked before credit because many debit SMS also say "<payee> credited".
+const STRONG_DEBIT_RE =
+  /\b(debited|debit|spent|withdrawn|w\/d|purchase|paid|auto[-\s]?debit|e-?mandate)\b/i;
+// Weak debit markers: ambiguous tokens that also appear in credit SMS (e.g.
+// "credited ... UPI txn ref", "received ... transferred to your a/c"). Only
+// treated as debit AFTER credit has been ruled out.
+const WEAK_DEBIT_RE = /\b(txn|transferred|sent)\b/i;
 const CREDIT_RE = /\b(credited|credit|received|deposited|refund(?:ed)?)\b/i;
 // Credit-card spend phrasing carries no debit keyword: "A transaction of Rs.X was
 // made using your HDFC ... Credit Card at <merchant>". Treat as a debit.
@@ -56,11 +60,18 @@ function extractCurrency(text: string): string | null {
 }
 
 function extractDirection(text: string): TxnDirection | null {
-  // "A/C debited ... payee credited" → debit wins (account is the subject).
-  if (DEBIT_RE.test(text)) return "debit";
-  // Card spends ("...made using your ... Card at X") have no debit keyword.
+  // 1. Strong debit word wins outright: "A/C debited ... payee credited" → debit
+  //    (the account is the subject; a payee being credited doesn't change that).
+  if (STRONG_DEBIT_RE.test(text)) return "debit";
+  // 2. Card spends ("...made using your ... Card at X") have no debit keyword and
+  //    the phrasing contains "Credit Card" — match before CREDIT_RE so that word
+  //    doesn't mis-read a spend as a credit.
   if (CARD_SPEND_RE.test(text)) return "debit";
+  // 3. Credit beats the weak/ambiguous debit tokens — a credit SMS often carries
+  //    "UPI txn ref" or "transferred to your a/c", which must NOT read as debit.
   if (CREDIT_RE.test(text)) return "credit";
+  // 4. Fall back to the weak debit tokens (txn/transferred/sent) only now.
+  if (WEAK_DEBIT_RE.test(text)) return "debit";
   return null;
 }
 

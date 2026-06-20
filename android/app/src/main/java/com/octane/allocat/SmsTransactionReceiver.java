@@ -56,6 +56,15 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
             return;
         }
 
+        // User-reported template blocklist: skip whole "kinds" of SMS the user
+        // flagged as mistakes (same key the web layer computes). Blocked
+        // templates neither notify nor queue.
+        String tkey = SmsSignature.templateKey(from, text);
+        if (SmsBlocklist.contains(context, tkey)) {
+            log("blocked kind — ignored");
+            return;
+        }
+
         long ts = System.currentTimeMillis();
         // Always queue the raw SMS so the web layer does the authoritative ingest
         // (logging + sync) on next open. Dedupe there makes this safe.
@@ -121,12 +130,17 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
                             + ordinal(byDay) + " — ease up to stay in budget.";
                         url = "/budget";
                     } else if (SmsConfig.confirmEnabled(context)) {
-                        // Subtle auto-allocate confirmation (user can disable in Settings).
+                        // Subtle auto-allocate confirmation (user can disable in
+                        // Settings). Names the budget ITEM (falls back to the
+                        // category, then "your budget").
+                        String target = (mr.itemName != null && !mr.itemName.isEmpty())
+                            ? mr.itemName
+                            : mr.category;
                         notifTitle = "🐾 Sorted: " + amt
-                            + (mr.category.isEmpty() ? "" : " → " + mr.category);
-                        notifBody = mr.category.isEmpty()
+                            + (target.isEmpty() ? "" : " → " + target);
+                        notifBody = target.isEmpty()
                             ? "Auto-logged to your budget."
-                            : "Auto-logged to " + mr.category + ".";
+                            : "Auto-logged to " + target + ".";
                         url = "/budget";
                     } else {
                         suppressNotif = true;

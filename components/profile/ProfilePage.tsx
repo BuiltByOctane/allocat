@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { Capacitor } from "@capacitor/core";
-import { ChevronRight, History, MessageSquareText, CheckCircle2, Lightbulb, RotateCcw, LifeBuoy, Sun, Moon } from "lucide-react";
+import { ChevronRight, History, MessageSquareText, CheckCircle2, Lightbulb, RotateCcw, MessageSquareHeart, Receipt, FileBarChart, Sun, Moon } from "lucide-react";
 import UserAvatar from "@/components/profile/UserAvatar";
 import AvatarPickerSheet from "@/components/profile/AvatarPickerSheet";
 import { Card } from "@/components/ui/Card";
@@ -27,10 +27,14 @@ import {
 } from "@/lib/sms/notifPrefs";
 import { scheduleWeeklyRecap } from "@/lib/sms/recap";
 import { SmsReader } from "@/lib/native/SmsReader";
+import { useIsPremium } from "@/lib/providers/EntitlementProvider";
+import { CrownBadge } from "@/components/ui/CrownBadge";
+import { FeedbackSheet } from "@/components/feedback/FeedbackSheet";
 
 export default function ProfilePage() {
   const { data: profile } = useProfile();
   const tour = useTour();
+  const isPremium = useIsPremium();
   const { resolvedTheme, setTheme } = useTheme();
 
   // Quick-action dock on /profile = light/dark toggle. Icon reflects the
@@ -54,6 +58,7 @@ export default function ProfilePage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [avatarOpen, setAvatarOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   useEffect(() => {
     setConfirm(confirmAutoAllocate());
     setInsights(weeklyInsightsEnabled());
@@ -102,20 +107,25 @@ export default function ProfilePage() {
           <Chip tone="good" className="bg-white/60 border-0 text-[var(--accent-ink)]">
             ✓ Verified
           </Chip>
-          <div className="font-display text-[22px] font-bold mt-1.5 truncate" style={{ color: "var(--accent-ink)" }}>
-            {profile?.full_name || "Anonymous Architect"}
+          <div className="mt-1.5">
+            <div className="font-display text-[22px] font-bold truncate" style={{ color: "var(--accent-ink)" }}>
+              {profile?.full_name || "Anonymous Architect"}
+            </div>
           </div>
           <div className="text-[11px] font-medium text-[var(--accent-ink)] opacity-75 truncate">
             {profile?.email || ""}
           </div>
         </div>
+        {isPremium && (
+          <CrownBadge size={44} className="self-center -mr-0.5" aria-label="Premium member" />
+        )}
       </div>
 
       {/* Subscription group */}
       <SubscriptionCard />
 
-      {/* Account group */}
-      <p className="t-label text-muted-foreground mt-1 ml-1">Account</p>
+      {/* Tools group — the sections that don't have their own nav tab */}
+      <p className="t-label text-muted-foreground mt-1 ml-1">Tools</p>
 
       <Link href="/activity" className="block active:scale-[0.99] transition-transform">
         <Card compact className="flex items-center gap-3">
@@ -123,7 +133,10 @@ export default function ProfilePage() {
             <History size={18} strokeWidth={1.7} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[13.5px] font-bold text-foreground">See Activity</div>
+            <div className="text-[13.5px] font-bold text-foreground">Activity</div>
+            <div className="text-[10.5px] font-medium text-muted-foreground mt-0.5">
+              A timeline of everything you've changed
+            </div>
           </div>
           <ChevronRight size={16} strokeWidth={2} className="text-muted-foreground" />
         </Card>
@@ -138,6 +151,36 @@ export default function ProfilePage() {
             <div className="text-[13.5px] font-bold text-foreground">SMS Transactions</div>
             <div className="text-[10.5px] font-medium text-muted-foreground mt-0.5">
               Review &amp; allocate spends from SMS
+            </div>
+          </div>
+          <ChevronRight size={16} strokeWidth={2} className="text-muted-foreground" />
+        </Card>
+      </Link>
+
+      <Link href="/transactions" className="block active:scale-[0.99] transition-transform">
+        <Card compact className="flex items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-tile text-muted-foreground">
+            <Receipt size={18} strokeWidth={1.7} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[13.5px] font-bold text-foreground">Transaction history</div>
+            <div className="text-[10.5px] font-medium text-muted-foreground mt-0.5">
+              Every spend in one place
+            </div>
+          </div>
+          <ChevronRight size={16} strokeWidth={2} className="text-muted-foreground" />
+        </Card>
+      </Link>
+
+      <Link href="/reports" className="block active:scale-[0.99] transition-transform">
+        <Card compact className="flex items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-tile text-muted-foreground">
+            <FileBarChart size={18} strokeWidth={1.7} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[13.5px] font-bold text-foreground">Monthly report</div>
+            <div className="text-[10.5px] font-medium text-muted-foreground mt-0.5">
+              Your spending, summarised
             </div>
           </div>
           <ChevronRight size={16} strokeWidth={2} className="text-muted-foreground" />
@@ -255,9 +298,9 @@ export default function ProfilePage() {
             <RotateCcw size={18} strokeWidth={1.7} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[13.5px] font-bold text-foreground">Reset All Tours</div>
+            <div className="text-[13.5px] font-bold text-foreground">Replay guided tours</div>
             <div className="text-[10.5px] font-medium text-muted-foreground mt-0.5">
-              Show section guides again
+              See the section walkthroughs again from the start
             </div>
           </div>
           <ChevronRight size={16} strokeWidth={2} className="text-muted-foreground" />
@@ -267,22 +310,30 @@ export default function ProfilePage() {
       {/* Support group */}
       <p className="t-label text-muted-foreground mt-1 ml-1">Support</p>
 
-      <a
-        href="mailto:innovationsoctane@gmail.com?subject=AlloCat%20Support"
-        className="block active:scale-[0.99] transition-transform"
+      <button
+        type="button"
+        onClick={() => setFeedbackOpen(true)}
+        className="block w-full text-left active:scale-[0.99] transition-transform"
       >
         <Card compact className="flex items-center gap-3">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-tile text-muted-foreground">
-            <LifeBuoy size={18} strokeWidth={1.7} />
+            <MessageSquareHeart size={18} strokeWidth={1.7} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[13.5px] font-bold text-foreground">Contact Support</div>
+            <div className="text-[13.5px] font-bold text-foreground">Send feedback / Report a bug</div>
             <div className="text-[10.5px] font-medium text-muted-foreground mt-0.5">
-              Report an issue or send feedback
+              Tell us what to fix or build next
             </div>
           </div>
           <ChevronRight size={16} strokeWidth={2} className="text-muted-foreground" />
         </Card>
+      </button>
+
+      <a
+        href="mailto:innovationsoctane@gmail.com?subject=AlloCat%20Support"
+        className="text-center text-[11px] font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground transition-colors py-0.5"
+      >
+        Or email us directly
       </a>
 
       {/* Logout */}
@@ -357,6 +408,8 @@ export default function ProfilePage() {
         onClose={() => setAvatarOpen(false)}
         current={profile?.avatar}
       />
+
+      <FeedbackSheet isOpen={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
 
       <footer className="text-center mt-2 opacity-40">
         <p className="figure text-[11px] text-foreground">v1.0.4</p>

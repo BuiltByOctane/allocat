@@ -299,4 +299,73 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       },
     },
   ],
+
+  sms: [
+    {
+      element: "#sms-tabs",
+      popover: {
+        title: "Pending & Allocated",
+        description:
+          "Pending holds transactions read from your bank/UPI SMS that haven't been filed yet. Allocated shows the ones you've already dropped into a budget category.",
+        side: "bottom",
+        align: "start",
+      },
+    },
+    {
+      element: "#sms-list",
+      popover: {
+        title: "Allocate a spend",
+        description:
+          "Each pending transaction shows the amount and merchant. Pick a budget item to file it — the spend then counts against that category automatically.",
+        side: "top",
+        align: "start",
+      },
+    },
+  ],
+
+  transactions: [
+    {
+      element: "#transactions-filters",
+      popover: {
+        title: "Find any spend",
+        description:
+          "Search by name, or narrow by month and budget item. Everything you've spent — from SMS or logged by hand — lives here in one searchable list.",
+        side: "bottom",
+        align: "start",
+      },
+    },
+    {
+      element: "#transactions-source",
+      popover: {
+        title: "Filter by source",
+        description:
+          "Switch between auto-captured SMS spends, manual logs, or all of them together.",
+        side: "bottom",
+        align: "start",
+      },
+    },
+  ],
+
+  reports: [
+    {
+      element: "#reports-month",
+      popover: {
+        title: "Pick a month",
+        description:
+          "Step back and forth through months to see how each one went. Reports are built from your budget and the spends filed against it.",
+        side: "bottom",
+        align: "start",
+      },
+    },
+    {
+      element: "#reports-summary",
+      popover: {
+        title: "Where your money went",
+        description:
+          "A category-by-category breakdown of planned vs actual spend for the month, so you can see what stayed on track and what didn't.",
+        side: "top",
+        align: "start",
+      },
+    },
+  ],
 };

@@ -26,9 +26,9 @@ final class SmsHash {
             h1 = (h1 ^ ch) * 0x9e3779b1; // Math.imul == low-32-bit signed multiply
             h2 = (h2 ^ ch) * 0x5f356495;
         }
-        h1 = (h1 ^ (h1 >>> 16)) * 0x85ebca77;
+        h1 = (h1 ^ (h1 >>> 16)) * 0x85ebca6b; // 2246822507 — must match hash53 in lib/sms/match.ts
         h1 ^= (h2 ^ (h2 >>> 13)) * 0xc2b2ae35;
-        h2 = (h2 ^ (h2 >>> 16)) * 0x85ebca77;
+        h2 = (h2 ^ (h2 >>> 16)) * 0x85ebca6b;
         h2 ^= (h1 ^ (h1 >>> 13)) * 0xc2b2ae35;
         long n = 4294967296L * (2097151 & h2) + (h1 & 0xFFFFFFFFL);
         StringBuilder hex = new StringBuilder(Long.toHexString(n));

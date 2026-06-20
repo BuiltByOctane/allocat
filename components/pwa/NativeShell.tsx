@@ -1,8 +1,29 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import type { PluginListenerHandle } from "@capacitor/core";
+import { createClient } from "@/lib/supabase/client";
+import { FeedbackSheet } from "@/components/feedback/FeedbackSheet";
+
+// Ask-on-resume feedback prompt: rate-limited so we never nag. Stores the last
+// time we asked in localStorage; only fires again after the interval.
+const FEEDBACK_ASKED_KEY = "allocat-feedback-asked-at";
+const FEEDBACK_INTERVAL_MS = 5 * 24 * 60 * 60 * 1000; // ~5 days
+// Don't pounce the moment a brand-new install resumes — seed the timer on first
+// run so the earliest prompt is one interval out.
+function shouldAskFeedback(): boolean {
+  try {
+    const raw = localStorage.getItem(FEEDBACK_ASKED_KEY);
+    if (!raw) {
+      localStorage.setItem(FEEDBACK_ASKED_KEY, String(Date.now()));
+      return false;
+    }
+    return Date.now() - Number(raw) > FEEDBACK_INTERVAL_MS;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Native-only shell behaviours:
@@ -12,8 +33,13 @@ import type { PluginListenerHandle } from "@capacitor/core";
  *    com.octane.allocat://auth/callback?code=... scheme. We close the tab and
  *    route the code through the in-WebView /auth/callback so the server exchange
  *    runs in the WebView cookie jar (where the PKCE verifier lives).
+ *  - Ask-on-resume feedback: when the app comes back to the foreground and it's
+ *    been a while since we last asked (and the user is signed in), open the
+ *    FeedbackSheet. Unobtrusive and rate-limited.
  */
 export function NativeShell() {
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
@@ -55,8 +81,32 @@ export function NativeShell() {
 
     let backHandle: PluginListenerHandle | undefined;
     let urlHandle: PluginListenerHandle | undefined;
+    let resumeHandle: PluginListenerHandle | undefined;
+    let pauseHandle: PluginListenerHandle | undefined;
     (async () => {
       const { App } = await import("@capacitor/app");
+
+      // On resume, maybe prompt for feedback (rate-limited + auth-gated). The
+      // "pause" listener is registered too so any future pause-time bookkeeping
+      // has a home; it's a no-op for now.
+      pauseHandle = await App.addListener("pause", () => {});
+      resumeHandle = await App.addListener("resume", () => {
+        if (!shouldAskFeedback()) return;
+        void (async () => {
+          const supabase = createClient();
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          if (!user) return;
+          try {
+            localStorage.setItem(FEEDBACK_ASKED_KEY, String(Date.now()));
+          } catch {
+            /* ignore */
+          }
+          setFeedbackOpen(true);
+        })();
+      });
+
       backHandle = await App.addListener("backButton", ({ canGoBack }) => {
         if (canGoBack || window.history.length > 1) {
           window.history.back();
@@ -88,9 +138,11 @@ export function NativeShell() {
     return () => {
       void backHandle?.remove();
       void urlHandle?.remove();
+      void resumeHandle?.remove();
+      void pauseHandle?.remove();
       themeObserver?.disconnect();
     };
   }, []);
 
-  return null;
+  return <FeedbackSheet isOpen={feedbackOpen} onClose={() => setFeedbackOpen(false)} />;
 }

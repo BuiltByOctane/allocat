@@ -9,6 +9,11 @@ import {
   matchMerchantRule,
   type MerchantRule,
 } from "@/lib/sms/match";
+import {
+  isAmountEdited,
+  effectiveAmount,
+  nextOriginalAmount,
+} from "@/lib/sms/amountDelta";
 
 /** Notify when a category crosses 90% / 100% of its allocation. */
 const NEAR_LIMIT_RATIO = 0.9;
@@ -38,6 +43,23 @@ export interface IngestSmsInput {
   /** ISO date/timestamp string. */
   occurredAt?: string | null;
   dedupeKey: string;
+  /**
+   * One-way hash of the SMS *template* (sender + masked skeleton). If the user
+   * has reported this template as wrongly captured, the server no-ops the ingest.
+   */
+  templateKey?: string | null;
+  /**
+   * Origin of the row. "sms" (default) runs the full rule-match / auto-apply
+   * pipeline. "manual" inserts an already-categorized ledger row WITHOUT bumping
+   * actual_amount (the manual spend's quickLogSpend/PAYMENT already did that).
+   */
+  source?: "sms" | "manual" | null;
+  /** Initial status. For a manual spend this is "categorized". */
+  status?: "pending" | "categorized" | "ignored" | "duplicate" | null;
+  /** Budget item this row is allocated to (manual spends arrive pre-allocated). */
+  budgetItemId?: string | null;
+  /** Optional human-readable name for the transaction. */
+  label?: string | null;
 }
 
 /**
@@ -62,6 +84,50 @@ export async function ingestSmsTransaction(input: IngestSmsInput) {
     .eq("dedupe_key", input.dedupeKey)
     .maybeSingle();
   if (existing) return existing;
+
+  // 1a. Manual spend → ledger-only row. The manual budget spend already bumped
+  // actual_amount via quickLogSpend (PAYMENT), so this inserts an
+  // already-categorized record WITHOUT re-applying the spend or running the
+  // rule-match / notification pipeline. Returns the full row so the sync engine
+  // reconciles the optimistic temp_ row with the canonical server id.
+  if (input.source === "manual") {
+    const merchantNormalized = input.merchantRaw
+      ? normalizeMerchant(input.merchantRaw)
+      : null;
+    const { data: manualTxn, error: manualErr } = await supabase
+      .from("sms_transactions")
+      .insert({
+        user_id: user.id,
+        amount: input.amount,
+        currency: input.currency ?? null,
+        merchant_raw: input.merchantRaw ?? null,
+        merchant_normalized: merchantNormalized,
+        direction: input.direction ?? "debit",
+        occurred_at: input.occurredAt ?? null,
+        dedupe_key: input.dedupeKey,
+        status: input.status ?? "categorized",
+        budget_item_id: input.budgetItemId ?? null,
+        label: input.label ?? null,
+        source: "manual",
+        original_amount: null,
+      })
+      .select()
+      .single();
+    if (manualErr) throw new Error(manualErr.message);
+    return manualTxn;
+  }
+
+  // 1b. Template blocklist — the user reported this kind of SMS as wrongly
+  // captured. No-op so the same template never re-appears as a transaction.
+  if (input.templateKey) {
+    const { data: blocked } = await supabase
+      .from("sms_blocklist")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("template_key", input.templateKey)
+      .maybeSingle();
+    if (blocked) return { ok: true as const, blocked: true as const };
+  }
 
   const merchantNormalized = input.merchantRaw
     ? normalizeMerchant(input.merchantRaw)
@@ -167,6 +233,12 @@ export interface CategorizeSmsInput {
   matchType?: "exact" | "contains" | "regex";
   /** Optional human-readable name for the transaction (overrides merchant_raw in lists). */
   label?: string | null;
+  /**
+   * Edited spend amount. When provided and ≠ the parsed amount, the EDITED value
+   * is logged against the budget item and persisted as `amount`; the original
+   * parsed amount is preserved in `original_amount` (only if not already set).
+   */
+  amount?: number;
 }
 
 /** Apply a user's category choice to a pending SMS txn, optionally learning a rule. */
@@ -193,7 +265,17 @@ export async function categorizeSmsTransaction(input: CategorizeSmsInput) {
     .maybeSingle();
   if (!item) throw new Error("Budget item not found");
 
-  await quickLogSpend(input.budgetItemId, txn.amount, {
+  // An edited amount logs the EDITED value (not the parsed one) and stashes the
+  // original parsed amount the first time it changes.
+  const edited = isAmountEdited(txn.amount, input.amount);
+  const spendAmount = effectiveAmount(txn.amount, input.amount) as number;
+  const originalAmount = nextOriginalAmount(
+    txn.amount,
+    txn.original_amount,
+    input.amount,
+  );
+
+  await quickLogSpend(input.budgetItemId, spendAmount, {
     kind: "sms",
     merchant: txn.merchant_raw || txn.merchant_normalized || null,
   });
@@ -223,6 +305,7 @@ export async function categorizeSmsTransaction(input: CategorizeSmsInput) {
       budget_item_id: input.budgetItemId,
       matched_rule_id: ruleId,
       ...(input.label !== undefined ? { label: input.label } : {}),
+      ...(edited ? { amount: spendAmount, original_amount: originalAmount } : {}),
     })
     .eq("id", input.txnId)
     .eq("user_id", user.id);
@@ -237,19 +320,31 @@ export interface RecategorizeSmsInput {
   txnId: string;
   newBudgetItemId: string;
   label?: string | null;
+  /**
+   * Edited spend amount. When provided and ≠ the current amount, the budget
+   * item totals are reconciled against the new value and `amount` /
+   * `original_amount` are persisted.
+   */
+  amount?: number;
 }
 
-/** Delete an SMS txn. If categorized, refund its amount to the budget item first. */
-export async function deleteSmsTransaction(txnId: string) {
-  const { supabase, user } = await getAuthed();
-
+/**
+ * Refund (if categorized) then delete an sms_transactions row. Shared by
+ * deleteSmsTransaction and reportSmsMistake. Returns the deleted row (or null if
+ * it didn't exist) so callers can log/derive labels from it. No-op if missing.
+ */
+async function refundAndDeleteTxn(
+  supabase: Supa,
+  userId: string,
+  txnId: string,
+): Promise<Record<string, unknown> | null> {
   const { data: txn } = await supabase
     .from("sms_transactions")
     .select("*")
     .eq("id", txnId)
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .maybeSingle();
-  if (!txn) return { ok: true as const };
+  if (!txn) return null;
 
   if (txn.status === "categorized" && txn.budget_item_id && typeof txn.amount === "number" && txn.amount > 0) {
     try {
@@ -266,17 +361,89 @@ export async function deleteSmsTransaction(txnId: string) {
     .from("sms_transactions")
     .delete()
     .eq("id", txnId)
-    .eq("user_id", user.id);
+    .eq("user_id", userId);
   if (error) throw new Error(error.message);
 
+  return txn as Record<string, unknown>;
+}
+
+/** Delete an SMS txn. If categorized, refund its amount to the budget item first. */
+export async function deleteSmsTransaction(txnId: string) {
+  const { supabase, user } = await getAuthed();
+
+  const txn = await refundAndDeleteTxn(supabase, user.id, txnId);
+  if (!txn) return { ok: true as const };
+
   const cur = await getUserCurrency(supabase, user.id);
-  const merchant = txn.label || txn.merchant_raw || txn.merchant_normalized || "Unknown";
+  const amount = txn.amount as number | null;
+  const merchant =
+    (txn.label as string | null) ||
+    (txn.merchant_raw as string | null) ||
+    (txn.merchant_normalized as string | null) ||
+    "Unknown";
   await logActivity(supabase, user.id, {
     action_type: "sms_txn_deleted",
     category: "budget",
-    title: `Deleted SMS transaction${typeof txn.amount === "number" ? ` ${fmt(txn.amount, cur)}` : ""}`,
+    title: `Deleted SMS transaction${typeof amount === "number" ? ` ${fmt(amount, cur)}` : ""}`,
     description: `Removed transaction at ${merchant}`,
-    metadata: { txnId, merchant, amount: txn.amount, wasCategorized: txn.status === "categorized" },
+    metadata: { txnId, merchant, amount, wasCategorized: txn.status === "categorized" },
+  });
+
+  return { ok: true as const };
+}
+
+export interface ReportSmsMistakeInput {
+  txnId: string;
+  /** One-way hash of the SMS template to block (sender + masked skeleton). */
+  templateKey: string;
+  /** Optional human-readable sample (e.g. merchant) for the blocklist UI. */
+  sampleLabel?: string | null;
+}
+
+/**
+ * "Report wrong SMS": record the SMS *template* in the user's blocklist (so
+ * future SMS of the same kind are skipped at ingest), then refund + delete the
+ * wrongly-captured transaction. Idempotent on the unique(user_id, template_key)
+ * constraint — re-reporting the same template silently no-ops the upsert.
+ */
+export async function reportSmsMistake(input: ReportSmsMistakeInput) {
+  const { supabase, user } = await getAuthed();
+
+  // Blocklist the template (idempotent — ignore the unique-constraint conflict).
+  const { error: blockErr } = await supabase
+    .from("sms_blocklist")
+    .upsert(
+      {
+        user_id: user.id,
+        template_key: input.templateKey,
+        sample_label: input.sampleLabel ?? null,
+      },
+      { onConflict: "user_id,template_key", ignoreDuplicates: true },
+    );
+  if (blockErr) throw new Error(blockErr.message);
+
+  // Refund (if categorized) + delete the offending transaction.
+  const txn = await refundAndDeleteTxn(supabase, user.id, input.txnId);
+
+  const cur = await getUserCurrency(supabase, user.id);
+  const amount = (txn?.amount as number | null) ?? null;
+  const merchant =
+    (txn?.label as string | null) ||
+    (txn?.merchant_raw as string | null) ||
+    (txn?.merchant_normalized as string | null) ||
+    input.sampleLabel ||
+    "Unknown";
+  await logActivity(supabase, user.id, {
+    action_type: "sms_txn_reported",
+    category: "budget",
+    title: `Reported wrong SMS${typeof amount === "number" ? ` ${fmt(amount, cur)}` : ""}`,
+    description: `Blocked this kind of SMS and removed it (at ${merchant})`,
+    metadata: {
+      txnId: input.txnId,
+      templateKey: input.templateKey,
+      merchant,
+      amount,
+    },
   });
 
   return { ok: true as const };
@@ -335,12 +502,30 @@ export async function recategorizeSmsTransaction(input: RecategorizeSmsInput) {
     throw new Error("Transaction is not allocated");
 
   const sameItem = input.newBudgetItemId === txn.budget_item_id;
+  const oldAmount = typeof txn.amount === "number" ? txn.amount : 0;
+  const edited = isAmountEdited(oldAmount, input.amount);
+  const newAmount = effectiveAmount(oldAmount, input.amount) as number;
+  const originalAmount = nextOriginalAmount(
+    oldAmount,
+    txn.original_amount,
+    input.amount,
+  );
+  const merchant = txn.merchant_raw || txn.merchant_normalized || null;
 
-  if (!sameItem && typeof txn.amount === "number" && txn.amount > 0) {
-    const merchant = txn.merchant_raw || txn.merchant_normalized || null;
-    // Reverse first to avoid a transient double-count.
-    await reverseSpend(txn.budget_item_id, txn.amount, { kind: "sms", merchant });
-    await quickLogSpend(input.newBudgetItemId, txn.amount, { kind: "sms", merchant });
+  if (!sameItem && oldAmount > 0) {
+    // Moving: reverse the OLD amount off the old item, apply the (possibly
+    // edited) NEW amount to the new item. Reverse first to avoid a transient
+    // double-count.
+    await reverseSpend(txn.budget_item_id, oldAmount, { kind: "sms", merchant });
+    if (newAmount > 0)
+      await quickLogSpend(input.newBudgetItemId, newAmount, { kind: "sms", merchant });
+  } else if (sameItem && edited) {
+    // Same item, amount changed: apply only the delta (new - old).
+    const delta = newAmount - oldAmount;
+    if (delta > 0)
+      await quickLogSpend(txn.budget_item_id, delta, { kind: "sms", merchant });
+    else if (delta < 0)
+      await reverseSpend(txn.budget_item_id, -delta, { kind: "sms", merchant });
   }
 
   const { error } = await supabase
@@ -348,6 +533,7 @@ export async function recategorizeSmsTransaction(input: RecategorizeSmsInput) {
     .update({
       budget_item_id: input.newBudgetItemId,
       ...(input.label !== undefined ? { label: input.label } : {}),
+      ...(edited ? { amount: newAmount, original_amount: originalAmount } : {}),
     })
     .eq("id", input.txnId)
     .eq("user_id", user.id);

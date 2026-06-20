@@ -191,10 +191,20 @@ export async function getBudgetForPeriod(month: number, year: number) {
     budget = newBudget;
   }
 
+  return formatBudget(supabase, budget!);
+}
+
+type BudgetRow = Database["public"]["Tables"]["budgets"]["Row"];
+
+/** Load + shape a budget row's categories into the client-facing BudgetData. */
+async function formatBudget(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  budget: BudgetRow
+) {
   const { data: categories } = await supabase
     .from("categories")
     .select("*, budget_items(*)")
-    .eq("budget_id", budget!.id)
+    .eq("budget_id", budget.id)
     .order("created_at");
 
   const formattedCategories = ((categories || []) as CategoryWithItems[]).map((cat) => {
@@ -215,12 +225,67 @@ export async function getBudgetForPeriod(month: number, year: number) {
   });
 
   return {
-    id: budget!.id,
-    month: budget!.month,
-    year: budget!.year,
-    totalBudget: Number(budget!.total_budget || 0),
+    id: budget.id,
+    month: budget.month,
+    year: budget.year,
+    totalBudget: Number(budget.total_budget || 0),
     categories: formattedCategories,
   };
+}
+
+/**
+ * Read-only budget fetch for the period. Returns null when no budget row exists
+ * — unlike getBudgetForPeriod, it never inserts. Used by the Budget read path so
+ * merely viewing the page can't create a phantom zero-value budget row.
+ */
+export async function getBudgetView(month: number, year: number) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const { data: budget } = await supabase
+    .from("budgets")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("month", month)
+    .eq("year", year)
+    .maybeSingle();
+
+  if (!budget) return null;
+  return formatBudget(supabase, budget);
+}
+
+/**
+ * Create-or-get the raw budget row for the period. Called lazily from write/setup
+ * paths (set total, add category, run template) so a real row exists before the
+ * first mutation — without creating one on a passive read.
+ */
+export async function ensureBudgetRow(
+  month: number,
+  year: number
+): Promise<BudgetRow> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const { data: existing } = await supabase
+    .from("budgets")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("month", month)
+    .eq("year", year)
+    .maybeSingle();
+
+  if (existing) return existing;
+
+  const { data: created, error } = await supabase
+    .from("budgets")
+    .insert({ user_id: user.id, month, year, total_budget: 0 })
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  return created;
 }
 
 export async function addBudgetCategory(
@@ -980,7 +1045,13 @@ type TemplateSetupCategoryInput = {
   icon: string | null;
   type: Database["public"]["Tables"]["categories"]["Insert"]["type"];
   allocated_amount: number;
-  items: Array<{ tempId: string; name: string; planned: number }>;
+  items: Array<{
+    tempId: string;
+    name: string;
+    planned: number;
+    linkType?: LinkType | null;
+    linkId?: string | null;
+  }>;
 };
 
 export async function setupBudgetFromTemplate(
@@ -1047,23 +1118,49 @@ export async function setupBudgetFromTemplate(
     categoryIdMap.map((m) => [m.tempId, m.realId])
   );
 
+  // Validate any cross-section links once — drop links whose target no longer
+  // exists (asset/debt deleted since the template was saved). Best-effort: a
+  // stale link never blocks budget creation. link_id has no FK constraint.
+  const hasLinks = categories.some((c) =>
+    c.items.some((i) => i.linkType && i.linkId)
+  );
+  let validAssetIds = new Set<string>();
+  let validDebtIds = new Set<string>();
+  if (hasLinks) {
+    const [assetsRes, debtsRes] = await Promise.all([
+      supabase.from("assets").select("id").eq("user_id", user.id),
+      supabase.from("debts").select("id").eq("user_id", user.id),
+    ]);
+    validAssetIds = new Set((assetsRes.data ?? []).map((r) => r.id));
+    validDebtIds = new Set((debtsRes.data ?? []).map((r) => r.id));
+  }
+  const linkIsValid = (type: LinkType, id: string) =>
+    type === "asset" ? validAssetIds.has(id) : validDebtIds.has(id);
+
   // 3. Bulk insert items
   const itemInputs: Array<{
     tempId: string;
     realCatId: string;
     name: string;
     planned: number;
+    link_type: LinkType | null;
+    link_id: string | null;
   }> = [];
   for (const c of filteredCats) {
     const realCatId = tempToRealCat.get(c.tempId)!;
     for (const item of c.items) {
       const trimmed = item.name.trim();
       if (!trimmed) continue;
+      const linkType = item.linkType ?? null;
+      const linkId = item.linkId ?? null;
+      const keepLink = !!(linkType && linkId && linkIsValid(linkType, linkId));
       itemInputs.push({
         tempId: item.tempId,
         realCatId,
         name: trimmed,
         planned: Number(item.planned || 0),
+        link_type: keepLink ? linkType : null,
+        link_id: keepLink ? linkId : null,
       });
     }
   }
@@ -1078,6 +1175,8 @@ export async function setupBudgetFromTemplate(
       actual_amount: 0,
       is_completed: false,
       notes: null,
+      link_type: i.link_type,
+      link_id: i.link_id,
     }));
     const { data, error } = await supabase
       .from("budget_items")

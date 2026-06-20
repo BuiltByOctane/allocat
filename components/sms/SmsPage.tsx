@@ -16,8 +16,10 @@ import {
   useDeleteSms,
   useUnallocateSms,
   useRecategorizeSms,
+  useReportSmsMistake,
 } from "@/lib/hooks/useSmsTransactions";
 import { useAddBudgetItem } from "@/lib/hooks/useBudget";
+import { useTourDriver } from "@/lib/tour/useTourDriver";
 import {
   ItemDetailSheet,
   NEW_ITEM_ID,
@@ -78,6 +80,8 @@ async function loadPickerData(): Promise<PickerData> {
         itemName: item.name,
         categoryName: cat.name,
         icon: cat.icon,
+        planned: Number(item.planned_amount) || 0,
+        actual: Number(item.actual_amount) || 0,
       });
     }
     metaById[cat.id] = {
@@ -114,6 +118,7 @@ function txnDate(row: SmsTransactionRow): string | null {
 
 export default function SmsPage() {
   const qc = useQueryClient();
+  useTourDriver("sms");
   const { data: pending, isLoading } = usePendingSms();
   const { data: categorized } = useCategorizedSms();
   const categorize = useCategorizeSms();
@@ -121,6 +126,7 @@ export default function SmsPage() {
   const del = useDeleteSms();
   const unallocate = useUnallocateSms();
   const recategorize = useRecategorizeSms();
+  const report = useReportSmsMistake();
   const addItem = useAddBudgetItem();
 
   const [tab, setTab] = useState<"pending" | "allocated">("pending");
@@ -235,7 +241,12 @@ export default function SmsPage() {
     setAllocateTxn(target);
   }, [pending]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function handleAllocate(budgetItemId: string, remember: boolean, label?: string | null) {
+  async function handleAllocate(
+    budgetItemId: string,
+    remember: boolean,
+    label?: string | null,
+    amount?: number,
+  ) {
     if (!allocateTxn) return;
     setAllocError(null);
     try {
@@ -244,6 +255,7 @@ export default function SmsPage() {
         budgetItemId,
         rememberRule: remember,
         label: label ?? null,
+        ...(amount !== undefined ? { amount } : {}),
       });
       setAllocateTxn(null);
     } catch (err) {
@@ -256,7 +268,12 @@ export default function SmsPage() {
   }
 
   // Move an already-categorized txn to a different item and/or rename it.
-  async function handleReallocate(budgetItemId: string, _remember: boolean, label?: string | null) {
+  async function handleReallocate(
+    budgetItemId: string,
+    _remember: boolean,
+    label?: string | null,
+    amount?: number,
+  ) {
     if (!reallocTxn) return;
     setAllocError(null);
     try {
@@ -264,6 +281,7 @@ export default function SmsPage() {
         txnId: reallocTxn.id,
         newBudgetItemId: budgetItemId,
         label: label ?? null,
+        ...(amount !== undefined ? { amount } : {}),
       });
       setReallocTxn(null);
     } catch (err) {
@@ -282,6 +300,17 @@ export default function SmsPage() {
     } catch (err) {
       console.error("[SmsPage] delete failed:", err);
       setAllocError(err instanceof Error ? err.message : "Couldn't delete. Try again.");
+    }
+  }
+
+  async function handleReport(txn: SmsTransactionRow) {
+    if (!window.confirm("Stop tracking this kind of SMS?")) return;
+    setAllocError(null);
+    try {
+      await report.mutateAsync(txn.id);
+    } catch (err) {
+      console.error("[SmsPage] report failed:", err);
+      setAllocError(err instanceof Error ? err.message : "Couldn't update. Try again.");
     }
   }
 
@@ -392,7 +421,7 @@ export default function SmsPage() {
       </div>
 
       {/* Pending / Allocated tabs */}
-      <div className="flex gap-1 rounded-pill border border-border bg-card p-1">
+      <div id="sms-tabs" className="flex gap-1 rounded-pill border border-border bg-card p-1">
         {(["pending", "allocated"] as const).map((t) => (
           <button
             key={t}
@@ -420,7 +449,7 @@ export default function SmsPage() {
 
       {/* Pending list */}
       {tab === "pending" && (
-      <section className="flex flex-col gap-3">
+      <section id="sms-list" className="flex flex-col gap-3">
         {isLoading ? (
           <p className="text-sm text-muted-foreground px-1">Loading…</p>
         ) : !pending || pending.length === 0 ? (
@@ -428,9 +457,10 @@ export default function SmsPage() {
             <div className="flex size-12 items-center justify-center rounded-[14px] bg-tile text-muted-foreground mb-1">
               <Inbox size={24} strokeWidth={1.7} />
             </div>
-            <p className="text-sm font-bold text-foreground">No unallocated transactions.</p>
+            <p className="text-sm font-bold text-foreground">Nothing to allocate</p>
             <p className="text-xs text-muted-foreground">
-              New transaction SMS will show up here to allocate.
+              When a bank or UPI payment SMS arrives, AlloCat reads it and lists it
+              here so you can drop it into a budget category. (Android app only.)
             </p>
           </Card>
         ) : (
@@ -449,7 +479,7 @@ export default function SmsPage() {
                   {meta && <Chip tone="neutral">{meta}</Chip>}
                 </div>
 
-                <div className="flex gap-2.5 mt-3.5">
+                <div className="flex flex-wrap gap-2.5 mt-3.5">
                   <button
                     onClick={() => {
                       setAllocError(null);
@@ -464,6 +494,13 @@ export default function SmsPage() {
                     className="h-[42px] px-5 rounded-pill border border-border text-sm font-semibold text-muted-foreground active:scale-[0.98] transition-transform"
                   >
                     Ignore
+                  </button>
+                  <button
+                    onClick={() => handleReport(txn)}
+                    disabled={report.isPending}
+                    className="h-[42px] px-5 rounded-pill border border-neg/30 text-sm font-semibold text-neg active:scale-[0.98] transition-transform"
+                  >
+                    Not a transaction
                   </button>
                 </div>
               </Card>
@@ -485,9 +522,10 @@ export default function SmsPage() {
               <div className="flex size-12 items-center justify-center rounded-[14px] bg-tile text-muted-foreground mb-1">
                 <Inbox size={24} strokeWidth={1.7} />
               </div>
-              <p className="text-sm font-bold text-foreground">No allocated transactions yet.</p>
+              <p className="text-sm font-bold text-foreground">No allocated spends yet</p>
               <p className="text-xs text-muted-foreground">
-                Allocated SMS spends and where they landed show up here.
+                Once you allocate a transaction from the Pending tab, it shows here
+                with the budget category it landed in.
               </p>
             </Card>
           ) : (
@@ -544,6 +582,13 @@ export default function SmsPage() {
                         >
                           Delete
                         </button>
+                        <button
+                          onClick={() => handleReport(txn)}
+                          disabled={report.isPending}
+                          className="h-8 px-3 rounded-pill border border-neg/30 text-xs font-semibold text-neg active:scale-[0.98] transition-transform"
+                        >
+                          Not a transaction
+                        </button>
                       </div>
                     </div>
                   );
@@ -560,6 +605,7 @@ export default function SmsPage() {
       <AllocateSheet
         txn={allocateTxn}
         amountLabel={allocateTxn ? money(allocateTxn) : ""}
+        amount={allocateTxn && typeof allocateTxn.amount === "number" ? allocateTxn.amount : null}
         items={pickerData?.items ?? []}
         categories={pickerData?.categories ?? []}
         onAllocate={handleAllocate}
@@ -572,6 +618,7 @@ export default function SmsPage() {
       <AllocateSheet
         txn={reallocTxn}
         amountLabel={reallocTxn ? money(reallocTxn) : ""}
+        amount={reallocTxn && typeof reallocTxn.amount === "number" ? reallocTxn.amount : null}
         items={pickerData?.items ?? []}
         categories={pickerData?.categories ?? []}
         onAllocate={handleReallocate}

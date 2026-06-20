@@ -11,7 +11,7 @@
 import { getDB } from "@/lib/db";
 import type { SyncQueueItem } from "@/lib/db";
 import { parseTransactionSms, isOtpOrVerification } from "@/lib/ai/parseSmsTransaction";
-import { normalizeMerchant, matchMerchantRule, txnDedupeKey } from "@/lib/sms/match";
+import { normalizeMerchant, matchMerchantRule, txnDedupeKey, smsTemplateKey } from "@/lib/sms/match";
 import type { MerchantRule } from "@/lib/sms/match";
 import { randomUUID } from "@/lib/utils/uuid";
 import { notifyLocal } from "@/lib/native/notify";
@@ -55,6 +55,14 @@ export async function ingestSmsClient(
 
   // Dedupe against anything already captured on this device.
   const dedupeKey = txnDedupeKey({ sender, raw });
+
+  // Template key identifies the *kind* of SMS (not the specific txn). If the user
+  // has reported this template as wrongly captured, skip the whole template.
+  const templateKey = smsTemplateKey({ sender, raw });
+  const blocked = await db.sms_blocklist.toArray();
+  if (blocked.some((b) => b.template_key === templateKey)) {
+    return { skipped: true, reason: "blocked" };
+  }
 
   // In-memory guard: reject a concurrent ingest of the SAME SMS synchronously,
   // before its async dedupe check (which the first caller hasn't satisfied yet).
@@ -145,6 +153,8 @@ export async function ingestSmsClient(
           matched_rule_id: autoApplied ? (rule?.id ?? null) : null,
           budget_item_id: autoApplied ? (rule?.budget_item_id ?? null) : null,
           label: null,
+          source: "sms",
+          original_amount: null,
           created_at: now,
         });
 
@@ -178,6 +188,7 @@ export async function ingestSmsClient(
         direction,
         occurredAt,
         dedupeKey,
+        templateKey,
       },
     });
 
@@ -209,12 +220,14 @@ export async function ingestSmsClient(
             url: "/budget",
           });
         } else if (confirmAutoAllocate()) {
-          // Subtle confirmation that a known merchant was auto-logged.
+          // Subtle confirmation that a known merchant was auto-logged — names the
+          // budget ITEM (falls back to category, then "your budget").
           const bi = await db.budget_items.get(rule.budget_item_id);
           const cat = bi ? await db.categories.get(bi.category_id) : null;
+          const target = bi?.name || cat?.name || null;
           await notifyLocal({
-            title: `🐾 Sorted: ${money(amount)}${cat ? ` → ${cat.name}` : ""}`,
-            body: cat ? `Auto-logged to ${cat.name}.` : "Auto-logged to your budget.",
+            title: `🐾 Sorted: ${money(amount)}${target ? ` → ${target}` : ""}`,
+            body: target ? `Auto-logged to ${target}.` : "Auto-logged to your budget.",
             url: "/budget",
           });
         }

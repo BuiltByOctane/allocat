@@ -1,5 +1,5 @@
 import { MaterialSymbol } from "./MaterialSymbol";
-import { Button } from "./Button";
+import { Button, type ButtonVariant, type ButtonSize } from "./Button";
 
 interface Action {
   label: string;
@@ -19,19 +19,25 @@ interface EmptyStateProps {
 function ActionButton({
   action,
   variant,
+  size,
+  block,
+  className,
 }: {
   action: Action;
-  variant: "primary" | "ghost";
+  variant: ButtonVariant;
+  size?: ButtonSize;
+  block?: boolean;
+  className?: string;
 }) {
   if (action.href) {
     return (
-      <Button href={action.href} variant={variant}>
+      <Button href={action.href} variant={variant} size={size} block={block} className={className}>
         {action.label}
       </Button>
     );
   }
   return (
-    <Button variant={variant} onClick={action.onClick}>
+    <Button variant={variant} size={size} block={block} className={className} onClick={action.onClick}>
       {action.label}
     </Button>
   );
@@ -57,10 +63,17 @@ export function EmptyState({
         <p className="t-body text-muted-foreground max-w-sm mb-8">{description}</p>
       )}
       {(action || secondaryAction) && (
-        <div className="flex flex-col sm:flex-row items-center gap-3">
-          {action && <ActionButton action={action} variant="primary" />}
+        <div className="flex flex-col items-center gap-3 w-full max-w-[260px]">
+          {action && (
+            <ActionButton action={action} variant="primary" size="lg" block />
+          )}
           {secondaryAction && (
-            <ActionButton action={secondaryAction} variant="ghost" />
+            <ActionButton
+              action={secondaryAction}
+              variant="link"
+              size="sm"
+              className="text-[13px] font-semibold text-muted-foreground decoration-transparent"
+            />
           )}
         </div>
       )}

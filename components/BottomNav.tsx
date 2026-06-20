@@ -12,16 +12,25 @@ type NavItem = { label: string; href: string; Icon: LucideIcon };
 const navItems: NavItem[] = [
   { label: "Home", href: "/dashboard", Icon: LayoutGrid },
   { label: "Budget", href: "/budget", Icon: Wallet },
-  { label: "Worth", href: "/net-worth", Icon: TrendingUp },
+  { label: "Net Worth", href: "/net-worth", Icon: TrendingUp },
   { label: "Debt", href: "/debt", Icon: CreditCard },
-  { label: "You", href: "/profile", Icon: User },
+  { label: "Profile", href: "/profile", Icon: User },
 ];
+
+// Secondary routes that don't have their own tab but are reached *through*
+// Profile. Keep the Profile pill active on these so the dock doesn't jump to
+// Home. Profile sub-routes (/profile/*) are handled by the startsWith pass.
+const PROFILE_OWNED = ["/activity", "/sms", "/transactions", "/reports"];
 
 function hrefForPath(pathname: string): string {
   const match = navItems.find(
     (item) => pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href)),
   );
-  return match?.href ?? "/dashboard";
+  if (match) return match.href;
+  if (PROFILE_OWNED.some((r) => pathname === r || pathname.startsWith(`${r}/`))) {
+    return "/profile";
+  }
+  return "/dashboard";
 }
 
 // Long-press duration before the dock turns into a slider, and how far the

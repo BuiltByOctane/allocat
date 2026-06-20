@@ -13,6 +13,9 @@ export interface SmsReaderPlugin {
   getQueued(): Promise<{ messages: CapturedSms[] }>;
   /** Push current merchant rules so the native receiver can match when closed. */
   setRules(options: { rules: string }): Promise<void>;
+  /** Push template keys (JSON string[]) the user reported as mistakes; the
+   * closed-app receiver skips any SMS whose template key is in this set. */
+  setBlocklist(options: { keys: string }): Promise<void>;
   /** Push top budget items (JSON [{id,name}]) for the quick-allocate buttons. */
   setQuickTargets(options: { targets: string }): Promise<void>;
   /**

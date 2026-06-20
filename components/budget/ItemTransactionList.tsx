@@ -1,10 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import { CurrencyText } from "@/components/ui/CurrencyText";
-import ActivityDetailSheet from "@/components/activity/ActivityDetailSheet";
-import { useItemActivity } from "@/lib/hooks/useActivityLogs";
-import type { ActivityLogRow } from "@/lib/db";
+import { useItemTransactions } from "@/lib/hooks/useSmsTransactions";
+import type { SmsTransactionRow } from "@/lib/db";
 
 function formatDateTime(iso: string) {
   const d = new Date(iso);
@@ -19,21 +17,15 @@ function formatDateTime(iso: string) {
   );
 }
 
-/** Pull the most relevant money figure out of a log's metadata, if any. */
-function amountOf(log: ActivityLogRow): number | null {
-  const m = (log.metadata ?? {}) as Record<string, unknown>;
-  for (const key of ["actual_amount", "amount", "planned_amount"]) {
-    const v = m[key];
-    if (typeof v === "number") return v;
-  }
-  return null;
+/** When a transaction happened — its own time, falling back to capture time. */
+function whenOf(txn: SmsTransactionRow): string {
+  return txn.occurred_at ?? txn.created_at;
 }
 
 export function ItemTransactionList({ itemId }: { itemId: string }) {
-  const { data, isLoading } = useItemActivity(itemId, true);
-  const [selected, setSelected] = useState<ActivityLogRow | null>(null);
+  const { data, isLoading } = useItemTransactions(itemId);
 
-  const logs = data ?? [];
+  const txns = data ?? [];
 
   return (
     <div className="space-y-2">
@@ -41,49 +33,46 @@ export function ItemTransactionList({ itemId }: { itemId: string }) {
         Transactions
       </label>
 
-      {isLoading && logs.length === 0 ? (
+      {isLoading && txns.length === 0 ? (
         <div className="rounded-tile bg-tile px-4 py-6 text-center text-[11px] font-medium text-muted-foreground">
           Loading…
         </div>
-      ) : logs.length === 0 ? (
+      ) : txns.length === 0 ? (
         <div className="rounded-tile bg-tile px-4 py-6 text-center text-[11px] font-medium text-muted-foreground">
           No transactions yet.
         </div>
       ) : (
         <div className="flex flex-col gap-1.5">
-          {logs.map((log) => {
-            const amt = amountOf(log);
+          {txns.map((txn) => {
+            const title = txn.label || txn.merchant_raw || "Transaction";
             return (
-              <button
-                key={log.id}
-                type="button"
-                onClick={() => setSelected(log)}
-                className="w-full flex items-center gap-3 rounded-tile bg-tile px-3.5 py-2.5 text-left transition-colors active:scale-[0.99]"
+              <div
+                key={txn.id}
+                className="w-full flex items-center gap-3 rounded-tile bg-tile px-3.5 py-2.5 text-left"
               >
                 <div className="flex-1 min-w-0">
-                  <p className="text-[12.5px] font-semibold text-foreground leading-snug truncate">
-                    {log.title}
-                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-[12.5px] font-semibold text-foreground leading-snug truncate">
+                      {title}
+                    </p>
+                    <span className="shrink-0 rounded-full bg-card px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-muted-foreground">
+                      {txn.source === "manual" ? "Manual" : "SMS"}
+                    </span>
+                  </div>
                   <p className="text-[10px] font-medium text-muted-foreground tabular-nums mt-0.5">
-                    {formatDateTime(log.created_at)}
+                    {formatDateTime(whenOf(txn))}
                   </p>
                 </div>
-                {amt !== null ? (
+                {typeof txn.amount === "number" ? (
                   <span className="figure text-[12.5px] shrink-0">
-                    <CurrencyText value={amt} />
+                    <CurrencyText value={txn.amount} />
                   </span>
                 ) : null}
-              </button>
+              </div>
             );
           })}
         </div>
       )}
-
-      <ActivityDetailSheet
-        log={selected}
-        open={!!selected}
-        onClose={() => setSelected(null)}
-      />
     </div>
   );
 }

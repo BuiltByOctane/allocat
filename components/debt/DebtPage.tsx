@@ -15,7 +15,6 @@ import { Progress } from "@/components/ui/Progress";
 import { Card } from "@/components/ui/Card";
 import { StatCard } from "@/components/ui/StatCard";
 import { Chip } from "@/components/ui/Chip";
-import { Button } from "@/components/ui/Button";
 import { resolveColor } from "@/lib/theme/dataViz";
 import {
   useAddDebt,
@@ -190,13 +189,22 @@ export default function DebtPage({ data }: { data: Debt[] }) {
     return (
       <>
         <div className="px-4 pt-4 flex flex-col gap-3">
-          <div className="px-1 pt-1">
-            <h1 className="font-display text-[26px] font-bold leading-none tracking-[-0.03em] text-foreground">
-              Debt
-            </h1>
-            <p className="text-[11px] font-medium text-muted-foreground mt-1">
-              Liability tracker · {monthCaption()}
-            </p>
+          <div className="flex items-center justify-between px-1 pt-1">
+            <div>
+              <h1 className="font-display text-[26px] font-bold leading-none tracking-[-0.03em] text-foreground">
+                Debt
+              </h1>
+              <p className="text-[11px] font-medium text-muted-foreground mt-1">
+                Liability tracker · {monthCaption()}
+              </p>
+            </div>
+            <button
+              onClick={openAddSheet}
+              className="flex size-[38px] items-center justify-center rounded-xl border border-border bg-card text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Add debt"
+            >
+              <span className="material-symbols-outlined text-[20px]">add</span>
+            </button>
           </div>
           <DebtEmptyState onAddDebt={openAddSheet} />
         </div>
@@ -224,6 +232,13 @@ export default function DebtPage({ data }: { data: Debt[] }) {
               Liability tracker · {monthCaption()}
             </p>
           </div>
+          <button
+            onClick={openAddSheet}
+            className="flex size-[38px] items-center justify-center rounded-xl border border-border bg-card text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Add debt"
+          >
+            <span className="material-symbols-outlined text-[20px]">add</span>
+          </button>
         </div>
 
         {/* Total outstanding hero (white card) */}
@@ -279,12 +294,6 @@ export default function DebtPage({ data }: { data: Debt[] }) {
               <span className="font-display text-[15px] font-bold text-foreground">
                 Active debts · {activeDebts.length}
               </span>
-              <button
-                onClick={openAddSheet}
-                className="flex items-center gap-1 text-[13px] font-bold text-foreground"
-              >
-                <span className="text-accent-strong text-base leading-none">＋</span>New
-              </button>
             </div>
 
             {activeDebts.length === 0 && (
@@ -357,10 +366,6 @@ export default function DebtPage({ data }: { data: Debt[] }) {
                 );
               })}
             </div>
-
-            <Button variant="dashed" block onClick={openAddSheet}>
-              <span className="text-[17px] leading-none">＋</span>New debt
-            </Button>
           </>
         ) : (
           <>

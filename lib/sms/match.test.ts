@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeMerchant, matchMerchantRule, txnDedupeKey } from "./match";
+import { normalizeMerchant, matchMerchantRule, txnDedupeKey, smsTemplateKey } from "./match";
 import type { MerchantRule } from "./match";
 
 describe("normalizeMerchant", () => {
@@ -52,5 +52,31 @@ describe("txnDedupeKey", () => {
     const a = txnDedupeKey({ sender: "HDFCBK", raw: "Rs.500 debited to X ref 1" });
     const b = txnDedupeKey({ sender: "HDFCBK", raw: "Rs.500 debited to X ref 2" });
     expect(a).not.toBe(b);
+  });
+});
+
+describe("smsTemplateKey", () => {
+  it("collapses the same credit template with different amounts/dates/refs to one key", () => {
+    const a = smsTemplateKey({
+      sender: "HDFCBK",
+      raw: "Rs.1,250.00 credited to a/c XX1234 on 05-06-26 ref 998877. Avl bal Rs.5,000",
+    });
+    const b = smsTemplateKey({
+      sender: "HDFCBK",
+      raw: "Rs.42.50 credited to a/c XX9999 on 18-12-25 ref 112233. Avl bal Rs.812",
+    });
+    expect(a).toBe(b);
+  });
+
+  it("gives a debit and a credit of the same bank/format different keys", () => {
+    const credit = smsTemplateKey({
+      sender: "HDFCBK",
+      raw: "Rs.1,250.00 credited to a/c XX1234 on 05-06-26 ref 998877",
+    });
+    const debit = smsTemplateKey({
+      sender: "HDFCBK",
+      raw: "Rs.1,250.00 debited to a/c XX1234 on 05-06-26 ref 998877",
+    });
+    expect(credit).not.toBe(debit);
   });
 });

@@ -283,11 +283,12 @@ export function PaymentSheet({
         <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
         <Drawer.Content
           aria-describedby="pay-sheet-desc"
-          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none"
+          className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none sheet-3q"
         >
           <div className="flex justify-center pt-3 pb-1 shrink-0">
             <div className="mx-auto w-9 h-1 bg-border rounded-full" />
           </div>
+          <div className="flex-1 overflow-y-auto overscroll-contain">
           <div className="px-6 pt-2 pb-4">
             <Drawer.Title className="font-display text-[20px] font-bold tracking-[-0.02em] text-foreground">
               Log payment
@@ -312,7 +313,8 @@ export function PaymentSheet({
               />
             </div>
           </div>
-          <div className="px-6 pb-8 pt-4 flex gap-2">
+          </div>
+          <div className="px-6 pb-8 pt-4 flex gap-2 shrink-0">
             <button
               onClick={onClose}
               className="flex-1 h-[48px] rounded-pill text-sm font-semibold bg-muted text-foreground"
@@ -424,12 +426,19 @@ export default function LentListView({ lents, onBack }: { lents: Lent[]; onBack:
         >
           <span className="material-symbols-outlined text-[18px]">arrow_back</span>
         </button>
-        <div>
+        <div className="flex-1">
           <h1 className="font-display text-[26px] font-bold leading-none tracking-[-0.03em] text-foreground">Money Out</h1>
           <p className="text-[11px] font-medium text-muted-foreground mt-1">
             Friends &amp; lending · {caption}
           </p>
         </div>
+        <button
+          onClick={openAdd}
+          className="flex size-[38px] shrink-0 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground hover:text-foreground transition-colors"
+          aria-label="Add lend"
+        >
+          <span className="material-symbols-outlined text-[20px]">add</span>
+        </button>
       </div>
 
       {/* Lime hero */}
@@ -448,17 +457,14 @@ export default function LentListView({ lents, onBack }: { lents: Lent[]; onBack:
         <span className="font-display text-[15px] font-bold text-foreground">
           Active lends · {activeLents.length}
         </span>
-        <button
-          onClick={openAdd}
-          className="flex items-center gap-1 text-[13px] font-bold text-foreground"
-        >
-          <span className="text-accent-strong text-base leading-none">＋</span>New
-        </button>
       </div>
 
       {activeLents.length === 0 && (
         <Card compact>
-          <p className="py-4 text-center text-[12px] font-medium text-muted-foreground">No active lends.</p>
+          <p className="py-4 text-center text-[12px] font-medium text-muted-foreground">No active lends yet.</p>
+          <Button variant="dashed" block onClick={openAdd}>
+            <span className="text-[17px] leading-none">＋</span>Add your first lend
+          </Button>
         </Card>
       )}
 

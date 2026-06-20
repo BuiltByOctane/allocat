@@ -65,6 +65,7 @@ const tables = {
   budget_items: makeTable(),
   merchant_rules: makeTable(),
   categories: makeTable(),
+  sms_blocklist: makeTable(),
 };
 
 const dbStub = {

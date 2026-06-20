@@ -10,6 +10,8 @@ import { StatCard } from "@/components/ui/StatCard";
 import { Chip } from "@/components/ui/Chip";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { useProfile } from "@/lib/hooks/useProfile";
+import { useIsPremium } from "@/lib/providers/EntitlementProvider";
+import { CrownBadge } from "@/components/ui/CrownBadge";
 import { getTimeGreeting, getWittyLine, WITTY_POOL_LEN } from "@/lib/utils/greeting";
 
 interface DashboardProps {
@@ -68,6 +70,7 @@ function NetWorthSparkline({ data }: { data: { net_worth: number | string }[] })
 export default function DashboardPage({ data }: DashboardProps) {
   const haptic = useHaptic();
   const { data: profile } = useProfile();
+  const isPremium = useIsPremium();
   const firstName = profile?.full_name?.trim().split(/\s+/)[0] ?? "";
 
   // Server (and first client render) get null to match SSR markup; after
@@ -105,13 +108,16 @@ export default function DashboardPage({ data }: DashboardProps) {
       {/* Header */}
       <div className="flex items-center justify-between px-1 pt-1">
         <div>
-          <h1 className="font-display text-[26px] font-bold leading-none tracking-[-0.03em] text-foreground">
-            {greeting
-              ? `${greeting.hi}${firstName ? `, ${firstName}` : ""}`
-              : firstName
-                ? `Hi, ${firstName}`
-                : "Dashboard"}
-          </h1>
+          <div className="flex items-center gap-1.5">
+            <h1 className="font-display text-[26px] font-bold leading-none tracking-[-0.03em] text-foreground">
+              {greeting
+                ? `${greeting.hi}${firstName ? `, ${firstName}` : ""}`
+                : firstName
+                  ? `Hi, ${firstName}`
+                  : "Dashboard"}
+            </h1>
+            {isPremium && <CrownBadge size={22} className="-mt-0.5" />}
+          </div>
           <p className="text-[11px] font-medium text-muted-foreground mt-1">
             {greeting?.line ?? "Financial overview"}
           </p>

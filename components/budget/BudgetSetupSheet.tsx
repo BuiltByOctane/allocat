@@ -12,13 +12,22 @@ import { PREDEFINED_TEMPLATES, type BudgetTemplate } from "@/lib/budget-template
 import {
   getBudgetTemplates,
   saveBudgetTemplate,
+  updateBudgetTemplate,
   deleteBudgetTemplate,
+  type SaveTemplateInput,
 } from "@/lib/actions/budget-templates";
+
+type LinkType = "asset" | "debt";
+
+/** "create" builds a new budget; "saveTemplate"/"editTemplate" only persist a template. */
+type SetupMode = "create" | "saveTemplate" | "editTemplate";
 
 interface SetupItem {
   id: string;
   name: string;
   allocation: number;
+  linkType?: LinkType | null;
+  linkId?: string | null;
 }
 
 interface SetupCategory {
@@ -36,6 +45,9 @@ interface BudgetSetupSheetProps {
   budgetId: string;
   existingTotalBudget: number;
   onDone: () => void;
+  /** "create" (default) = pick/build a budget. "saveTemplate" = capture the
+   *  current budget as a template only (no budget writes). */
+  mode?: "create" | "saveTemplate";
 }
 
 function templateToCategories(
@@ -55,6 +67,8 @@ function templateToCategories(
       id: crypto.randomUUID(),
       name: item.name,
       allocation: item.plannedAmount ?? 0,
+      linkType: item.linkType ?? null,
+      linkId: item.linkId ?? null,
     })),
   }));
 }
@@ -82,15 +96,21 @@ export function BudgetSetupSheet({
   budgetId,
   existingTotalBudget,
   onDone,
+  mode = "create",
 }: BudgetSetupSheetProps) {
   const haptic = useHaptic();
   const fmt = useFormatCurrency();
   const enqueue = useEnqueue();
 
   const [step, setStep] = useState<1 | 2>(1);
+  const [internalMode, setInternalMode] = useState<SetupMode>("create");
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [userTemplates, setUserTemplates] = useState<BudgetTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] =
     useState<BudgetTemplate | null>(null);
+
+  const isTemplateMode =
+    internalMode === "saveTemplate" || internalMode === "editTemplate";
 
   // Step 2 state
   const [totalBudget, setTotalBudget] = useState("");
@@ -103,25 +123,109 @@ export function BudgetSetupSheet({
 
   const totalBudgetRef = useRef<HTMLInputElement>(null);
 
-  // Load user templates on open
+  // On open: "saveTemplate" jumps straight to step 2 prefilled from the current
+  // budget; otherwise show the template picker (step 1).
   useEffect(() => {
-    if (isOpen) {
-      setStep(1);
-      setSelectedTemplate(null);
-      setError("");
-      let cancelled = false;
-      getBudgetTemplates()
-        .then((t) => {
-          if (!cancelled) setUserTemplates(t);
-        })
-        .catch(() => {
-          if (!cancelled) setUserTemplates([]);
-        });
-      return () => {
-        cancelled = true;
-      };
+    if (!isOpen) return;
+    setError("");
+    setEditingTemplateId(null);
+    setSelectedTemplate(null);
+    setInternalMode(mode);
+
+    if (mode === "saveTemplate") {
+      void prefillFromBudget();
+      return;
     }
-  }, [isOpen]);
+
+    setStep(1);
+    let cancelled = false;
+    getBudgetTemplates()
+      .then((t) => {
+        if (!cancelled) setUserTemplates(t);
+      })
+      .catch(() => {
+        if (!cancelled) setUserTemplates([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // prefillFromBudget reads stable refs (budgetId); excluded intentionally.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, mode]);
+
+  // Build step-2 state from the current budget's IDB rows (categories + items,
+  // preserving each item's asset/debt link).
+  async function prefillFromBudget() {
+    const db = getDB();
+    const [budget, cats] = await Promise.all([
+      db.budgets.get(budgetId),
+      db.categories.where("budget_id").equals(budgetId).toArray(),
+    ]);
+    const setupCats: SetupCategory[] = [];
+    for (const cat of cats) {
+      const items = await db.budget_items
+        .where("category_id")
+        .equals(cat.id)
+        .toArray();
+      setupCats.push({
+        id: crypto.randomUUID(),
+        name: cat.name,
+        icon: cat.icon,
+        allocation: cat.allocated_amount,
+        allocationPct: null,
+        items: items.map((it) => ({
+          id: crypto.randomUUID(),
+          name: it.name,
+          allocation: it.planned_amount,
+          linkType: it.link_type as LinkType | null,
+          linkId: it.link_id,
+        })),
+      });
+    }
+    setTotalBudget(budget?.total_budget ? String(budget.total_budget) : "");
+    setCategories(setupCats);
+    setSaveAsTemplate(true);
+    setTemplateName("");
+    setStep(2);
+  }
+
+  // Enter "edit existing template" mode from the step-1 picker.
+  function enterEditTemplate(t: BudgetTemplate) {
+    haptic.selection();
+    setSelectedTemplate(t);
+    setEditingTemplateId(t.id);
+    setInternalMode("editTemplate");
+    const budget = existingTotalBudget > 0 ? existingTotalBudget : 0;
+    setTotalBudget(budget > 0 ? String(budget) : "");
+    setCategories(templateToCategories(t, budget));
+    setSaveAsTemplate(true);
+    setTemplateName(t.name);
+    setError("");
+    setStep(2);
+  }
+
+  // Build the template payload from current step-2 state (shared by all modes).
+  function buildTemplatePayload(): SaveTemplateInput {
+    return {
+      name: templateName.trim(),
+      description: selectedTemplate?.description?.trim() || "Custom template",
+      preview: categories.map((c) => c.name).slice(0, 4),
+      categories: categories.map((c) => ({
+        name: c.name,
+        icon: c.icon,
+        allocationPct:
+          totalBudgetNum > 0 && c.allocation > 0
+            ? Math.round((c.allocation / totalBudgetNum) * 100)
+            : null,
+        items: c.items.map((i) => ({
+          name: i.name,
+          plannedAmount: i.allocation > 0 ? i.allocation : undefined,
+          linkType: i.linkType ?? undefined,
+          linkId: i.linkId ?? undefined,
+        })),
+      })),
+    };
+  }
 
   // Focus total budget input on step 2
   useEffect(() => {
@@ -272,6 +376,36 @@ export function BudgetSetupSheet({
       haptic.error();
       return;
     }
+
+    // Template-only modes: persist the template, no budget writes.
+    if (isTemplateMode) {
+      if (!templateName.trim()) {
+        setError("Give the template a name.");
+        haptic.error();
+        return;
+      }
+      setIsCreating(true);
+      setError("");
+      try {
+        if (internalMode === "editTemplate" && editingTemplateId) {
+          await updateBudgetTemplate(editingTemplateId, buildTemplatePayload());
+        } else {
+          await saveBudgetTemplate(buildTemplatePayload());
+        }
+        haptic.success();
+        onDone();
+        onClose();
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Couldn't save the template."
+        );
+        haptic.error();
+      } finally {
+        setIsCreating(false);
+      }
+      return;
+    }
+
     if (isOverAllocated) {
       setError(
         `Category allocations exceed the total budget by ${fmt(Math.abs(leftToAllocate))}.`
@@ -301,7 +435,13 @@ export function BudgetSetupSheet({
         icon: string | null;
         type: "misc";
         allocated_amount: number;
-        items: Array<{ tempId: string; name: string; planned: number }>;
+        items: Array<{
+          tempId: string;
+          name: string;
+          planned: number;
+          linkType: LinkType | null;
+          linkId: string | null;
+        }>;
       }> = [];
 
       for (const cat of categories) {
@@ -326,6 +466,8 @@ export function BudgetSetupSheet({
           tempId: string;
           name: string;
           planned: number;
+          linkType: LinkType | null;
+          linkId: string | null;
         }> = [];
 
         for (const item of cat.items) {
@@ -334,6 +476,8 @@ export function BudgetSetupSheet({
 
           const itemTempId = `temp_${crypto.randomUUID()}`;
           const itemPlanned = item.allocation > 0 ? item.allocation : 0;
+          const linkType = item.linkType ?? null;
+          const linkId = item.linkId ?? null;
           await db.budget_items.add({
             id: itemTempId,
             category_id: catTempId,
@@ -344,12 +488,18 @@ export function BudgetSetupSheet({
             actual_amount: 0,
             is_completed: false,
             notes: null,
-            link_type: null,
-            link_id: null,
+            link_type: linkType,
+            link_id: linkId,
             created_at: now,
             updated_at: now,
           });
-          itemPayloads.push({ tempId: itemTempId, name: itemName, planned: itemPlanned });
+          itemPayloads.push({
+            tempId: itemTempId,
+            name: itemName,
+            planned: itemPlanned,
+            linkType,
+            linkId,
+          });
         }
 
         bulkCategories.push({
@@ -378,23 +528,7 @@ export function BudgetSetupSheet({
 
       // 3. Save as template if requested
       if (saveAsTemplate && templateName.trim()) {
-        await saveBudgetTemplate({
-          name: templateName.trim(),
-          description: "Custom template",
-          preview: categories.map((c) => c.name).slice(0, 4),
-          categories: categories.map((c) => ({
-            name: c.name,
-            icon: c.icon,
-            allocationPct:
-              totalBudgetNum > 0 && c.allocation > 0
-                ? Math.round((c.allocation / totalBudgetNum) * 100)
-                : null,
-            items: c.items.map((i) => ({
-              name: i.name,
-              plannedAmount: i.allocation > 0 ? i.allocation : undefined,
-            })),
-          })),
-        });
+        await saveBudgetTemplate(buildTemplatePayload());
       }
 
       haptic.success();
@@ -511,8 +645,19 @@ export function BudgetSetupSheet({
                           </button>
                           <button
                             type="button"
+                            onClick={() => enterEditTemplate(t)}
+                            className="text-muted-foreground hover:text-accent-strong transition-colors shrink-0"
+                            aria-label="Edit template"
+                          >
+                            <span className="material-symbols-outlined text-base">
+                              edit
+                            </span>
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleDeleteUserTemplate(t.id)}
                             className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                            aria-label="Delete template"
                           >
                             <span className="material-symbols-outlined text-base">
                               delete
@@ -534,7 +679,16 @@ export function BudgetSetupSheet({
               <div className="px-5 pt-3 pb-4 shrink-0 flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setStep(1)}
+                  onClick={() => {
+                    // saveTemplate opens straight at step 2 — back closes.
+                    if (internalMode === "saveTemplate") {
+                      onClose();
+                    } else {
+                      setInternalMode("create");
+                      setEditingTemplateId(null);
+                      setStep(1);
+                    }
+                  }}
                   className="flex items-center justify-center size-9 rounded-full bg-tile active:bg-muted transition-colors shrink-0"
                 >
                   <span className="material-symbols-outlined text-base">
@@ -543,7 +697,11 @@ export function BudgetSetupSheet({
                 </button>
                 <div>
                   <Drawer.Title className="font-display text-[20px] font-bold tracking-[-0.02em] text-foreground">
-                    {selectedTemplate?.name ?? "Custom Setup"}
+                    {internalMode === "saveTemplate"
+                      ? "Save as template"
+                      : internalMode === "editTemplate"
+                        ? "Edit template"
+                        : (selectedTemplate?.name ?? "Custom Setup")}
                   </Drawer.Title>
                   <p id="setup-description" className="sr-only">
                     Configure your budget categories and allocations
@@ -661,44 +819,12 @@ export function BudgetSetupSheet({
                   </div>
                 </div>
 
-                {/* Save as template */}
-                <div className="space-y-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      haptic.selection();
-                      setSaveAsTemplate((v) => !v);
-                    }}
-                    className={`flex items-center gap-3 w-full rounded-2xl px-4 py-3 transition-all ${
-                      saveAsTemplate
-                        ? "bg-accent ring-2 ring-[var(--accent-strong)]"
-                        : "bg-tile"
-                    }`}
-                  >
-                    <span
-                      className={`material-symbols-outlined text-xl ${
-                        saveAsTemplate
-                          ? "text-[var(--accent-ink)]"
-                          : "text-muted-foreground"
-                      }`}
-                      style={{
-                        fontVariationSettings: saveAsTemplate
-                          ? "'FILL' 1"
-                          : "'FILL' 0",
-                      }}
-                    >
-                      bookmark
-                    </span>
-                    <span
-                      className={`text-sm font-semibold ${
-                        saveAsTemplate ? "text-[var(--accent-ink)]" : "text-foreground"
-                      }`}
-                    >
-                      Save as template
-                    </span>
-                  </button>
-
-                  {saveAsTemplate && (
+                {/* Template name / Save-as-template */}
+                {isTemplateMode ? (
+                  <div className="space-y-2">
+                    <label className="t-label text-muted-foreground">
+                      Template name
+                    </label>
                     <input
                       type="text"
                       value={templateName}
@@ -706,21 +832,76 @@ export function BudgetSetupSheet({
                       placeholder="Template name…"
                       className="w-full rounded-[13px] border border-border bg-card px-4 py-3 text-sm text-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
                     />
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        haptic.selection();
+                        setSaveAsTemplate((v) => !v);
+                      }}
+                      className={`flex items-center gap-3 w-full rounded-2xl px-4 py-3 transition-all ${
+                        saveAsTemplate
+                          ? "bg-accent ring-2 ring-[var(--accent-strong)]"
+                          : "bg-tile"
+                      }`}
+                    >
+                      <span
+                        className={`material-symbols-outlined text-xl ${
+                          saveAsTemplate
+                            ? "text-[var(--accent-ink)]"
+                            : "text-muted-foreground"
+                        }`}
+                        style={{
+                          fontVariationSettings: saveAsTemplate
+                            ? "'FILL' 1"
+                            : "'FILL' 0",
+                        }}
+                      >
+                        bookmark
+                      </span>
+                      <span
+                        className={`text-sm font-semibold ${
+                          saveAsTemplate ? "text-[var(--accent-ink)]" : "text-foreground"
+                        }`}
+                      >
+                        Save as template
+                      </span>
+                    </button>
+
+                    {saveAsTemplate && (
+                      <input
+                        type="text"
+                        value={templateName}
+                        onChange={(e) => setTemplateName(e.target.value)}
+                        placeholder="Template name…"
+                        className="w-full rounded-[13px] border border-border bg-card px-4 py-3 text-sm text-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
+                      />
+                    )}
+                  </div>
+                )}
 
                 {error ? (
                   <p className="text-xs text-neg">{error}</p>
                 ) : null}
 
-                {/* Create button */}
+                {/* Primary action */}
                 <button
                   type="button"
                   onClick={handleCreate}
                   disabled={isCreating || categories.length === 0}
                   className="w-full h-[48px] rounded-pill bg-[var(--pill)] px-4 text-sm font-bold text-[var(--pill-foreground)] disabled:opacity-50 active:scale-[0.98] transition-all"
                 >
-                  {isCreating ? "Creating…" : "Create Budget"}
+                  {isCreating
+                    ? internalMode === "create"
+                      ? "Creating…"
+                      : "Saving…"
+                    : internalMode === "editTemplate"
+                      ? "Update template"
+                      : internalMode === "saveTemplate"
+                        ? "Save template"
+                        : "Create Budget"}
                 </button>
               </div>
             </div>
@@ -820,6 +1001,15 @@ function CategoryCard({
                 placeholder="Item name"
                 className="flex-1 min-w-0 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
               />
+              {item.linkType ? (
+                <span
+                  className="material-symbols-outlined text-[13px] text-muted-foreground shrink-0"
+                  title={`Linked to ${item.linkType}`}
+                  aria-label={`Linked to ${item.linkType}`}
+                >
+                  link
+                </span>
+              ) : null}
               <div className="flex items-center gap-1 shrink-0">
                 <CurrencySymbol className="currency-symbol text-[11px] text-muted-foreground" />
                 <input

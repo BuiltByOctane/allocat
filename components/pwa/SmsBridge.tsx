@@ -7,6 +7,7 @@ import { SmsReader, type CapturedSms } from "@/lib/native/SmsReader";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { ingestSmsClient, reapplyRulesToPending } from "@/lib/sms/ingestClient";
 import { scheduleWeeklyRecap } from "@/lib/sms/recap";
+import { scheduleDebtReminders } from "@/lib/native/debtReminders";
 import { confirmAutoAllocate, notifSound } from "@/lib/sms/notifPrefs";
 import { nativeSoundKey } from "@/lib/native/notifSounds";
 import { getDB } from "@/lib/db";
@@ -138,6 +139,18 @@ export function SmsBridge() {
       }
     };
 
+    // Mirror the reported-template blocklist into native so the closed-app
+    // receiver can skip whole "kinds" of SMS the user flagged as mistakes.
+    const pushBlocklist = async () => {
+      try {
+        const rows = await getDB().sms_blocklist.toArray();
+        const keys = rows.map((r) => r.template_key);
+        await SmsReader.setBlocklist({ keys: JSON.stringify(keys) });
+      } catch {
+        /* ignore */
+      }
+    };
+
     // A tapped native notification stashes a deep-link; follow it. consumeDeepLink
     // is fired on mount AND every visibilitychange, so it must be idempotent:
     // consuming clears the native stash, but we also guard against re-assigning
@@ -187,6 +200,7 @@ export function SmsBridge() {
         /* plugin unavailable */
       }
       await pushRules();
+      await pushBlocklist();
       try {
         // Live events only fire while the app is open (already hydrated), so the
         // handler stays active regardless of the hydration gate on drain().
@@ -201,14 +215,17 @@ export function SmsBridge() {
       await drain();
       await consumeDeepLink();
       void scheduleWeeklyRecap();
+      void scheduleDebtReminders();
     })();
 
     const onVisible = () => {
       if (document.visibilityState === "visible") {
         void drain();
         void pushRules();
+        void pushBlocklist();
         void consumeDeepLink();
         void scheduleWeeklyRecap();
+        void scheduleDebtReminders();
       }
     };
     document.addEventListener("visibilitychange", onVisible);

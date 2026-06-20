@@ -23,12 +23,12 @@ export default function AvatarPickerSheet({ open, onClose, current }: AvatarPick
   return (
     <Drawer open={open} onOpenChange={(o) => !o && onClose()}>
       <DrawerContent className="sheet-3q">
-        <DrawerHeader>
+        <DrawerHeader className="shrink-0">
           <DrawerTitle>Choose your avatar</DrawerTitle>
           <DrawerDescription>Pick the cat that&apos;s most you.</DrawerDescription>
         </DrawerHeader>
 
-        <div className="grid grid-cols-3 gap-3 overflow-y-auto px-4 pb-8">
+        <div className="grid grid-cols-3 gap-3 flex-1 overflow-y-auto overscroll-contain px-4 pb-8">
           {AVATARS.map((a) => {
             const active = a.id === selected;
             return (

@@ -528,6 +528,8 @@ export type Database = {
           matched_rule_id: string | null
           budget_item_id: string | null
           label: string | null
+          source: "sms" | "manual"
+          original_amount: number | null
           created_at: string
         }
         Insert: {
@@ -546,6 +548,8 @@ export type Database = {
           matched_rule_id?: string | null
           budget_item_id?: string | null
           label?: string | null
+          source?: "sms" | "manual"
+          original_amount?: number | null
           created_at?: string
         }
         Update: {
@@ -554,6 +558,8 @@ export type Database = {
           budget_item_id?: string | null
           merchant_normalized?: string | null
           label?: string | null
+          amount?: number | null
+          original_amount?: number | null
         }
         Relationships: [
           {
@@ -564,6 +570,52 @@ export type Database = {
             referencedColumns: ["id"]
           }
         ]
+      }
+      sms_blocklist: {
+        Row: {
+          id: string
+          user_id: string
+          template_key: string
+          sample_label: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          template_key: string
+          sample_label?: string | null
+          created_at?: string
+        }
+        Update: {
+          template_key?: string
+          sample_label?: string | null
+        }
+        Relationships: []
+      }
+      feedback: {
+        Row: {
+          id: string
+          user_id: string
+          kind: "bug" | "feature" | "feedback"
+          message: string
+          app_version: string | null
+          platform: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          kind?: "bug" | "feature" | "feedback"
+          message: string
+          app_version?: string | null
+          platform?: string | null
+          created_at?: string
+        }
+        Update: {
+          kind?: "bug" | "feature" | "feedback"
+          message?: string
+        }
+        Relationships: []
       }
     }
     Views: {

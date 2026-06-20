@@ -11,6 +11,7 @@ import {
 const CONFIRM_KEY = "allocat-confirm-autoallocate";
 const SOUND_KEY = "allocat-notif-sound";
 const INSIGHTS_KEY = "allocat-weekly-insights";
+const DEBT_REMINDERS_KEY = "allocat-debt-reminders";
 
 /** Whether to show a subtle confirmation when a known merchant auto-allocates. Default ON. */
 export function confirmAutoAllocate(): boolean {
@@ -59,6 +60,23 @@ export function weeklyInsightsEnabled(): boolean {
 export function setWeeklyInsightsEnabled(on: boolean): void {
   try {
     localStorage.setItem(INSIGHTS_KEY, on ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Whether to schedule due-date reminders for money lent to friends. Default ON. */
+export function debtRemindersEnabled(): boolean {
+  try {
+    return localStorage.getItem(DEBT_REMINDERS_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export function setDebtRemindersEnabled(on: boolean): void {
+  try {
+    localStorage.setItem(DEBT_REMINDERS_KEY, on ? "1" : "0");
   } catch {
     /* ignore */
   }

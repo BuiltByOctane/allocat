@@ -64,13 +64,13 @@ export function PaywallSheet({
     <Drawer.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 bg-black/60 z-40" />
-        <Drawer.Content className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card px-5 pt-3 pb-safe focus:outline-none max-w-[480px] mx-auto">
+        <Drawer.Content className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card px-5 pt-3 pb-safe focus:outline-none max-w-[480px] mx-auto sheet-3q">
           <div className="flex justify-center pb-4 shrink-0">
             <div className="w-9 h-1 bg-border rounded-full" />
           </div>
 
           {/* Header */}
-          <div className="text-center mb-5">
+          <div className="text-center mb-5 shrink-0">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-accent/15 mb-3">
               <span className="material-symbols-outlined text-accent">
                 workspace_premium
@@ -84,6 +84,8 @@ export function PaywallSheet({
             </p>
           </div>
 
+          {/* Scrollable middle */}
+          <div className="flex-1 overflow-y-auto overscroll-contain">
           {/* Feature list */}
           <ul className="flex flex-col gap-2.5 mb-5">
             {FEATURES.map((f) => (
@@ -120,9 +122,10 @@ export function PaywallSheet({
               badge={`Save ${YEARLY_SAVE_PCT}%`}
             />
           </div>
+          </div>
 
           {/* CTA */}
-          <div className="flex flex-col gap-3 pb-6">
+          <div className="flex flex-col gap-3 pb-6 shrink-0">
             {canTrial ? (
               <button
                 disabled={starting}

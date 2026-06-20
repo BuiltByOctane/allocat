@@ -124,8 +124,8 @@ export default function ProfilePage() {
       {/* Subscription group */}
       <SubscriptionCard />
 
-      {/* Account group */}
-      <p className="t-label text-muted-foreground mt-1 ml-1">Account</p>
+      {/* Tools group — the sections that don't have their own nav tab */}
+      <p className="t-label text-muted-foreground mt-1 ml-1">Tools</p>
 
       <Link href="/activity" className="block active:scale-[0.99] transition-transform">
         <Card compact className="flex items-center gap-3">
@@ -133,7 +133,10 @@ export default function ProfilePage() {
             <History size={18} strokeWidth={1.7} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[13.5px] font-bold text-foreground">See Activity</div>
+            <div className="text-[13.5px] font-bold text-foreground">Activity</div>
+            <div className="text-[10.5px] font-medium text-muted-foreground mt-0.5">
+              A timeline of everything you've changed
+            </div>
           </div>
           <ChevronRight size={16} strokeWidth={2} className="text-muted-foreground" />
         </Card>
@@ -295,9 +298,9 @@ export default function ProfilePage() {
             <RotateCcw size={18} strokeWidth={1.7} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[13.5px] font-bold text-foreground">Reset All Tours</div>
+            <div className="text-[13.5px] font-bold text-foreground">Replay guided tours</div>
             <div className="text-[10.5px] font-medium text-muted-foreground mt-0.5">
-              Show section guides again
+              See the section walkthroughs again from the start
             </div>
           </div>
           <ChevronRight size={16} strokeWidth={2} className="text-muted-foreground" />

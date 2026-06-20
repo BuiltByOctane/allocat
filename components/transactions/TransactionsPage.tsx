@@ -9,6 +9,7 @@ import { getDB } from "@/lib/db";
 import { Card } from "@/components/ui/Card";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { useAllTransactions } from "@/lib/hooks/useSmsTransactions";
+import { useTourDriver } from "@/lib/tour/useTourDriver";
 import type { SmsTransactionRow } from "@/lib/db";
 
 // ─── Item/category name lookup (read from IDB) ────────────────────────────────
@@ -101,6 +102,7 @@ function monthLabel(key: string): string {
 type SourceFilter = "all" | "sms" | "manual";
 
 export default function TransactionsPage() {
+  useTourDriver("transactions");
   const { data: txns, isLoading } = useAllTransactions();
   const { data: lookup } = useQuery({
     queryKey: LOOKUP_KEY,
@@ -194,7 +196,7 @@ export default function TransactionsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col gap-2">
+      <div id="transactions-filters" className="flex flex-col gap-2">
         {/* Search */}
         <div className="flex items-center gap-2 rounded-pill border border-border bg-card px-3.5 h-10">
           <Search size={15} strokeWidth={2} className="text-muted-foreground shrink-0" />
@@ -239,7 +241,7 @@ export default function TransactionsPage() {
         </div>
 
         {/* Source filter */}
-        <div className="flex gap-1 rounded-pill border border-border bg-card p-1">
+        <div id="transactions-source" className="flex gap-1 rounded-pill border border-border bg-card p-1">
           {(["all", "sms", "manual"] as const).map((s) => (
             <button
               key={s}
@@ -265,10 +267,17 @@ export default function TransactionsPage() {
           <div className="flex size-12 items-center justify-center rounded-[14px] bg-tile text-muted-foreground mb-1">
             <Inbox size={24} strokeWidth={1.7} />
           </div>
-          <p className="text-sm font-bold text-foreground">No transactions.</p>
-          <p className="text-xs text-muted-foreground">
-            Allocated SMS spends and manual logs show up here.
+          <p className="text-sm font-bold text-foreground">No transactions yet</p>
+          <p className="max-w-[260px] text-xs text-muted-foreground">
+            Your spending shows up here — auto-captured from bank SMS or logged by
+            hand. Set up a budget, then log a spend to get started.
           </p>
+          <Link
+            href="/budget"
+            className="mt-1 text-[13px] font-bold text-foreground"
+          >
+            Go to Budget →
+          </Link>
         </Card>
       ) : (
         <div className="flex flex-col gap-4">

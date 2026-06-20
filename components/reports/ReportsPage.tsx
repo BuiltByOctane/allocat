@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { getDB } from "@/lib/db";
 import { getBudgetFromIDB } from "@/lib/hooks/useBudget";
-import { getBudgetForPeriod } from "@/lib/actions/budget";
+import { getBudgetView } from "@/lib/actions/budget";
 import { useMonthlyReport, useSaveReportNotes } from "@/lib/hooks/useReports";
 import { useHaptic } from "@/lib/hooks/useHaptic";
+import { useTourDriver } from "@/lib/tour/useTourDriver";
 import { Card } from "@/components/ui/Card";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { Progress } from "@/components/ui/Progress";
@@ -47,9 +48,10 @@ function summaryKey(month: number, year: number) {
 async function computeSummary(month: number, year: number): Promise<MonthSummary> {
   let budget = await getBudgetFromIDB(month, year);
   if (!budget) {
-    // IDB miss (new month / first open) — server creates + returns the budget.
+    // IDB miss (new month / first open) — read-only fetch; never create a row
+    // just by viewing a report.
     try {
-      budget = await getBudgetForPeriod(month, year);
+      budget = await getBudgetView(month, year);
     } catch {
       budget = null;
     }
@@ -111,6 +113,7 @@ async function computeSummary(month: number, year: number): Promise<MonthSummary
 export default function ReportsPage() {
   const router = useRouter();
   const haptic = useHaptic();
+  useTourDriver("reports");
 
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -198,7 +201,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Month picker */}
-      <div className="flex items-center justify-between rounded-card border border-border bg-card px-2 py-2">
+      <div id="reports-month" className="flex items-center justify-between rounded-card border border-border bg-card px-2 py-2">
         <button
           onClick={() => shiftMonth(-1)}
           aria-label="Previous month"
@@ -257,16 +260,26 @@ export default function ReportsPage() {
           </div>
 
           {/* By category */}
-          <div className="px-1 mt-1">
+          <div id="reports-summary" className="px-1 mt-1">
             <span className="font-display text-[15px] font-bold text-foreground">
               By category · {summary?.categories.length ?? 0}
             </span>
           </div>
           {(summary?.categories.length ?? 0) === 0 ? (
             <Card compact>
-              <p className="py-4 text-center text-[12px] font-medium text-muted-foreground">
-                No budget categories this month.
-              </p>
+              <div className="flex flex-col items-center gap-3 py-5 text-center">
+                <p className="max-w-[260px] text-[12px] font-medium text-muted-foreground">
+                  Reports summarise how you spent against your budget. Set up a
+                  budget this month to see yours.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { haptic.light(); router.push("/budget"); }}
+                  className="text-[13px] font-bold text-foreground"
+                >
+                  Set up your budget →
+                </button>
+              </div>
             </Card>
           ) : (
             <div className="flex flex-col gap-2.5">

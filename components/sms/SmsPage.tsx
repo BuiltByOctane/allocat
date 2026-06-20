@@ -19,6 +19,7 @@ import {
   useReportSmsMistake,
 } from "@/lib/hooks/useSmsTransactions";
 import { useAddBudgetItem } from "@/lib/hooks/useBudget";
+import { useTourDriver } from "@/lib/tour/useTourDriver";
 import {
   ItemDetailSheet,
   NEW_ITEM_ID,
@@ -117,6 +118,7 @@ function txnDate(row: SmsTransactionRow): string | null {
 
 export default function SmsPage() {
   const qc = useQueryClient();
+  useTourDriver("sms");
   const { data: pending, isLoading } = usePendingSms();
   const { data: categorized } = useCategorizedSms();
   const categorize = useCategorizeSms();
@@ -419,7 +421,7 @@ export default function SmsPage() {
       </div>
 
       {/* Pending / Allocated tabs */}
-      <div className="flex gap-1 rounded-pill border border-border bg-card p-1">
+      <div id="sms-tabs" className="flex gap-1 rounded-pill border border-border bg-card p-1">
         {(["pending", "allocated"] as const).map((t) => (
           <button
             key={t}
@@ -447,7 +449,7 @@ export default function SmsPage() {
 
       {/* Pending list */}
       {tab === "pending" && (
-      <section className="flex flex-col gap-3">
+      <section id="sms-list" className="flex flex-col gap-3">
         {isLoading ? (
           <p className="text-sm text-muted-foreground px-1">Loading…</p>
         ) : !pending || pending.length === 0 ? (
@@ -455,9 +457,10 @@ export default function SmsPage() {
             <div className="flex size-12 items-center justify-center rounded-[14px] bg-tile text-muted-foreground mb-1">
               <Inbox size={24} strokeWidth={1.7} />
             </div>
-            <p className="text-sm font-bold text-foreground">No unallocated transactions.</p>
+            <p className="text-sm font-bold text-foreground">Nothing to allocate</p>
             <p className="text-xs text-muted-foreground">
-              New transaction SMS will show up here to allocate.
+              When a bank or UPI payment SMS arrives, AlloCat reads it and lists it
+              here so you can drop it into a budget category. (Android app only.)
             </p>
           </Card>
         ) : (
@@ -519,9 +522,10 @@ export default function SmsPage() {
               <div className="flex size-12 items-center justify-center rounded-[14px] bg-tile text-muted-foreground mb-1">
                 <Inbox size={24} strokeWidth={1.7} />
               </div>
-              <p className="text-sm font-bold text-foreground">No allocated transactions yet.</p>
+              <p className="text-sm font-bold text-foreground">No allocated spends yet</p>
               <p className="text-xs text-muted-foreground">
-                Allocated SMS spends and where they landed show up here.
+                Once you allocate a transaction from the Pending tab, it shows here
+                with the budget category it landed in.
               </p>
             </Card>
           ) : (

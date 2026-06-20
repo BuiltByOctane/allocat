@@ -40,7 +40,7 @@ export default function LoginPage() {
         <form id="login-form" action={handleSubmit} className="flex flex-col gap-3">
           <Button
             type="submit"
-            variant="primary"
+            variant="lime"
             block
             loading={isPending}
             className="h-[52px] text-[15px]"

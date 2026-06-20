@@ -12,9 +12,9 @@ type NavItem = { label: string; href: string; Icon: LucideIcon };
 const navItems: NavItem[] = [
   { label: "Home", href: "/dashboard", Icon: LayoutGrid },
   { label: "Budget", href: "/budget", Icon: Wallet },
-  { label: "Worth", href: "/net-worth", Icon: TrendingUp },
+  { label: "Net Worth", href: "/net-worth", Icon: TrendingUp },
   { label: "Debt", href: "/debt", Icon: CreditCard },
-  { label: "You", href: "/profile", Icon: User },
+  { label: "Profile", href: "/profile", Icon: User },
 ];
 
 // Secondary routes that don't have their own tab but are reached *through*

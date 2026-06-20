@@ -5,9 +5,9 @@ export default function NetWorthEmptyState({ onAddAsset }: { onAddAsset?: () => 
     <div className="mt-4">
       <EmptyState
         icon="account_balance"
-        title="Track your wealth"
-        description="Your financial picture starts here. Manually add assets to visualize your path."
-        action={{ label: "Add asset", onClick: onAddAsset }}
+        title="Track your net worth"
+        description="Add what you own — bank balance, cash, investments, property — to see your total net worth grow over time."
+        action={{ label: "Add an asset", onClick: onAddAsset }}
       />
     </div>
   );

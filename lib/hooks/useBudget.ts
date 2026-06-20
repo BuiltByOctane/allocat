@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getBudgetForPeriod } from "@/lib/actions/budget";
+import { getBudgetView } from "@/lib/actions/budget";
 import { getDB } from "@/lib/db";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import {
@@ -75,9 +75,12 @@ export function useBudgetData(month: number, year: number) {
       const local = await getBudgetFromIDB(month, year);
       if (local) return local;
 
-      // IDB miss: first-ever open or a new month — fall back to server
-      // (server creates the budget row for new months)
-      return getBudgetForPeriod(month, year);
+      // IDB miss: read-only server fetch (never creates a row). When no budget
+      // exists yet, hand back a virtual empty budget (id "") so the page shows
+      // its empty state; a real row is created lazily on the first write action.
+      const view = await getBudgetView(month, year);
+      if (view) return view;
+      return { id: "", month, year, totalBudget: 0, categories: [] };
     },
   });
 }

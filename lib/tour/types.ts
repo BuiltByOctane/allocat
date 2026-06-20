@@ -4,7 +4,10 @@ export type TourPage =
   | "goals"
   | "debt"
   | "net-worth"
-  | "activity";
+  | "activity"
+  | "sms"
+  | "transactions"
+  | "reports";
 
 export interface TourState {
   /** Whether the user has answered the upfront "want a tour?" prompt yet. */

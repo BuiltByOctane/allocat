@@ -39,7 +39,7 @@ export default function SignupPage() {
         <form id="signup-form" action={handleSubmit} className="flex flex-col gap-3">
           <Button
             type="submit"
-            variant="primary"
+            variant="lime"
             block
             loading={isPending}
             className="h-[52px] text-[15px]"

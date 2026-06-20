@@ -1,7 +1,7 @@
 "use client";
 
 import DashboardPage from "@/components/dashboard/DashboardPage";
-import DashboardEmptyState from "@/components/dashboard/DashboardEmptyState";
+import FirstRunChecklist, { useFirstRun } from "@/components/dashboard/FirstRunChecklist";
 import Link from "next/link";
 import { useDashboardData } from "@/lib/hooks/useDashboard";
 import AIOverlay from "@/components/ai/AIOverlay";
@@ -39,6 +39,7 @@ export default function Dashboard() {
   const tour = useTour();
   const tourActive = tour.isPageTourActive("dashboard");
   useTourDriver("dashboard");
+  const firstRun = useFirstRun(data);
 
   if (isLoading && !tourActive) return <DashboardSkeleton />;
 
@@ -52,13 +53,9 @@ export default function Dashboard() {
 
   const displayData = tourActive ? mockDashboardData : data!;
 
-  const isEmpty =
-    !tourActive &&
-    !data?.budget &&
-    (data?.goals.length ?? 0) === 0 &&
-    (data?.netWorthHistory.length ?? 0) === 0;
-
-  if (isEmpty) {
+  // While the setup guide is active, show ONLY the guide (not the dashboard
+  // underneath) until the user finishes every step or dismisses it.
+  if (!tourActive && firstRun.visible) {
     return (
       <div className="px-6">
         <header className="flex items-center justify-between pt-10 pb-4">
@@ -70,7 +67,11 @@ export default function Dashboard() {
             <span className="material-symbols-outlined text-[22px]">account_circle</span>
           </Link>
         </header>
-        <DashboardEmptyState />
+        <FirstRunChecklist
+          items={firstRun.items}
+          doneCount={firstRun.doneCount}
+          onDismiss={firstRun.dismiss}
+        />
         <AIOverlay />
       </div>
     );

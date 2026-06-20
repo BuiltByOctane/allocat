@@ -7,6 +7,7 @@ import { AccentProvider } from "@/lib/providers/AccentProvider";
 import { ACCENT_IDS, ACCENT_STORAGE_KEY } from "@/lib/theme/accents";
 import RegisterPWA from "@/components/ui/RegisterPWA";
 import { NativeShell } from "@/components/pwa/NativeShell";
+import { AndroidWebGate } from "@/components/pwa/AndroidWebGate";
 
 const hankenGrotesque = Hanken_Grotesk({
   subsets: ["latin"],
@@ -207,6 +208,7 @@ export default function RootLayout({
           </AccentProvider>
           <RegisterPWA />
           <NativeShell />
+          <AndroidWebGate />
         </ThemeProvider>
       </body>
     </html>

@@ -7,6 +7,7 @@ import { SmsReader, type CapturedSms } from "@/lib/native/SmsReader";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { ingestSmsClient, reapplyRulesToPending } from "@/lib/sms/ingestClient";
 import { scheduleWeeklyRecap } from "@/lib/sms/recap";
+import { scheduleDebtReminders } from "@/lib/native/debtReminders";
 import { confirmAutoAllocate, notifSound } from "@/lib/sms/notifPrefs";
 import { nativeSoundKey } from "@/lib/native/notifSounds";
 import { getDB } from "@/lib/db";
@@ -214,6 +215,7 @@ export function SmsBridge() {
       await drain();
       await consumeDeepLink();
       void scheduleWeeklyRecap();
+      void scheduleDebtReminders();
     })();
 
     const onVisible = () => {
@@ -223,6 +225,7 @@ export function SmsBridge() {
         void pushBlocklist();
         void consumeDeepLink();
         void scheduleWeeklyRecap();
+        void scheduleDebtReminders();
       }
     };
     document.addEventListener("visibilitychange", onVisible);

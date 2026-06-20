@@ -115,6 +115,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     size: _size,
     block: _block,
     loading: _loading,
+    className: _className,
+    children: _children,
     ...rest
   } = props as ButtonAsButton;
   void _href;
@@ -122,6 +124,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   void _size;
   void _block;
   void _loading;
+  void _className;
+  void _children;
   return (
     <button
       ref={ref}

@@ -111,6 +111,7 @@ export async function hydrateAllTables(): Promise<void> {
     { data: merchantRules },
     { data: smsTransactions },
     { data: smsBlocklist },
+    { data: feedback },
   ] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", userId),
     supabase.from("budgets").select("*").eq("user_id", userId),
@@ -146,6 +147,12 @@ export async function hydrateAllTables(): Promise<void> {
       .order("created_at", { ascending: false })
       .limit(200),
     supabase.from("sms_blocklist").select("*").eq("user_id", userId),
+    supabase
+      .from("feedback")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(100),
   ]);
 
   const now = Date.now();
@@ -201,6 +208,7 @@ export async function hydrateAllTables(): Promise<void> {
     smsBlocklist?.length
       ? db.sms_blocklist.bulkPut(keep("sms_blocklist", smsBlocklist))
       : Promise.resolve(),
+    feedback?.length ? db.feedback.bulkPut(feedback) : Promise.resolve(),
   ]);
 
   // Stamp sync_meta for all tables
@@ -219,6 +227,7 @@ export async function hydrateAllTables(): Promise<void> {
     "merchant_rules",
     "sms_transactions",
     "sms_blocklist",
+    "feedback",
   ] as const;
 
   await db.sync_meta.bulkPut(
@@ -317,6 +326,7 @@ export async function clearDB(): Promise<void> {
     db.merchant_rules.clear(),
     db.sms_transactions.clear(),
     db.sms_blocklist.clear(),
+    db.feedback.clear(),
     db.id_map.clear(),
     db.sync_meta.clear(),
     db.sync_queue.clear(),

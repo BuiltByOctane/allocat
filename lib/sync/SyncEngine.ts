@@ -41,6 +41,7 @@ import {
   deleteDebt,
   makePayment,
 } from "@/lib/actions/debt";
+import { upsertReport, type UpsertReportInput } from "@/lib/actions/reports";
 import {
   ingestSmsTransaction,
   categorizeSmsTransaction,
@@ -196,6 +197,26 @@ export class SyncEngine {
         ),
       DELETE: (p) => deleteDebt(p.id as string),
       PAYMENT: (p) => makePayment(p.id as string, p.amount as number),
+    },
+    reports: {
+      // Notes-save is an upsert: both INSERT and UPDATE route to upsertReport,
+      // which resolves the (user_id, month, year) row server-side.
+      INSERT: (p) =>
+        upsertReport({
+          budgetId: p.budgetId as string,
+          month: p.month as number,
+          year: p.year as number,
+          notes: (p.notes as string) ?? "",
+          summaryData: p.summaryData as UpsertReportInput["summaryData"],
+        }),
+      UPDATE: (p) =>
+        upsertReport({
+          budgetId: p.budgetId as string,
+          month: p.month as number,
+          year: p.year as number,
+          notes: (p.notes as string) ?? "",
+          summaryData: p.summaryData as UpsertReportInput["summaryData"],
+        }),
     },
     sms_transactions: {
       INSERT: (p) => ingestSmsTransaction(p as unknown as IngestSmsInput),

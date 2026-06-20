@@ -153,6 +153,8 @@ export async function ingestSmsClient(
           matched_rule_id: autoApplied ? (rule?.id ?? null) : null,
           budget_item_id: autoApplied ? (rule?.budget_item_id ?? null) : null,
           label: null,
+          source: "sms",
+          original_amount: null,
           created_at: now,
         });
 
@@ -218,12 +220,14 @@ export async function ingestSmsClient(
             url: "/budget",
           });
         } else if (confirmAutoAllocate()) {
-          // Subtle confirmation that a known merchant was auto-logged.
+          // Subtle confirmation that a known merchant was auto-logged — names the
+          // budget ITEM (falls back to category, then "your budget").
           const bi = await db.budget_items.get(rule.budget_item_id);
           const cat = bi ? await db.categories.get(bi.category_id) : null;
+          const target = bi?.name || cat?.name || null;
           await notifyLocal({
-            title: `🐾 Sorted: ${money(amount)}${cat ? ` → ${cat.name}` : ""}`,
-            body: cat ? `Auto-logged to ${cat.name}.` : "Auto-logged to your budget.",
+            title: `🐾 Sorted: ${money(amount)}${target ? ` → ${target}` : ""}`,
+            body: target ? `Auto-logged to ${target}.` : "Auto-logged to your budget.",
             url: "/budget",
           });
         }

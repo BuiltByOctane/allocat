@@ -15,11 +15,18 @@ import { NET_WORTH_KEY } from "./useNetWorth";
 
 export const SMS_TX_KEY = ["sms-transactions"] as const;
 export const SMS_CATEGORIZED_KEY = ["sms-transactions", "categorized"] as const;
+export const ALL_TX_KEY = ["transactions", "all"] as const;
+export const ITEM_TX_KEY = ["item-transactions"] as const;
+export function itemTxKey(itemId: string) {
+  return ["item-transactions", itemId] as const;
+}
 
 /** Invalidate every query that an allocate/reverse touches. */
 function invalidateSmsCaches(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: SMS_TX_KEY });
   qc.invalidateQueries({ queryKey: SMS_CATEGORIZED_KEY });
+  qc.invalidateQueries({ queryKey: ALL_TX_KEY });
+  qc.invalidateQueries({ queryKey: ITEM_TX_KEY });
   qc.invalidateQueries({ queryKey: ["budget"] });
   qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
   qc.invalidateQueries({ queryKey: ["sms-picker"] });
@@ -119,6 +126,39 @@ export async function getCategorizedSmsFromIDB(): Promise<SmsTransactionRow[]> {
   return rows.sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
+/** Sort key for the history: the spend time, falling back to capture time. */
+function txnSortTime(row: SmsTransactionRow): string {
+  return row.occurred_at ?? row.created_at;
+}
+
+/**
+ * Every categorized transaction (both SMS + manual sources), newest first.
+ * Backs the /transactions history. Sorts by occurred_at (the spend's own time)
+ * with created_at as a fallback so manual rows without occurred_at still slot in.
+ */
+export async function getAllTransactionsFromIDB(): Promise<SmsTransactionRow[]> {
+  const db = getDB();
+  const rows = await db.sms_transactions
+    .where("status")
+    .equals("categorized")
+    .toArray();
+  return rows.sort((a, b) => txnSortTime(b).localeCompare(txnSortTime(a)));
+}
+
+/** Categorized transactions for a single budget item, newest first. */
+export async function getItemTransactionsFromIDB(
+  itemId: string,
+): Promise<SmsTransactionRow[]> {
+  const db = getDB();
+  const rows = await db.sms_transactions
+    .where("budget_item_id")
+    .equals(itemId)
+    .toArray();
+  return rows
+    .filter((r) => r.status === "categorized")
+    .sort((a, b) => txnSortTime(b).localeCompare(txnSortTime(a)));
+}
+
 // ─── Query ────────────────────────────────────────────────────────────────────
 
 export function usePendingSms() {
@@ -132,6 +172,23 @@ export function useCategorizedSms() {
   return useQuery({
     queryKey: SMS_CATEGORIZED_KEY,
     queryFn: () => getCategorizedSmsFromIDB(),
+  });
+}
+
+/** All categorized transactions (SMS + manual) for the /transactions history. */
+export function useAllTransactions() {
+  return useQuery({
+    queryKey: ALL_TX_KEY,
+    queryFn: () => getAllTransactionsFromIDB(),
+  });
+}
+
+/** Categorized transactions allocated to a single budget item. */
+export function useItemTransactions(itemId: string) {
+  return useQuery({
+    queryKey: itemTxKey(itemId),
+    queryFn: () => getItemTransactionsFromIDB(itemId),
+    enabled: !!itemId,
   });
 }
 
@@ -166,22 +223,43 @@ export function useCategorizeSms() {
       rememberRule?: boolean;
       matchType?: "exact" | "contains" | "regex";
       label?: string | null;
+      /** Edited spend amount (defaults to the parsed amount). */
+      amount?: number;
     }) => {
       const db = getDB();
 
       const { txnId, txn } = await resolveTxn(db, input.txnId);
       if (!txn) throw new Error("Transaction not found");
 
+      // An edited amount logs the EDITED value (not the parsed one) and stashes
+      // the original parsed amount the first time it changes.
+      const edited =
+        typeof input.amount === "number" &&
+        input.amount > 0 &&
+        input.amount !== txn.amount;
+      const spendAmount =
+        edited && typeof input.amount === "number"
+          ? input.amount
+          : typeof txn.amount === "number"
+            ? txn.amount
+            : null;
+
       // Optimistic: mark categorized + reflect the spend on the budget item.
       await db.sms_transactions.update(txnId, {
         status: "categorized",
         budget_item_id: input.budgetItemId,
         ...(input.label !== undefined ? { label: input.label } : {}),
+        ...(edited
+          ? {
+              amount: spendAmount,
+              original_amount: txn.original_amount ?? txn.amount,
+            }
+          : {}),
       });
       const item = await db.budget_items.get(input.budgetItemId);
-      if (item && typeof txn.amount === "number") {
+      if (item && typeof spendAmount === "number") {
         await db.budget_items.update(input.budgetItemId, {
-          actual_amount: Number(item.actual_amount) + txn.amount,
+          actual_amount: Number(item.actual_amount) + spendAmount,
         });
       }
 
@@ -233,6 +311,7 @@ export function useCategorizeSms() {
           rememberRule: input.rememberRule ?? false,
           matchType: input.matchType ?? "contains",
           ...(input.label !== undefined ? { label: input.label } : {}),
+          ...(edited ? { amount: spendAmount } : {}),
         },
       });
 
@@ -406,6 +485,8 @@ export function useRecategorizeSms() {
       txnId: string;
       newBudgetItemId: string;
       label?: string | null;
+      /** Edited spend amount (defaults to the current amount). */
+      amount?: number;
     }) => {
       const db = getDB();
       const { txnId, txn } = await resolveTxn(db, input.txnId);
@@ -413,20 +494,36 @@ export function useRecategorizeSms() {
 
       const oldItemId = txn.budget_item_id;
       const moving = oldItemId !== input.newBudgetItemId;
+      const oldAmount = typeof txn.amount === "number" ? txn.amount : 0;
+      const edited =
+        typeof input.amount === "number" &&
+        input.amount > 0 &&
+        input.amount !== oldAmount;
+      const newAmount = edited ? (input.amount as number) : oldAmount;
 
-      if (moving && typeof txn.amount === "number") {
+      if (moving && oldAmount > 0) {
+        // Moving: reverse the OLD amount off the old item, apply the (possibly
+        // edited) NEW amount to the new item.
         if (oldItemId) {
           const oldItem = await db.budget_items.get(oldItemId);
           if (oldItem) {
             await db.budget_items.update(oldItemId, {
-              actual_amount: Math.max(0, Number(oldItem.actual_amount) - txn.amount),
+              actual_amount: Math.max(0, Number(oldItem.actual_amount) - oldAmount),
             });
           }
         }
         const newItem = await db.budget_items.get(input.newBudgetItemId);
-        if (newItem) {
+        if (newItem && newAmount > 0) {
           await db.budget_items.update(input.newBudgetItemId, {
-            actual_amount: Number(newItem.actual_amount) + txn.amount,
+            actual_amount: Number(newItem.actual_amount) + newAmount,
+          });
+        }
+      } else if (!moving && edited && oldItemId) {
+        // Same item, amount changed: apply only the delta (new - old).
+        const item = await db.budget_items.get(oldItemId);
+        if (item) {
+          await db.budget_items.update(oldItemId, {
+            actual_amount: Math.max(0, Number(item.actual_amount) + (newAmount - oldAmount)),
           });
         }
       }
@@ -434,6 +531,9 @@ export function useRecategorizeSms() {
       await db.sms_transactions.update(txnId, {
         budget_item_id: input.newBudgetItemId,
         ...(input.label !== undefined ? { label: input.label } : {}),
+        ...(edited
+          ? { amount: newAmount, original_amount: txn.original_amount ?? oldAmount }
+          : {}),
       });
       await enqueue({
         table: "sms_transactions",
@@ -443,10 +543,86 @@ export function useRecategorizeSms() {
           txnId,
           newBudgetItemId: input.newBudgetItemId,
           ...(input.label !== undefined ? { label: input.label } : {}),
+          ...(edited ? { amount: newAmount } : {}),
         },
       });
       return { ok: true };
     },
     onSuccess: () => invalidateSmsCaches(qc),
   });
+}
+
+// ─── Manual spend → ledger row ────────────────────────────────────────────────
+
+type EnqueueFn = (
+  item: Omit<
+    import("@/lib/db").SyncQueueItem,
+    "id" | "retries" | "status" | "createdAt"
+  >,
+) => Promise<void>;
+
+/**
+ * Record a manual budget spend as a real transaction so it shows up in the
+ * /transactions history and the per-item list. This is a LEDGER record only —
+ * the caller (e.g. useQuickLogSpend) already bumped the budget item's
+ * actual_amount, so the server insert deliberately does NOT re-apply the spend.
+ *
+ * Writes an optimistic already-categorized sms_transactions row and enqueues an
+ * INSERT (source "manual"); the server's ingestSmsTransaction inserts the
+ * canonical row without touching actual_amount.
+ */
+export async function writeManualTransaction(
+  input: {
+    budgetItemId: string;
+    amount: number;
+    currency?: string | null;
+    label?: string | null;
+  },
+  deps: { enqueue: EnqueueFn },
+): Promise<{ txnId: string }> {
+  const db = getDB();
+  const tempId = `temp_${randomUUID()}`;
+  const now = new Date().toISOString();
+  const dedupeKey = `manual_${randomUUID()}`;
+
+  await db.sms_transactions.add({
+    id: tempId,
+    user_id: "__pending__",
+    raw_text: null,
+    sender: null,
+    amount: input.amount,
+    currency: input.currency ?? "INR",
+    merchant_raw: null,
+    merchant_normalized: null,
+    direction: "debit",
+    occurred_at: now,
+    dedupe_key: dedupeKey,
+    status: "categorized",
+    matched_rule_id: null,
+    budget_item_id: input.budgetItemId,
+    label: input.label ?? null,
+    source: "manual",
+    original_amount: null,
+    created_at: now,
+  });
+
+  await deps.enqueue({
+    table: "sms_transactions",
+    operation: "INSERT",
+    recordId: tempId,
+    tempId,
+    payload: {
+      amount: input.amount,
+      currency: input.currency ?? "INR",
+      direction: "debit",
+      occurredAt: now,
+      dedupeKey,
+      source: "manual",
+      status: "categorized",
+      budgetItemId: input.budgetItemId,
+      label: input.label ?? null,
+    },
+  });
+
+  return { txnId: tempId };
 }

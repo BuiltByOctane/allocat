@@ -130,12 +130,17 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
                             + ordinal(byDay) + " — ease up to stay in budget.";
                         url = "/budget";
                     } else if (SmsConfig.confirmEnabled(context)) {
-                        // Subtle auto-allocate confirmation (user can disable in Settings).
+                        // Subtle auto-allocate confirmation (user can disable in
+                        // Settings). Names the budget ITEM (falls back to the
+                        // category, then "your budget").
+                        String target = (mr.itemName != null && !mr.itemName.isEmpty())
+                            ? mr.itemName
+                            : mr.category;
                         notifTitle = "🐾 Sorted: " + amt
-                            + (mr.category.isEmpty() ? "" : " → " + mr.category);
-                        notifBody = mr.category.isEmpty()
+                            + (target.isEmpty() ? "" : " → " + target);
+                        notifBody = target.isEmpty()
                             ? "Auto-logged to your budget."
-                            : "Auto-logged to " + mr.category + ".";
+                            : "Auto-logged to " + target + ".";
                         url = "/budget";
                     } else {
                         suppressNotif = true;

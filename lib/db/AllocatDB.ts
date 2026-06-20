@@ -19,6 +19,7 @@ export type SmsTransactionRow =
   Database["public"]["Tables"]["sms_transactions"]["Row"];
 export type SmsBlocklistRow =
   Database["public"]["Tables"]["sms_blocklist"]["Row"];
+export type FeedbackRow = Database["public"]["Tables"]["feedback"]["Row"];
 
 // ─── Sync infrastructure types ────────────────────────────────────────────────
 export type SyncTable =
@@ -34,7 +35,8 @@ export type SyncTable =
   | "net_worth_snapshots"
   | "merchant_rules"
   | "sms_transactions"
-  | "sms_blocklist";
+  | "sms_blocklist"
+  | "feedback";
 
 export type SyncOperation =
   | "INSERT"
@@ -96,6 +98,7 @@ export class AllocatDB extends Dexie {
   merchant_rules!: Table<MerchantRuleRow, string>;
   sms_transactions!: Table<SmsTransactionRow, string>;
   sms_blocklist!: Table<SmsBlocklistRow, string>;
+  feedback!: Table<FeedbackRow, string>;
 
   sync_queue!: Table<SyncQueueItem, number>;
   id_map!: Table<IdMapEntry, string>;
@@ -222,5 +225,22 @@ export class AllocatDB extends Dexie {
     this.version(13).stores({
       sms_blocklist: "id, user_id, template_key, created_at",
     });
+
+    // v14: transactions unify + feedback.
+    //  - sms_transactions gains `source` ('sms'|'manual') + `original_amount`
+    //    (non-indexed) so manual budget spends are real transaction rows and an
+    //    overridden amount can preserve the parsed value. Add a budget_item_id
+    //    index for item-level transaction reads, and a `source` index.
+    //  - new `feedback` table (in-app bug/feature/feedback submissions).
+    // Re-hydrate sms_transactions so the new columns land on cached rows.
+    this.version(14)
+      .stores({
+        sms_transactions:
+          "id, user_id, status, dedupe_key, [user_id+status], occurred_at, created_at, budget_item_id, source",
+        feedback: "id, user_id, created_at",
+      })
+      .upgrade(async (tx) => {
+        await tx.table("sync_meta").delete("sms_transactions");
+      });
   }
 }

@@ -79,6 +79,8 @@ async function loadPickerData(): Promise<PickerData> {
         itemName: item.name,
         categoryName: cat.name,
         icon: cat.icon,
+        planned: Number(item.planned_amount) || 0,
+        actual: Number(item.actual_amount) || 0,
       });
     }
     metaById[cat.id] = {
@@ -237,7 +239,12 @@ export default function SmsPage() {
     setAllocateTxn(target);
   }, [pending]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function handleAllocate(budgetItemId: string, remember: boolean, label?: string | null) {
+  async function handleAllocate(
+    budgetItemId: string,
+    remember: boolean,
+    label?: string | null,
+    amount?: number,
+  ) {
     if (!allocateTxn) return;
     setAllocError(null);
     try {
@@ -246,6 +253,7 @@ export default function SmsPage() {
         budgetItemId,
         rememberRule: remember,
         label: label ?? null,
+        ...(amount !== undefined ? { amount } : {}),
       });
       setAllocateTxn(null);
     } catch (err) {
@@ -258,7 +266,12 @@ export default function SmsPage() {
   }
 
   // Move an already-categorized txn to a different item and/or rename it.
-  async function handleReallocate(budgetItemId: string, _remember: boolean, label?: string | null) {
+  async function handleReallocate(
+    budgetItemId: string,
+    _remember: boolean,
+    label?: string | null,
+    amount?: number,
+  ) {
     if (!reallocTxn) return;
     setAllocError(null);
     try {
@@ -266,6 +279,7 @@ export default function SmsPage() {
         txnId: reallocTxn.id,
         newBudgetItemId: budgetItemId,
         label: label ?? null,
+        ...(amount !== undefined ? { amount } : {}),
       });
       setReallocTxn(null);
     } catch (err) {
@@ -587,6 +601,7 @@ export default function SmsPage() {
       <AllocateSheet
         txn={allocateTxn}
         amountLabel={allocateTxn ? money(allocateTxn) : ""}
+        amount={allocateTxn && typeof allocateTxn.amount === "number" ? allocateTxn.amount : null}
         items={pickerData?.items ?? []}
         categories={pickerData?.categories ?? []}
         onAllocate={handleAllocate}
@@ -599,6 +614,7 @@ export default function SmsPage() {
       <AllocateSheet
         txn={reallocTxn}
         amountLabel={reallocTxn ? money(reallocTxn) : ""}
+        amount={reallocTxn && typeof reallocTxn.amount === "number" ? reallocTxn.amount : null}
         items={pickerData?.items ?? []}
         categories={pickerData?.categories ?? []}
         onAllocate={handleReallocate}

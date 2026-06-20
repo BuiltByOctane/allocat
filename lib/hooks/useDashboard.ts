@@ -5,6 +5,12 @@ import { getDB } from "@/lib/db";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { computeMonthlyHistory } from "@/lib/utils/netWorthHistory";
 import { computeAutoCompletion } from "@/lib/utils/budget-completion";
+import {
+  writeManualTransaction,
+  ALL_TX_KEY,
+  ITEM_TX_KEY,
+  SMS_CATEGORIZED_KEY,
+} from "@/lib/hooks/useSmsTransactions";
 
 export const DASHBOARD_KEY = ["dashboard"] as const;
 
@@ -185,8 +191,20 @@ export function useQuickLogSpend() {
   const enqueue = useEnqueue();
 
   return useMutation({
-    mutationFn: async ({ itemId, amount }: { itemId: string; amount: number }) => {
+    mutationFn: async ({
+      itemId,
+      amount,
+      label,
+    }: {
+      itemId: string;
+      amount: number;
+      /** Optional name for the ledger transaction row. */
+      label?: string | null;
+    }) => {
       const db = getDB();
+      // Profile currency for the ledger row (falls back to INR).
+      const profiles = await db.profiles.toArray();
+      const currency = profiles[0]?.currency ?? "INR";
       const item = await db.budget_items.get(itemId);
       if (item) {
         const newActual = Number(item.actual_amount) + amount;
@@ -207,6 +225,12 @@ export function useQuickLogSpend() {
           recordId: itemId,
           payload: { itemId, amount },
         });
+        // Ledger record only — the PAYMENT above already bumped actual_amount, so
+        // the manual transaction's server insert must NOT re-apply the spend.
+        await writeManualTransaction(
+          { budgetItemId: itemId, amount, currency, label: label ?? null },
+          { enqueue },
+        );
         return {
           itemName: item.name,
           remaining: planned - newActual,
@@ -222,6 +246,10 @@ export function useQuickLogSpend() {
         recordId: itemId,
         payload: { itemId, amount },
       });
+      await writeManualTransaction(
+        { budgetItemId: itemId, amount, currency, label: label ?? null },
+        { enqueue },
+      );
       return null;
     },
     onSuccess: () => {
@@ -230,6 +258,10 @@ export function useQuickLogSpend() {
       qc.invalidateQueries({ queryKey: ["categoryItems"] });
       // A logged spend bumps the item's actual on the category detail screen too.
       qc.invalidateQueries({ queryKey: ["categoryData"] });
+      // The ledger row shows in the history + per-item list.
+      qc.invalidateQueries({ queryKey: ALL_TX_KEY });
+      qc.invalidateQueries({ queryKey: ITEM_TX_KEY });
+      qc.invalidateQueries({ queryKey: SMS_CATEGORIZED_KEY });
     },
   });
 }

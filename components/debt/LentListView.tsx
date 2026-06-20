@@ -426,12 +426,19 @@ export default function LentListView({ lents, onBack }: { lents: Lent[]; onBack:
         >
           <span className="material-symbols-outlined text-[18px]">arrow_back</span>
         </button>
-        <div>
+        <div className="flex-1">
           <h1 className="font-display text-[26px] font-bold leading-none tracking-[-0.03em] text-foreground">Money Out</h1>
           <p className="text-[11px] font-medium text-muted-foreground mt-1">
             Friends &amp; lending · {caption}
           </p>
         </div>
+        <button
+          onClick={openAdd}
+          className="flex size-[38px] shrink-0 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground hover:text-foreground transition-colors"
+          aria-label="Add lend"
+        >
+          <span className="material-symbols-outlined text-[20px]">add</span>
+        </button>
       </div>
 
       {/* Lime hero */}
@@ -450,17 +457,14 @@ export default function LentListView({ lents, onBack }: { lents: Lent[]; onBack:
         <span className="font-display text-[15px] font-bold text-foreground">
           Active lends · {activeLents.length}
         </span>
-        <button
-          onClick={openAdd}
-          className="flex items-center gap-1 text-[13px] font-bold text-foreground"
-        >
-          <span className="text-accent-strong text-base leading-none">＋</span>New
-        </button>
       </div>
 
       {activeLents.length === 0 && (
         <Card compact>
-          <p className="py-4 text-center text-[12px] font-medium text-muted-foreground">No active lends.</p>
+          <p className="py-4 text-center text-[12px] font-medium text-muted-foreground">No active lends yet.</p>
+          <Button variant="dashed" block onClick={openAdd}>
+            <span className="text-[17px] leading-none">＋</span>Add your first lend
+          </Button>
         </Card>
       )}
 

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Drawer } from "vaul";
-import { hasNumericText } from "@/lib/number-format";
+import { hasNumericText, formatCurrency } from "@/lib/number-format";
 import type { SmsTransactionRow } from "@/lib/db";
 
 export interface AllocatePickerItem {
@@ -10,6 +10,9 @@ export interface AllocatePickerItem {
   itemName: string;
   categoryName: string;
   icon?: string | null;
+  /** Planned + actual for the "<amount> left" hint (optional). */
+  planned?: number;
+  actual?: number;
 }
 
 export interface AllocateCategory {
@@ -23,9 +26,16 @@ interface AllocateSheetProps {
   txn: SmsTransactionRow | null;
   /** Pre-formatted amount for the header (parent owns currency formatting). */
   amountLabel: string;
+  /** Raw numeric amount, seeds the editable amount field. */
+  amount: number | null;
   items: AllocatePickerItem[];
   categories: AllocateCategory[];
-  onAllocate: (budgetItemId: string, remember: boolean, label?: string | null) => void;
+  onAllocate: (
+    budgetItemId: string,
+    remember: boolean,
+    label?: string | null,
+    amount?: number,
+  ) => void;
   onCreateNew: (categoryId: string) => void;
   onClose: () => void;
   isPending: boolean;
@@ -42,6 +52,7 @@ type View = "items" | "pick-category";
 export function AllocateSheet({
   txn,
   amountLabel,
+  amount,
   items,
   categories,
   onAllocate,
@@ -55,6 +66,9 @@ export function AllocateSheet({
   const [chosenItem, setChosenItem] = useState("");
   const [remember, setRemember] = useState(true);
   const [label, setLabel] = useState("");
+  // Editable spend amount (seeded from the parsed amount). Kept as a string so
+  // the field can be cleared/typed; parsed back to a number on Allocate.
+  const [amountText, setAmountText] = useState("");
 
   // Reset to a clean state every time a new transaction opens the sheet.
   // Idiomatic "adjust state during render on prop change" — no effect needed.
@@ -67,11 +81,17 @@ export function AllocateSheet({
       setChosenItem(txn?.budget_item_id ?? "");
       setRemember(true);
       setLabel(txn?.label ?? "");
+      setAmountText(amount != null ? String(amount) : "");
     }
   }
 
   const merchant = txn?.merchant_raw ?? "Unknown merchant";
   const labelTrimmed = label.trim();
+  const currency = txn?.currency ?? "INR";
+  const parsedAmount = parseFloat(amountText);
+  const amountValid = hasNumericText(amountText) && parsedAmount > 0;
+  const editedAmount =
+    amountValid && parsedAmount !== amount ? parsedAmount : undefined;
 
   return (
     <Drawer.Root
@@ -93,20 +113,27 @@ export function AllocateSheet({
 
           {view === "items" ? (
             <>
-              {/* Header — amount + merchant */}
+              {/* Header — editable amount + merchant */}
               <div className="px-5 pt-2 pb-4 border-b border-border shrink-0">
-                <div className="flex items-baseline justify-between gap-3">
-                  <span
-                    className={`text-[26px] font-bold text-foreground ${
-                      hasNumericText(amountLabel) ? "figure" : "font-display"
-                    }`}
-                  >
-                    {amountLabel}
-                  </span>
-                  <span className="truncate text-[13px] font-bold text-foreground">
+                <div className="flex items-center justify-between gap-3">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={amountText}
+                    onChange={(e) => setAmountText(e.target.value)}
+                    aria-label="Amount"
+                    placeholder={amountLabel}
+                    className="figure min-w-0 flex-1 bg-transparent text-[26px] font-bold text-foreground focus:outline-none"
+                  />
+                  <span className="truncate text-[13px] font-bold text-foreground shrink-0">
                     {merchant}
                   </span>
                 </div>
+                {!amountValid && (
+                  <p className="mt-1 text-[11px] font-medium text-neg">
+                    Enter an amount greater than 0.
+                  </p>
+                )}
                 <Drawer.Title className="mt-3 t-label text-muted-foreground m-0">
                   {isReallocate ? "Move to" : "Allocate to"}
                 </Drawer.Title>
@@ -145,37 +172,52 @@ export function AllocateSheet({
                   ) : (
                     items.map((it) => {
                       const isSelected = it.id === chosenItem;
+                      const left =
+                        it.planned != null && it.actual != null
+                          ? Math.max(0, it.planned - it.actual)
+                          : null;
                       return (
                         <li key={it.id}>
                           <button
                             type="button"
                             onClick={() => setChosenItem(it.id)}
-                            className={`w-full flex items-center justify-between px-4 py-3.5 rounded-tile text-left transition-colors ${
+                            className={`w-full flex items-center justify-between gap-2 px-4 py-3.5 rounded-tile text-left transition-colors ${
                               isSelected
                                 ? "bg-muted text-foreground"
                                 : "text-muted-foreground hover:bg-muted/50 active:bg-muted"
                             }`}
                           >
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
                               {it.icon && (
                                 <span className="text-lg leading-none shrink-0">
                                   {it.icon}
                                 </span>
                               )}
-                              <div>
-                                <span className="text-sm font-medium block">
+                              <div className="min-w-0">
+                                <span className="text-sm font-medium block truncate">
                                   {it.itemName}
                                 </span>
-                                <span className="text-[11px] text-muted-foreground block mt-0.5">
+                                <span className="text-[11px] text-muted-foreground block mt-0.5 truncate">
                                   {it.categoryName}
                                 </span>
                               </div>
                             </div>
-                            {isSelected && (
-                              <span className="material-symbols-outlined text-foreground text-[18px] shrink-0">
-                                check
-                              </span>
-                            )}
+                            <div className="flex items-center gap-2 shrink-0">
+                              {left != null && (
+                                <span className="figure text-[11px] text-muted-foreground">
+                                  {formatCurrency(left, {
+                                    code: currency,
+                                    maximumFractionDigits: 0,
+                                  })}{" "}
+                                  left
+                                </span>
+                              )}
+                              {isSelected && (
+                                <span className="material-symbols-outlined text-foreground text-[18px]">
+                                  check
+                                </span>
+                              )}
+                            </div>
                           </button>
                         </li>
                       );
@@ -218,8 +260,15 @@ export function AllocateSheet({
                 <div className="flex gap-2 pt-2 pb-3">
                   <button
                     type="button"
-                    disabled={!chosenItem || isPending}
-                    onClick={() => onAllocate(chosenItem, remember, labelTrimmed || null)}
+                    disabled={!chosenItem || !amountValid || isPending}
+                    onClick={() =>
+                      onAllocate(
+                        chosenItem,
+                        remember,
+                        labelTrimmed || null,
+                        editedAmount,
+                      )
+                    }
                     className="flex-1 h-[48px] rounded-pill bg-[var(--pill)] text-[var(--pill-foreground)] text-sm font-bold disabled:opacity-40 active:scale-[0.98] transition-all"
                   >
                     {isPending ? (isReallocate ? "Saving…" : "Allocating…") : isReallocate ? "Save" : "Allocate"}

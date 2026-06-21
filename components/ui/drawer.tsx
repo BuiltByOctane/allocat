@@ -38,7 +38,10 @@ const DrawerContent = React.forwardRef<
     <DrawerOverlay />
     <DrawerPrimitive.Content
       ref={ref}
-      className={`fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-sheet bg-card ${className ?? ""}`}
+      className={`fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-sheet bg-card transition-[bottom] duration-200 ${className ?? ""}`}
+      // Anchor above the soft keyboard (--keyboard-inset is 0 when none is open),
+      // so the focused input + footer stay visible while typing.
+      style={{ bottom: "var(--keyboard-inset, 0px)" }}
       {...props}
     >
       <div className="mx-auto mt-3 h-1 w-9 rounded-full bg-border" />

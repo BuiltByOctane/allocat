@@ -7,6 +7,7 @@ import { InstallPrompt } from "@/components/ui/InstallPrompt";
 import { BadgeUpdater } from "@/components/pwa/BadgeUpdater";
 import { PushPermissionPrompt } from "@/components/pwa/PushPermissionPrompt";
 import { SmsBridge } from "@/components/pwa/SmsBridge";
+import { KeyboardInset } from "@/components/pwa/KeyboardInset";
 import { AdaptyBridge } from "@/components/pwa/AdaptyBridge";
 import { NativeSetup } from "@/components/pwa/NativeSetup";
 import { TourPrompt } from "@/components/tour/TourPrompt";
@@ -52,6 +53,7 @@ export default async function AppLayout({
           </PullToRefresh>
         </main>
         <InstallPrompt />
+        <KeyboardInset />
         <SmsBridge />
         <AdaptyBridge />
         <TourPrompt />

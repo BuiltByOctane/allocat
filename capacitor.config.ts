@@ -1,4 +1,5 @@
 import type { CapacitorConfig } from "@capacitor/cli";
+import { KeyboardResize } from "@capacitor/keyboard";
 
 /**
  * Remote-URL WebView mode: the native shell loads the deployed Next.js app so
@@ -43,6 +44,15 @@ const config: CapacitorConfig = {
     LocalNotifications: {
       smallIcon: "ic_notification",
       iconColor: "#F4A340",
+    },
+    // resize:"none" keeps the WebView layout viewport full-screen when the soft
+    // keyboard opens, so 100dvh/75dvh never shrink (and never get stuck at the
+    // shrunken value after the keyboard hides — the root cause of bottom sheets
+    // collapsing to half height). The keyboard overlays the page; the web layer
+    // lifts sheets above it via the --keyboard-inset var (KeyboardInset.tsx).
+    Keyboard: {
+      resize: KeyboardResize.None,
+      resizeOnFullScreen: true,
     },
     // Remote-URL mode loads the deployed app over the network, so the native
     // splash must stay up until the WebView is ready — otherwise users see a

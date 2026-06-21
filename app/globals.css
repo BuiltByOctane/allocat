@@ -249,9 +249,25 @@ input[type="date"] {
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* Soft-keyboard height, in px. 0 unless a keyboard is open. Set at runtime by
+   components/pwa/KeyboardInset.tsx (native Keyboard events + visualViewport
+   fallback); stays 0 on web/SSR so layout is unchanged. */
+:root { --keyboard-inset: 0px; }
+
 /* Uniform 3/4-screen height for all content bottom sheets.
-   vh first as a WebView fallback; dvh override for browsers that support it. */
-.sheet-3q { height: 75vh; height: 75dvh; max-height: 75dvh; }
+   vh first as a WebView fallback; dvh + keyboard-inset override for modern
+   browsers. Subtracting --keyboard-inset keeps the sheet (top, content, footer)
+   above the soft keyboard instead of letting the focused input hide behind it. */
+.sheet-3q {
+  height: 75vh;
+  height: min(75dvh, calc(100dvh - var(--keyboard-inset, 0px)));
+  max-height: calc(100dvh - var(--keyboard-inset, 0px));
+}
+
+/* Safe-area padding utilities (notch / home-indicator). Used across bottom
+   sheets and footers; defined here because the project has no tailwind config. */
+@utility pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+@utility pt-safe { padding-top: env(safe-area-inset-top); }
 
 /* Glassy floating-dock surface + shadow (bottom nav) */
 .glass-dock {

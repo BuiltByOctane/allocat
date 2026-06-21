@@ -113,7 +113,13 @@ function txnDate(row: SmsTransactionRow): string | null {
   if (!row.occurred_at) return null;
   const d = new Date(row.occurred_at);
   if (isNaN(d.getTime())) return null;
-  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  return d.toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
 export default function SmsPage() {

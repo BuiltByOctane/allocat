@@ -2,7 +2,7 @@ import { EmptyState } from "../ui/EmptyState";
 
 export default function DebtEmptyState({ onAddDebt }: { onAddDebt?: () => void }) {
   return (
-    <div className="mt-12">
+    <div className="mt-4">
       <EmptyState
         icon="account_balance_wallet"
         title="No debts yet"

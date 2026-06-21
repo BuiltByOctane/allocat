@@ -226,6 +226,9 @@ function CategoryDetailContent({
         notes: data.notes,
         link_type: linkType,
         link_id: linkId,
+        // Added directly to a budget (not from a template item) → no durable id.
+        template_id: null,
+        template_item_id: null,
         created_at: now,
         updated_at: now,
       });

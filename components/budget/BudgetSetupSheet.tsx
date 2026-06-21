@@ -8,6 +8,7 @@ import { useFormatCurrency } from "@/lib/hooks/useFormatCurrency";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { getDB } from "@/lib/db";
+import { reapplyRulesToPending } from "@/lib/sms/ingestClient";
 import { PREDEFINED_TEMPLATES, type BudgetTemplate } from "@/lib/budget-templates";
 import {
   getBudgetTemplates,
@@ -28,6 +29,17 @@ interface SetupItem {
   allocation: number;
   linkType?: LinkType | null;
   linkId?: string | null;
+  /**
+   * Durable template-item identity, preserved across edits/renames so SMS rules
+   * follow the item month to month. Carried from a template or an existing
+   * budget item; falls back to the row's `id` for brand-new manual items.
+   */
+  templateItemId?: string | null;
+}
+
+/** Stable durable id for an item — its template id, or its row id as a fallback. */
+function itemTemplateItemId(i: SetupItem): string {
+  return i.templateItemId ?? i.id;
 }
 
 interface SetupCategory {
@@ -69,6 +81,7 @@ function templateToCategories(
       allocation: item.plannedAmount ?? 0,
       linkType: item.linkType ?? null,
       linkId: item.linkId ?? null,
+      templateItemId: item.templateItemId ?? null,
     })),
   }));
 }
@@ -179,6 +192,8 @@ export function BudgetSetupSheet({
           allocation: it.planned_amount,
           linkType: it.link_type as LinkType | null,
           linkId: it.link_id,
+          // Preserve durable identity when capturing a budget as a template.
+          templateItemId: it.template_item_id ?? null,
         })),
       });
     }
@@ -219,6 +234,9 @@ export function BudgetSetupSheet({
             : null,
         items: c.items.map((i) => ({
           name: i.name,
+          // Same durable id the budget items are stamped with — keeps a saved
+          // template aligned with the budget it was captured from.
+          templateItemId: itemTemplateItemId(i),
           plannedAmount: i.allocation > 0 ? i.allocation : undefined,
           linkType: i.linkType ?? undefined,
           linkId: i.linkId ?? undefined,
@@ -421,12 +439,24 @@ export function BudgetSetupSheet({
       const db = getDB();
       const now = new Date().toISOString();
 
+      // The template identity this budget anchors to, so SMS rules re-allocate
+      // across months. Saving as a (new) template mints a client id shared with
+      // saveBudgetTemplate; otherwise anchor to the picked template; manual
+      // budgets stay null. See lib/sms/resolveRuleItem.ts.
+      const willSaveTemplate = saveAsTemplate && !!templateName.trim();
+      const savedTemplateId = willSaveTemplate ? crypto.randomUUID() : null;
+      const budgetTemplateId =
+        savedTemplateId ?? selectedTemplate?.id ?? null;
+
       // 1. Optimistic IDB write for total + cats + items
       if (totalBudgetNum > 0) {
         await db.budgets.update(budgetId, {
           total_budget: totalBudgetNum,
+          template_id: budgetTemplateId,
           updated_at: now,
         });
+      } else {
+        await db.budgets.update(budgetId, { template_id: budgetTemplateId });
       }
 
       const bulkCategories: Array<{
@@ -441,6 +471,7 @@ export function BudgetSetupSheet({
           planned: number;
           linkType: LinkType | null;
           linkId: string | null;
+          templateItemId: string | null;
         }>;
       }> = [];
 
@@ -468,6 +499,7 @@ export function BudgetSetupSheet({
           planned: number;
           linkType: LinkType | null;
           linkId: string | null;
+          templateItemId: string | null;
         }> = [];
 
         for (const item of cat.items) {
@@ -478,6 +510,9 @@ export function BudgetSetupSheet({
           const itemPlanned = item.allocation > 0 ? item.allocation : 0;
           const linkType = item.linkType ?? null;
           const linkId = item.linkId ?? null;
+          const templateItemId = budgetTemplateId
+            ? itemTemplateItemId(item)
+            : null;
           await db.budget_items.add({
             id: itemTempId,
             category_id: catTempId,
@@ -490,6 +525,8 @@ export function BudgetSetupSheet({
             notes: null,
             link_type: linkType,
             link_id: linkId,
+            template_id: templateItemId ? budgetTemplateId : null,
+            template_item_id: templateItemId,
             created_at: now,
             updated_at: now,
           });
@@ -499,6 +536,7 @@ export function BudgetSetupSheet({
             planned: itemPlanned,
             linkType,
             linkId,
+            templateItemId,
           });
         }
 
@@ -521,14 +559,27 @@ export function BudgetSetupSheet({
           payload: {
             budgetId,
             totalBudget: totalBudgetNum,
+            templateId: budgetTemplateId,
             categories: bulkCategories,
           },
         });
       }
 
-      // 3. Save as template if requested
-      if (saveAsTemplate && templateName.trim()) {
-        await saveBudgetTemplate(buildTemplatePayload());
+      // 3. Save as template if requested — reuse the same id the budget anchors
+      //    to so reusing this template next month re-stamps the same identity.
+      if (willSaveTemplate) {
+        await saveBudgetTemplate(buildTemplatePayload(), savedTemplateId);
+      }
+
+      // 4. Now that this month's items exist (with durable template ids), re-apply
+      //    any SMS that landed pending because the budget didn't exist yet — they
+      //    auto-allocate to the matching item. Best-effort. resolveRuleItem.ts.
+      if (budgetTemplateId) {
+        try {
+          await reapplyRulesToPending({ enqueue });
+        } catch {
+          /* best-effort — manual allocation still available */
+        }
       }
 
       haptic.success();

@@ -1,5 +1,12 @@
 export interface TemplateItem {
   name: string;
+  /**
+   * Stable identity for this item, durable across template edits and re-applies.
+   * Used to re-key SMS merchant rules so allocations follow the item from month
+   * to month (and survive renames). Predefined templates use hand-assigned slugs;
+   * custom templates mint a uuid when first saved. See lib/sms/resolveRuleItem.ts.
+   */
+  templateItemId: string;
   /** Absolute planned amount in the user's display currency. Optional — predefined templates omit. */
   plannedAmount?: number;
   /** Cross-section link preserved across applies. Predefined templates omit. */
@@ -37,11 +44,11 @@ export const PREDEFINED_TEMPLATES: BudgetTemplate[] = [
         icon: "🏠",
         allocationPct: 50,
         items: [
-          { name: "Rent / EMI" },
-          { name: "Groceries" },
-          { name: "Utilities" },
-          { name: "Transport" },
-          { name: "Insurance" },
+          { name: "Rent / EMI", templateItemId: "50-30-20:needs:rent" },
+          { name: "Groceries", templateItemId: "50-30-20:needs:groceries" },
+          { name: "Utilities", templateItemId: "50-30-20:needs:utilities" },
+          { name: "Transport", templateItemId: "50-30-20:needs:transport" },
+          { name: "Insurance", templateItemId: "50-30-20:needs:insurance" },
         ],
       },
       {
@@ -49,10 +56,10 @@ export const PREDEFINED_TEMPLATES: BudgetTemplate[] = [
         icon: "🎉",
         allocationPct: 30,
         items: [
-          { name: "Dining Out" },
-          { name: "Entertainment" },
-          { name: "Shopping" },
-          { name: "Subscriptions" },
+          { name: "Dining Out", templateItemId: "50-30-20:wants:dining" },
+          { name: "Entertainment", templateItemId: "50-30-20:wants:entertainment" },
+          { name: "Shopping", templateItemId: "50-30-20:wants:shopping" },
+          { name: "Subscriptions", templateItemId: "50-30-20:wants:subscriptions" },
         ],
       },
       {
@@ -60,9 +67,9 @@ export const PREDEFINED_TEMPLATES: BudgetTemplate[] = [
         icon: "💰",
         allocationPct: 20,
         items: [
-          { name: "Emergency Fund" },
-          { name: "Investments" },
-          { name: "Goals" },
+          { name: "Emergency Fund", templateItemId: "50-30-20:savings:emergency" },
+          { name: "Investments", templateItemId: "50-30-20:savings:investments" },
+          { name: "Goals", templateItemId: "50-30-20:savings:goals" },
         ],
       },
     ],
@@ -77,41 +84,58 @@ export const PREDEFINED_TEMPLATES: BudgetTemplate[] = [
         name: "Housing",
         icon: "🏠",
         allocationPct: null,
-        items: [{ name: "Rent / EMI" }, { name: "Electricity" }, { name: "Internet" }],
+        items: [
+          { name: "Rent / EMI", templateItemId: "zero-based:housing:rent" },
+          { name: "Electricity", templateItemId: "zero-based:housing:electricity" },
+          { name: "Internet", templateItemId: "zero-based:housing:internet" },
+        ],
       },
       {
         name: "Food",
         icon: "🍽️",
         allocationPct: null,
-        items: [{ name: "Groceries" }, { name: "Dining Out" }],
+        items: [
+          { name: "Groceries", templateItemId: "zero-based:food:groceries" },
+          { name: "Dining Out", templateItemId: "zero-based:food:dining" },
+        ],
       },
       {
         name: "Transport",
         icon: "🚗",
         allocationPct: null,
-        items: [{ name: "Fuel" }, { name: "Public Transport" }],
+        items: [
+          { name: "Fuel", templateItemId: "zero-based:transport:fuel" },
+          { name: "Public Transport", templateItemId: "zero-based:transport:public" },
+        ],
       },
       {
         name: "Savings",
         icon: "💰",
         allocationPct: null,
-        items: [{ name: "Emergency Fund" }, { name: "Investments" }],
+        items: [
+          { name: "Emergency Fund", templateItemId: "zero-based:savings:emergency" },
+          { name: "Investments", templateItemId: "zero-based:savings:investments" },
+        ],
       },
       {
         name: "Personal",
         icon: "🧴",
         allocationPct: null,
         items: [
-          { name: "Health & Fitness" },
-          { name: "Clothing" },
-          { name: "Entertainment" },
+          { name: "Health & Fitness", templateItemId: "zero-based:personal:health" },
+          { name: "Clothing", templateItemId: "zero-based:personal:clothing" },
+          { name: "Entertainment", templateItemId: "zero-based:personal:entertainment" },
         ],
       },
       {
         name: "Misc",
         icon: "📦",
         allocationPct: null,
-        items: [{ name: "Subscriptions" }, { name: "Gifts" }, { name: "Other" }],
+        items: [
+          { name: "Subscriptions", templateItemId: "zero-based:misc:subscriptions" },
+          { name: "Gifts", templateItemId: "zero-based:misc:gifts" },
+          { name: "Other", templateItemId: "zero-based:misc:other" },
+        ],
       },
     ],
   },
@@ -126,23 +150,26 @@ export const PREDEFINED_TEMPLATES: BudgetTemplate[] = [
         icon: "🏠",
         allocationPct: null,
         items: [
-          { name: "Rent" },
-          { name: "Groceries" },
-          { name: "Electricity" },
-          { name: "Water" },
+          { name: "Rent", templateItemId: "bare-minimum:essentials:rent" },
+          { name: "Groceries", templateItemId: "bare-minimum:essentials:groceries" },
+          { name: "Electricity", templateItemId: "bare-minimum:essentials:electricity" },
+          { name: "Water", templateItemId: "bare-minimum:essentials:water" },
         ],
       },
       {
         name: "Transport",
         icon: "🚌",
         allocationPct: null,
-        items: [{ name: "Fuel / Commute" }],
+        items: [{ name: "Fuel / Commute", templateItemId: "bare-minimum:transport:fuel" }],
       },
       {
         name: "Health",
         icon: "💊",
         allocationPct: null,
-        items: [{ name: "Medicine" }, { name: "Insurance" }],
+        items: [
+          { name: "Medicine", templateItemId: "bare-minimum:health:medicine" },
+          { name: "Insurance", templateItemId: "bare-minimum:health:insurance" },
+        ],
       },
     ],
   },

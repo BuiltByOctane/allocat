@@ -70,10 +70,11 @@ async function pushRulesToNative(): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
   try {
     const db = getDB();
-    const [rules, cats, items] = await Promise.all([
+    const [rules, cats, items, budgets] = await Promise.all([
       db.merchant_rules.toArray(),
       db.categories.toArray(),
       db.budget_items.toArray(),
+      db.budgets.toArray(),
     ]);
     const name = new Map(cats.map((c) => [c.id, c.name]));
     const alloc = new Map(cats.map((c) => [c.id, Number(c.allocated_amount)]));
@@ -85,14 +86,37 @@ async function pushRulesToNative(): Promise<void> {
         (spent.get(it.category_id) ?? 0) + Number(it.actual_amount),
       );
     }
+
+    // Display should name THIS month's item, not the stale cache: durable rules
+    // now resolve cross-month. Build a (template_id, template_item_id) → item map
+    // scoped to the current month's budget, preferring it over r.budget_item_id.
+    const now = new Date();
+    const curBudget = budgets.find(
+      (b) => b.month === now.getMonth() + 1 && b.year === now.getFullYear(),
+    );
+    const curCatIds = new Set(
+      cats.filter((c) => c.budget_id === curBudget?.id).map((c) => c.id),
+    );
+    const durableMap = new Map<string, (typeof items)[number]>();
+    for (const it of items) {
+      if (it.template_id && it.template_item_id && curCatIds.has(it.category_id)) {
+        durableMap.set(`${it.template_id}::${it.template_item_id}`, it);
+      }
+    }
+
     const payload = rules.map((r) => {
-      const it = itemsById.get(r.budget_item_id);
+      const it =
+        (r.template_id && r.template_item_id
+          ? durableMap.get(`${r.template_id}::${r.template_item_id}`)
+          : undefined) ??
+        (r.budget_item_id ? itemsById.get(r.budget_item_id) : undefined);
+      const catId = it?.category_id ?? r.category_id ?? "";
       return {
         match_type: r.match_type,
         pattern: r.pattern,
-        category: name.get(r.category_id) ?? "",
-        allocated: alloc.get(r.category_id) ?? 0,
-        spent: spent.get(r.category_id) ?? 0,
+        category: name.get(catId) ?? "",
+        allocated: alloc.get(catId) ?? 0,
+        spent: spent.get(catId) ?? 0,
         itemName: it?.name ?? "",
         itemPlanned: it ? Number(it.planned_amount) : 0,
         itemActual: it ? Number(it.actual_amount) : 0,
@@ -269,19 +293,36 @@ export function useCategorizeSms() {
       let ruleLearned = false;
       if (input.rememberRule && txn.merchant_normalized && item) {
         const now = new Date().toISOString();
-        await db.merchant_rules.add({
-          id: `temp_${randomUUID()}`,
-          user_id: "__pending__",
-          match_type: input.matchType ?? "contains",
-          pattern: txn.merchant_normalized,
+        const matchType = input.matchType ?? "contains";
+        const durable = {
           merchant_normalized: txn.merchant_normalized,
+          // Durable cross-month key; budget_item_id/category_id are caches.
+          template_id: item.template_id ?? null,
+          template_item_id: item.template_item_id ?? null,
           budget_item_id: input.budgetItemId,
           category_id: item.category_id,
           auto_apply: true,
-          times_applied: 0,
-          created_at: now,
           updated_at: now,
-        });
+        };
+        // Re-point an existing rule for this merchant instead of stacking a
+        // duplicate (mirrors the server upsert) — keeps matching unambiguous.
+        const existing = (await db.merchant_rules.toArray()).find(
+          (r) =>
+            r.match_type === matchType && r.pattern === txn.merchant_normalized,
+        );
+        if (existing) {
+          await db.merchant_rules.update(existing.id, durable);
+        } else {
+          await db.merchant_rules.add({
+            id: `temp_${randomUUID()}`,
+            user_id: "__pending__",
+            match_type: matchType,
+            pattern: txn.merchant_normalized,
+            times_applied: 0,
+            created_at: now,
+            ...durable,
+          });
+        }
         ruleLearned = true;
       }
 

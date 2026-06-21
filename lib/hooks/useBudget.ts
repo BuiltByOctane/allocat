@@ -314,6 +314,9 @@ export function useAddBudgetItem() {
         notes: null,
         link_type: link?.link_type ?? null,
         link_id: link?.link_id ?? null,
+        // Added directly to a budget (not from a template item) → no durable id.
+        template_id: null,
+        template_item_id: null,
         created_at: now,
         updated_at: now,
       });

@@ -6,9 +6,13 @@ import { notifyUser } from "@/lib/server/push-notify";
 import { logActivity, getUserCurrency, fmt } from "@/lib/server/activity-logger";
 import {
   normalizeMerchant,
-  matchMerchantRule,
+  matchMerchantRules,
   type MerchantRule,
 } from "@/lib/sms/match";
+import {
+  selectRuleForPeriod,
+  type RuleResolutionContext,
+} from "@/lib/sms/resolveRuleItem";
 import {
   isAmountEdited,
   effectiveAmount,
@@ -28,6 +32,47 @@ async function getAuthed() {
 }
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * Load the resolver context (budget + its items) for the SMS's period — its
+ * occurred_at month, falling back to now. Read-only: never creates a budget.
+ * See lib/sms/resolveRuleItem.ts.
+ */
+async function loadPeriodContext(
+  supabase: Supa,
+  userId: string,
+  occurredAt: string | null | undefined,
+): Promise<RuleResolutionContext> {
+  const d = occurredAt ? new Date(occurredAt) : new Date();
+  const month = d.getMonth() + 1;
+  const year = d.getFullYear();
+
+  const { data: budget } = await supabase
+    .from("budgets")
+    .select("id, template_id")
+    .eq("user_id", userId)
+    .eq("month", month)
+    .eq("year", year)
+    .maybeSingle();
+
+  let items: RuleResolutionContext["items"] = [];
+  if (budget) {
+    const { data: cats } = await supabase
+      .from("categories")
+      .select("id")
+      .eq("budget_id", budget.id);
+    const catIds = (cats ?? []).map((c) => c.id);
+    if (catIds.length > 0) {
+      const { data: rows } = await supabase
+        .from("budget_items")
+        .select("id, template_id, template_item_id")
+        .in("category_id", catIds);
+      items = rows ?? [];
+    }
+  }
+
+  return { budget: budget ?? null, items };
+}
 
 export interface IngestSmsInput {
   /**
@@ -136,13 +181,17 @@ export async function ingestSmsTransaction(input: IngestSmsInput) {
   const actionable = isDebit && typeof input.amount === "number" && input.amount > 0;
 
   // 2. Server-authoritative rule match (rules may have changed since capture).
-  let rule: MerchantRule | null = null;
+  // Collect ALL matching rules so a stale one can't shadow a working one.
+  let candidates: MerchantRule[] = [];
   if (actionable && input.merchantRaw) {
     const { data: rows } = await supabase
       .from("merchant_rules")
       .select("*")
       .eq("user_id", user.id);
-    rule = matchMerchantRule(input.merchantRaw, (rows ?? []) as MerchantRule[]);
+    candidates = matchMerchantRules(
+      input.merchantRaw,
+      (rows ?? []) as MerchantRule[],
+    );
   }
 
   // 3. Insert the transaction record.
@@ -169,38 +218,51 @@ export async function ingestSmsTransaction(input: IngestSmsInput) {
   const cur = await getUserCurrency(supabase, user.id);
   const merchantLabel = input.merchantRaw || merchantNormalized || "Unknown";
 
-  // 4a. Auto-apply a known merchant rule.
-  if (actionable && rule && rule.auto_apply) {
-    try {
-      await quickLogSpend(rule.budget_item_id, input.amount as number, {
-        kind: "sms",
-        merchant: merchantLabel,
-      });
-      await supabase
-        .from("sms_transactions")
-        .update({
-          status: "categorized",
-          budget_item_id: rule.budget_item_id,
-          matched_rule_id: rule.id,
-        })
-        .eq("id", txn.id)
-        .eq("user_id", user.id);
-      await supabase
-        .from("merchant_rules")
-        .update({ times_applied: (rule.times_applied ?? 0) + 1 })
-        .eq("id", rule.id)
-        .eq("user_id", user.id);
+  // 4a. Auto-apply a known merchant rule — but only against THIS period's item.
+  // A rule keyed to last month's template item resolves to this month's item;
+  // selectRuleForPeriod skips stale/duplicate rules that no longer resolve, so a
+  // broken rule can't shadow a working one. No resolution → leave pending.
+  // See lib/sms/resolveRuleItem.ts.
+  if (actionable && candidates.length > 0) {
+    const ctx = await loadPeriodContext(supabase, user.id, input.occurredAt);
+    const sel = selectRuleForPeriod(candidates, ctx);
+    if (sel) {
+      const { rule, itemId: resolvedItemId } = sel;
+      try {
+        await quickLogSpend(resolvedItemId, input.amount as number, {
+          kind: "sms",
+          merchant: merchantLabel,
+        });
+        await supabase
+          .from("sms_transactions")
+          .update({
+            status: "categorized",
+            budget_item_id: resolvedItemId,
+            matched_rule_id: rule.id,
+          })
+          .eq("id", txn.id)
+          .eq("user_id", user.id);
+        await supabase
+          .from("merchant_rules")
+          .update({
+            times_applied: (rule.times_applied ?? 0) + 1,
+            // Refresh the denormalized cache to the item just charged.
+            budget_item_id: resolvedItemId,
+          })
+          .eq("id", rule.id)
+          .eq("user_id", user.id);
 
-      await notifyIfNearLimit(supabase, user.id, rule.budget_item_id, cur);
-      // Return the full row reflecting the final categorized state.
-      return {
-        ...txn,
-        status: "categorized" as const,
-        budget_item_id: rule.budget_item_id,
-        matched_rule_id: rule.id,
-      };
-    } catch {
-      // Fall through to manual categorization if the spend log failed.
+        await notifyIfNearLimit(supabase, user.id, resolvedItemId, cur);
+        // Return the full row reflecting the final categorized state.
+        return {
+          ...txn,
+          status: "categorized" as const,
+          budget_item_id: resolvedItemId,
+          matched_rule_id: rule.id,
+        };
+      } catch {
+        // Fall through to manual categorization if the spend log failed.
+      }
     }
   }
 
@@ -256,10 +318,12 @@ export async function categorizeSmsTransaction(input: CategorizeSmsInput) {
   if (typeof txn.amount !== "number" || txn.amount <= 0)
     throw new Error("Transaction has no spendable amount");
 
-  // Resolve the item's category (needed for rule + near-limit math).
+  // Resolve the item's category + durable template identity (needed for the
+  // rule + near-limit math). The template keys re-key the rule so it follows the
+  // item across months. See lib/sms/resolveRuleItem.ts.
   const { data: item } = await supabase
     .from("budget_items")
-    .select("id, category_id")
+    .select("id, category_id, template_id, template_item_id")
     .eq("id", input.budgetItemId)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -282,20 +346,48 @@ export async function categorizeSmsTransaction(input: CategorizeSmsInput) {
 
   let ruleId: string | null = null;
   if (input.rememberRule && txn.merchant_normalized) {
-    const { data: rule } = await supabase
+    const matchType = input.matchType ?? "contains";
+    const ruleFields = {
+      merchant_normalized: txn.merchant_normalized,
+      // Durable cross-month key; budget_item_id/category_id are now caches.
+      template_id: item.template_id,
+      template_item_id: item.template_item_id,
+      budget_item_id: input.budgetItemId,
+      category_id: item.category_id,
+      auto_apply: true,
+    };
+
+    // Re-point an existing rule for this merchant rather than stacking a
+    // duplicate — so a corrected allocation overwrites the old (possibly stale)
+    // target instead of leaving a shadow rule behind. See resolveRuleItem.ts.
+    const { data: existing } = await supabase
       .from("merchant_rules")
-      .insert({
-        user_id: user.id,
-        match_type: input.matchType ?? "contains",
-        pattern: txn.merchant_normalized,
-        merchant_normalized: txn.merchant_normalized,
-        budget_item_id: input.budgetItemId,
-        category_id: item.category_id,
-        auto_apply: true,
-      })
       .select("id")
-      .single();
-    ruleId = rule?.id ?? null;
+      .eq("user_id", user.id)
+      .eq("match_type", matchType)
+      .eq("pattern", txn.merchant_normalized)
+      .maybeSingle();
+
+    if (existing) {
+      await supabase
+        .from("merchant_rules")
+        .update(ruleFields)
+        .eq("id", existing.id)
+        .eq("user_id", user.id);
+      ruleId = existing.id;
+    } else {
+      const { data: rule } = await supabase
+        .from("merchant_rules")
+        .insert({
+          user_id: user.id,
+          match_type: matchType,
+          pattern: txn.merchant_normalized,
+          ...ruleFields,
+        })
+        .select("id")
+        .single();
+      ruleId = rule?.id ?? null;
+    }
   }
 
   await supabase

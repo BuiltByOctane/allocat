@@ -66,6 +66,7 @@ export type Database = {
           year: number
           total_budget: number
           is_locked: boolean
+          template_id: string | null
           created_at: string
           updated_at: string
         }
@@ -76,6 +77,7 @@ export type Database = {
           year: number
           total_budget?: number
           is_locked?: boolean
+          template_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -84,6 +86,7 @@ export type Database = {
           year?: number
           total_budget?: number
           is_locked?: boolean
+          template_id?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -174,6 +177,8 @@ export type Database = {
           notes: string | null
           link_type: "asset" | "debt" | null
           link_id: string | null
+          template_id: string | null
+          template_item_id: string | null
           created_at: string
           updated_at: string
         }
@@ -189,6 +194,8 @@ export type Database = {
           notes?: string | null
           link_type?: "asset" | "debt" | null
           link_id?: string | null
+          template_id?: string | null
+          template_item_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -201,6 +208,8 @@ export type Database = {
           notes?: string | null
           link_type?: "asset" | "debt" | null
           link_id?: string | null
+          template_id?: string | null
+          template_item_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -471,8 +480,10 @@ export type Database = {
           match_type: "exact" | "contains" | "regex"
           pattern: string
           merchant_normalized: string | null
-          budget_item_id: string
-          category_id: string
+          template_id: string | null
+          template_item_id: string | null
+          budget_item_id: string | null
+          category_id: string | null
           auto_apply: boolean
           times_applied: number
           created_at: string
@@ -484,8 +495,10 @@ export type Database = {
           match_type: "exact" | "contains" | "regex"
           pattern: string
           merchant_normalized?: string | null
-          budget_item_id: string
-          category_id: string
+          template_id?: string | null
+          template_item_id?: string | null
+          budget_item_id?: string | null
+          category_id?: string | null
           auto_apply?: boolean
           times_applied?: number
           created_at?: string
@@ -495,8 +508,10 @@ export type Database = {
           match_type?: "exact" | "contains" | "regex"
           pattern?: string
           merchant_normalized?: string | null
-          budget_item_id?: string
-          category_id?: string
+          template_id?: string | null
+          template_item_id?: string | null
+          budget_item_id?: string | null
+          category_id?: string | null
           auto_apply?: boolean
           times_applied?: number
           updated_at?: string

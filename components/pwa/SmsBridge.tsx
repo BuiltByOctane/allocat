@@ -94,10 +94,11 @@ export function SmsBridge() {
     const pushRules = async () => {
       try {
         const db = getDB();
-        const [rules, cats, items] = await Promise.all([
+        const [rules, cats, items, budgets] = await Promise.all([
           db.merchant_rules.toArray(),
           db.categories.toArray(),
           db.budget_items.toArray(),
+          db.budgets.toArray(),
         ]);
         const name = new Map(cats.map((c) => [c.id, c.name]));
         const alloc = new Map(cats.map((c) => [c.id, Number(c.allocated_amount)]));
@@ -109,14 +110,40 @@ export function SmsBridge() {
             (spent.get(it.category_id) ?? 0) + Number(it.actual_amount),
           );
         }
+
+        // Resolve durable rules to THIS month's item for correct labels (mirror
+        // of pushRulesToNative in useSmsTransactions). See resolveRuleItem.ts.
+        const now = new Date();
+        const curBudget = budgets.find(
+          (b) => b.month === now.getMonth() + 1 && b.year === now.getFullYear(),
+        );
+        const curCatIds = new Set(
+          cats.filter((c) => c.budget_id === curBudget?.id).map((c) => c.id),
+        );
+        const durableMap = new Map<string, (typeof items)[number]>();
+        for (const it of items) {
+          if (
+            it.template_id &&
+            it.template_item_id &&
+            curCatIds.has(it.category_id)
+          ) {
+            durableMap.set(`${it.template_id}::${it.template_item_id}`, it);
+          }
+        }
+
         const payload = rules.map((r) => {
-          const it = itemsById.get(r.budget_item_id);
+          const it =
+            (r.template_id && r.template_item_id
+              ? durableMap.get(`${r.template_id}::${r.template_item_id}`)
+              : undefined) ??
+            (r.budget_item_id ? itemsById.get(r.budget_item_id) : undefined);
+          const catId = it?.category_id ?? r.category_id ?? "";
           return {
             match_type: r.match_type,
             pattern: r.pattern,
-            category: name.get(r.category_id) ?? "",
-            allocated: alloc.get(r.category_id) ?? 0,
-            spent: spent.get(r.category_id) ?? 0,
+            category: name.get(catId) ?? "",
+            allocated: alloc.get(catId) ?? 0,
+            spent: spent.get(catId) ?? 0,
             itemName: it?.name ?? "",
             itemPlanned: it ? Number(it.planned_amount) : 0,
             itemActual: it ? Number(it.actual_amount) : 0,

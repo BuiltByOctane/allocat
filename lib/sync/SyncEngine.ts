@@ -27,6 +27,7 @@ type BulkSetupCategoryInput = {
     planned: number;
     linkType?: "asset" | "debt" | null;
     linkId?: string | null;
+    templateItemId?: string | null;
   }>;
 };
 import {
@@ -104,7 +105,8 @@ export class SyncEngine {
         setupBudgetFromTemplate(
           p.budgetId as string,
           p.totalBudget as number,
-          p.categories as BulkSetupCategoryInput[]
+          p.categories as BulkSetupCategoryInput[],
+          (p.templateId as string | null) ?? null
         ),
     },
     categories: {

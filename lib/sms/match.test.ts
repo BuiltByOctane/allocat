@@ -40,6 +40,25 @@ describe("matchMerchantRule", () => {
     ];
     expect(matchMerchantRule("Amazon Pay", r)?.id).toBe("exact");
   });
+
+  it("passes durable template identity through untouched (matching is pattern-only)", () => {
+    const durable: MerchantRule[] = [
+      {
+        id: "r-durable",
+        match_type: "exact",
+        pattern: "zomato",
+        template_id: "tpl-1",
+        template_item_id: "ti-dining",
+        budget_item_id: null,
+        category_id: null,
+        auto_apply: true,
+      },
+    ];
+    const hit = matchMerchantRule("ZOMATO", durable);
+    expect(hit?.template_id).toBe("tpl-1");
+    expect(hit?.template_item_id).toBe("ti-dining");
+    expect(hit?.budget_item_id).toBeNull();
+  });
 });
 
 describe("txnDedupeKey", () => {

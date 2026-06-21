@@ -242,5 +242,24 @@ export class AllocatDB extends Dexie {
       .upgrade(async (tx) => {
         await tx.table("sync_meta").delete("sms_transactions");
       });
+
+    // v15: durable cross-month SMS auto-allocation.
+    //  - budgets gain `template_id`; budget_items gain `template_id` +
+    //    `template_item_id` (non-indexed → those schema strings unchanged).
+    //  - merchant_rules gain `template_id` + `template_item_id`; add a compound
+    //    index so the resolver can look rules up by durable identity.
+    // Re-hydrate budgets/budget_items/merchant_rules so the new columns land on
+    // cached rows. See lib/sms/resolveRuleItem.ts.
+    this.version(15)
+      .stores({
+        merchant_rules:
+          "id, user_id, match_type, [user_id+match_type], created_at, [user_id+template_id+template_item_id]",
+      })
+      .upgrade(async (tx) => {
+        const meta = tx.table("sync_meta");
+        await meta.delete("budgets");
+        await meta.delete("budget_items");
+        await meta.delete("merchant_rules");
+      });
   }
 }

@@ -1051,13 +1051,19 @@ type TemplateSetupCategoryInput = {
     planned: number;
     linkType?: LinkType | null;
     linkId?: string | null;
+    /** Durable template-item identity stamped onto the created budget_item. */
+    templateItemId?: string | null;
   }>;
 };
 
 export async function setupBudgetFromTemplate(
   budgetId: string,
   totalBudget: number,
-  categories: TemplateSetupCategoryInput[]
+  categories: TemplateSetupCategoryInput[],
+  // The template this budget was built from. Stamped onto the budget and each
+  // item so SMS merchant rules can re-allocate across months. Null for manual
+  // budgets. See lib/sms/resolveRuleItem.ts.
+  templateId: string | null = null
 ) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -1075,11 +1081,16 @@ export async function setupBudgetFromTemplate(
     );
   }
 
-  // 1. Update budget total (only if non-zero)
-  if (totalBudget > 0) {
+  // 1. Update budget total (only if non-zero) + stamp the originating template
+  //    so cross-month SMS rules can tell which budget identity this month has.
+  const budgetUpdate: Database["public"]["Tables"]["budgets"]["Update"] = {
+    template_id: templateId,
+  };
+  if (totalBudget > 0) budgetUpdate.total_budget = totalBudget;
+  {
     const { error: budgetErr } = await supabase
       .from("budgets")
-      .update({ total_budget: totalBudget })
+      .update(budgetUpdate)
       .eq("id", budgetId)
       .eq("user_id", user.id);
     if (budgetErr) throw new Error(budgetErr.message);
@@ -1145,6 +1156,7 @@ export async function setupBudgetFromTemplate(
     planned: number;
     link_type: LinkType | null;
     link_id: string | null;
+    template_item_id: string | null;
   }> = [];
   for (const c of filteredCats) {
     const realCatId = tempToRealCat.get(c.tempId)!;
@@ -1161,6 +1173,7 @@ export async function setupBudgetFromTemplate(
         planned: Number(item.planned || 0),
         link_type: keepLink ? linkType : null,
         link_id: keepLink ? linkId : null,
+        template_item_id: item.templateItemId ?? null,
       });
     }
   }
@@ -1177,6 +1190,9 @@ export async function setupBudgetFromTemplate(
       notes: null,
       link_type: i.link_type,
       link_id: i.link_id,
+      // Durable identity so SMS rules re-allocate across months.
+      template_id: i.template_item_id ? templateId : null,
+      template_item_id: i.template_item_id,
     }));
     const { data, error } = await supabase
       .from("budget_items")

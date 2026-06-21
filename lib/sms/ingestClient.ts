@@ -11,8 +11,9 @@
 import { getDB } from "@/lib/db";
 import type { SyncQueueItem } from "@/lib/db";
 import { parseTransactionSms, isOtpOrVerification } from "@/lib/ai/parseSmsTransaction";
-import { normalizeMerchant, matchMerchantRule, txnDedupeKey, smsTemplateKey } from "@/lib/sms/match";
+import { normalizeMerchant, matchMerchantRules, txnDedupeKey, smsTemplateKey } from "@/lib/sms/match";
 import type { MerchantRule } from "@/lib/sms/match";
+import { selectRuleForPeriod, type RuleResolutionContext } from "@/lib/sms/resolveRuleItem";
 import { randomUUID } from "@/lib/utils/uuid";
 import { notifyLocal } from "@/lib/native/notify";
 import { nearLimitFromIDB, paceFromIDB, ordinal } from "@/lib/sms/nearLimit";
@@ -38,6 +39,50 @@ export interface IngestClientResult {
  * even starts; the readwrite transaction below is the durable backstop.
  */
 const inFlight = new Set<string>();
+
+/**
+ * Load the resolver context (budget + its items) for a period from IDB — mirror
+ * of the server's loadPeriodContext. Reads the budget for the SMS's occurred_at
+ * month (fallback: now) and its items. See lib/sms/resolveRuleItem.ts.
+ */
+async function loadPeriodContextIDB(
+  occurredAt: string | null | undefined,
+): Promise<RuleResolutionContext> {
+  const db = getDB();
+  const d = occurredAt ? new Date(occurredAt) : new Date();
+  const month = d.getMonth() + 1;
+  const year = d.getFullYear();
+
+  const budget = await db.budgets
+    .where("[month+year]")
+    .equals([month, year])
+    .first();
+
+  let items: RuleResolutionContext["items"] = [];
+  if (budget) {
+    const cats = await db.categories
+      .where("budget_id")
+      .equals(budget.id)
+      .toArray();
+    const itemArrays = await Promise.all(
+      cats.map((c) =>
+        db.budget_items.where("category_id").equals(c.id).toArray(),
+      ),
+    );
+    items = itemArrays.flat().map((i) => ({
+      id: i.id,
+      template_id: i.template_id ?? null,
+      template_item_id: i.template_item_id ?? null,
+    }));
+  }
+
+  return {
+    budget: budget
+      ? { id: budget.id, template_id: budget.template_id ?? null }
+      : null,
+    items,
+  };
+}
 
 export async function ingestSmsClient(
   input: { raw: string; sender?: string | null },
@@ -102,13 +147,28 @@ export async function ingestSmsClient(
     const isDebit = true;
     const merchantNormalized = merchant ? normalizeMerchant(merchant) : null;
 
-    // Match a learned rule from IDB (holds only the current user's rows).
+    // Match learned rules from IDB (holds only the current user's rows), then
+    // pick the first that resolves to THIS month's item — a rule keyed to last
+    // month's template item maps onto this month's item; stale/duplicate rules
+    // that no longer resolve are skipped (never shadow a working one). No
+    // resolution → leave pending. See lib/sms/resolveRuleItem.ts.
     let rule: MerchantRule | null = null;
+    let resolvedItemId: string | null = null;
     if (isDebit && merchant) {
-      const rules = (await db.merchant_rules.toArray()) as MerchantRule[];
-      rule = matchMerchantRule(merchant, rules);
+      const candidates = matchMerchantRules(
+        merchant,
+        (await db.merchant_rules.toArray()) as MerchantRule[],
+      );
+      if (candidates.length > 0) {
+        const ctx = await loadPeriodContextIDB(occurredAt);
+        const sel = selectRuleForPeriod(candidates, ctx);
+        if (sel) {
+          rule = sel.rule;
+          resolvedItemId = sel.itemId;
+        }
+      }
     }
-    const autoApplied = Boolean(isDebit && rule && rule.auto_apply);
+    const autoApplied = Boolean(resolvedItemId);
 
     const tempId = `temp_${randomUUID()}`;
     const now = new Date().toISOString();
@@ -151,18 +211,18 @@ export async function ingestSmsClient(
           dedupe_key: dedupeKey,
           status,
           matched_rule_id: autoApplied ? (rule?.id ?? null) : null,
-          budget_item_id: autoApplied ? (rule?.budget_item_id ?? null) : null,
+          budget_item_id: autoApplied ? resolvedItemId : null,
           label: null,
           source: "sms",
           original_amount: null,
           created_at: now,
         });
 
-        // Optimistically reflect an auto-applied spend in the budget item.
-        if (autoApplied && rule) {
-          const item = await db.budget_items.get(rule.budget_item_id);
+        // Optimistically reflect an auto-applied spend in the resolved item.
+        if (autoApplied && resolvedItemId) {
+          const item = await db.budget_items.get(resolvedItemId);
           if (item) {
-            await db.budget_items.update(rule.budget_item_id, {
+            await db.budget_items.update(resolvedItemId, {
               actual_amount: Number(item.actual_amount) + amount,
             });
           }
@@ -201,8 +261,8 @@ export async function ingestSmsClient(
       return { txnId: tempId, autoApplied };
     }
 
-    if (autoApplied && rule) {
-      const nl = await nearLimitFromIDB(rule.budget_item_id);
+    if (autoApplied && resolvedItemId) {
+      const nl = await nearLimitFromIDB(resolvedItemId);
       if (nl) {
         await notifyLocal({
           title: nl.over ? "🙀 Budget blown!" : "😼 Budget's getting thin",
@@ -212,7 +272,7 @@ export async function ingestSmsClient(
           url: "/budget",
         });
       } else {
-        const pace = await paceFromIDB(rule.budget_item_id);
+        const pace = await paceFromIDB(resolvedItemId);
         if (pace) {
           await notifyLocal({
             title: "🐾 Spending fast",
@@ -222,7 +282,7 @@ export async function ingestSmsClient(
         } else if (confirmAutoAllocate()) {
           // Subtle confirmation that a known merchant was auto-logged — names the
           // budget ITEM (falls back to category, then "your budget").
-          const bi = await db.budget_items.get(rule.budget_item_id);
+          const bi = await db.budget_items.get(resolvedItemId);
           const cat = bi ? await db.categories.get(bi.category_id) : null;
           const target = bi?.name || cat?.name || null;
           await notifyLocal({
@@ -279,12 +339,21 @@ export async function reapplyRulesToPending(deps: {
     let applied = 0;
     for (const row of pending) {
       if (!row.merchant_raw && !row.merchant_normalized) continue;
-      const rule = matchMerchantRule(
+      if (typeof row.amount !== "number" || row.amount <= 0) continue;
+      const candidates = matchMerchantRules(
         row.merchant_raw ?? row.merchant_normalized ?? "",
         rules,
       );
-      if (!rule || !rule.auto_apply) continue;
-      if (typeof row.amount !== "number" || row.amount <= 0) continue;
+      if (candidates.length === 0) continue;
+
+      // Resolve to the row's own period — this is the whole point of the re-apply
+      // pass: a row that landed pending because its month's budget didn't exist
+      // yet now resolves once that budget is created from the same template.
+      // selectRuleForPeriod also skips stale/duplicate rules.
+      const ctx = await loadPeriodContextIDB(row.occurred_at);
+      const sel = selectRuleForPeriod(candidates, ctx);
+      if (!sel) continue;
+      const { rule, itemId: resolvedItemId } = sel;
 
       // Atomic per-row apply with a status re-check → safe to call repeatedly.
       const didApply = await db.transaction(
@@ -296,12 +365,12 @@ export async function reapplyRulesToPending(deps: {
           if (!fresh || fresh.status !== "pending") return false;
           await db.sms_transactions.update(row.id, {
             status: "categorized",
-            budget_item_id: rule.budget_item_id,
+            budget_item_id: resolvedItemId,
             matched_rule_id: rule.id,
           });
-          const item = await db.budget_items.get(rule.budget_item_id);
+          const item = await db.budget_items.get(resolvedItemId);
           if (item) {
-            await db.budget_items.update(rule.budget_item_id, {
+            await db.budget_items.update(resolvedItemId, {
               actual_amount: Number(item.actual_amount) + (row.amount as number),
             });
           }
@@ -318,7 +387,7 @@ export async function reapplyRulesToPending(deps: {
           recordId: row.id,
           payload: {
             txnId: row.id,
-            budgetItemId: rule.budget_item_id,
+            budgetItemId: resolvedItemId,
             rememberRule: false,
             matchType: rule.match_type,
           },

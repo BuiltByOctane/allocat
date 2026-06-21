@@ -11,8 +11,19 @@ export interface MerchantRule {
   match_type: MerchantMatchType;
   /** For exact/contains: compared against the normalized merchant. For regex: a raw pattern. */
   pattern: string;
-  budget_item_id: string;
-  category_id: string;
+  /**
+   * Durable cross-month identity: the template + template-item the rule targets.
+   * Resolved to the current month's `budget_item_id` at apply time. Null on legacy
+   * rules and rules learned against manual (non-template) budgets.
+   */
+  template_id?: string | null;
+  template_item_id?: string | null;
+  /**
+   * Denormalized cache of the last-resolved budget item. No longer the durable
+   * key — kept for legacy same-month fallback and native display. May be null.
+   */
+  budget_item_id?: string | null;
+  category_id?: string | null;
   auto_apply: boolean;
   /** Present on persisted rules; used for usage stats, not for matching. */
   times_applied?: number;
@@ -30,19 +41,34 @@ export function normalizeMerchant(raw: string): string {
 
 const TIER_ORDER: MerchantMatchType[] = ["exact", "contains", "regex"];
 
-/** Find the rule that matches `merchant`, preferring exact > contains > regex. */
+/**
+ * All rules matching `merchant`, ordered by precedence (exact > contains >
+ * regex, then array order within a tier). The caller picks the first that
+ * actually resolves to a live item — important when stale/duplicate rules exist
+ * for the same merchant (e.g. an old rule whose template item was deleted must
+ * not shadow a newer working one). See selectRuleForPeriod in resolveRuleItem.ts.
+ */
+export function matchMerchantRules(
+  merchant: string,
+  rules: MerchantRule[],
+): MerchantRule[] {
+  const norm = normalizeMerchant(merchant);
+  const out: MerchantRule[] = [];
+  for (const tier of TIER_ORDER) {
+    for (const rule of rules) {
+      if (rule.match_type !== tier) continue;
+      if (ruleMatches(rule, norm)) out.push(rule);
+    }
+  }
+  return out;
+}
+
+/** Find the single best rule matching `merchant` (exact > contains > regex). */
 export function matchMerchantRule(
   merchant: string,
   rules: MerchantRule[],
 ): MerchantRule | null {
-  const norm = normalizeMerchant(merchant);
-  for (const tier of TIER_ORDER) {
-    for (const rule of rules) {
-      if (rule.match_type !== tier) continue;
-      if (ruleMatches(rule, norm)) return rule;
-    }
-  }
-  return null;
+  return matchMerchantRules(merchant, rules)[0] ?? null;
 }
 
 function ruleMatches(rule: MerchantRule, normalizedMerchant: string): boolean {

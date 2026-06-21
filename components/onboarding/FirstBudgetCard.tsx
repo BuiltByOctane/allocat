@@ -32,6 +32,7 @@ function templateToSetupCategories(template: BudgetTemplate, total: number) {
       tempId: crypto.randomUUID(),
       name: i.name,
       planned: i.plannedAmount ?? 0,
+      templateItemId: i.templateItemId,
     })),
   }));
 }
@@ -76,7 +77,12 @@ export function FirstBudgetCard() {
         const cats = selected
           ? templateToSetupCategories(selected, totalNum)
           : [];
-        await setupBudgetFromTemplate(budget.id, totalNum, cats);
+        await setupBudgetFromTemplate(
+          budget.id,
+          totalNum,
+          cats,
+          selected?.id ?? null
+        );
       } catch {
         /* proceed without blocking entry */
       }

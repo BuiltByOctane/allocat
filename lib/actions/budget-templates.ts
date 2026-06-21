@@ -3,11 +3,29 @@
 import { createClient } from "@/lib/supabase/server";
 import type { BudgetTemplate, TemplateCategory } from "@/lib/budget-templates";
 
-/** Shape accepted when saving a custom template (id/savedAt assigned by DB). */
+/** Shape accepted when saving a custom template (savedAt assigned by DB). */
 export type SaveTemplateInput = Pick<
   BudgetTemplate,
   "name" | "description" | "preview" | "categories"
 >;
+
+/**
+ * Guarantee every template item carries a durable `templateItemId`. Items that
+ * already have one keep it (preserving SMS allocations across edits/renames);
+ * brand-new items get a fresh uuid. Defensive: the client normally supplies ids,
+ * but never trust the payload. See lib/sms/resolveRuleItem.ts.
+ */
+function ensureTemplateItemIds(
+  categories: TemplateCategory[]
+): TemplateCategory[] {
+  return (categories ?? []).map((c) => ({
+    ...c,
+    items: (c.items ?? []).map((i) => ({
+      ...i,
+      templateItemId: i.templateItemId?.trim() || crypto.randomUUID(),
+    })),
+  }));
+}
 
 /** Map a DB row into the client-facing BudgetTemplate. */
 function rowToTemplate(row: {
@@ -45,9 +63,14 @@ export async function getBudgetTemplates(): Promise<BudgetTemplate[]> {
   return (data ?? []).map(rowToTemplate);
 }
 
-/** Persist a new custom template; returns the saved row. */
+/**
+ * Persist a new custom template; returns the saved row. An optional `id` lets a
+ * budget being created share the same template id, so reusing the template next
+ * month re-stamps the same identity onto its items (cross-month SMS rules).
+ */
 export async function saveBudgetTemplate(
-  input: SaveTemplateInput
+  input: SaveTemplateInput,
+  id?: string | null
 ): Promise<BudgetTemplate> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -59,11 +82,12 @@ export async function saveBudgetTemplate(
   const { data, error } = await supabase
     .from("budget_templates")
     .insert({
+      ...(id ? { id } : {}),
       user_id: user.id,
       name,
       description: input.description?.trim() || null,
       preview: input.preview ?? [],
-      categories: input.categories as never,
+      categories: ensureTemplateItemIds(input.categories) as never,
     })
     .select("id, name, description, preview, categories, created_at")
     .single();
@@ -90,7 +114,8 @@ export async function updateBudgetTemplate(
       name,
       description: input.description?.trim() || null,
       preview: input.preview ?? [],
-      categories: input.categories as never,
+      // Preserve existing item ids (rename keeps allocations); mint only for new.
+      categories: ensureTemplateItemIds(input.categories) as never,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)

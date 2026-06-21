@@ -13,7 +13,6 @@ import { isAtLimit } from "@/lib/subscription/limits";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Progress } from "@/components/ui/Progress";
 import { Card } from "@/components/ui/Card";
-import { StatCard } from "@/components/ui/StatCard";
 import { Chip } from "@/components/ui/Chip";
 import { resolveColor } from "@/lib/theme/dataViz";
 import {

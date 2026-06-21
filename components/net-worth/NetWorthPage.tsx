@@ -253,7 +253,6 @@ export default function NetWorthPage({ data }: { data: NetWorthData }) {
         {/* Assets (dark) / Liabilities (white) stat pair */}
         <div className="flex gap-3">
           <StatCard
-            tone="dark"
             icon={<TrendingUp size={16} strokeWidth={2} />}
             chip={<Chip tone="onDark">Growing</Chip>}
             label="Assets"

@@ -79,6 +79,30 @@ function extractTempIds(obj: unknown): string[] {
   return ids;
 }
 
+/**
+ * BULK_SETUP enqueues with `recordId: budgetId` and NO top-level `tempId` — the
+ * category/item temp ids it creates live inside `payload.categories[].tempId`
+ * and `…items[].tempId`. So a plain `q.tempId === id` producer lookup never
+ * matches them. This recognises a BULK_SETUP item as the producer for any temp
+ * id it declares, so dependents (SMS categorize, quick-spend, auto-allocate on a
+ * freshly-created budget item) aren't wrongly judged doomed if the queue is ever
+ * evaluated out of insertion order.
+ */
+function bulkSetupDeclares(item: SyncQueueItem, tempId: string): boolean {
+  if (item.operation !== "BULK_SETUP") return false;
+  const cats =
+    (item.payload as {
+      categories?: Array<{ tempId?: string; items?: Array<{ tempId?: string }> }>;
+    }).categories ?? [];
+  for (const c of cats) {
+    if (c.tempId === tempId) return true;
+    for (const i of c.items ?? []) {
+      if (i.tempId === tempId) return true;
+    }
+  }
+  return false;
+}
+
 type Payload = Record<string, unknown>;
 type Dispatcher = Record<
   string,
@@ -440,12 +464,13 @@ export class SyncEngine {
     for (const tempId of tempIds) {
       if (await db.id_map.get(tempId)) continue; // already resolved
       const producer = await db.sync_queue
-        .filter((q) => q.tempId === tempId)
+        .filter(
+          (q) =>
+            (q.tempId === tempId || bulkSetupDeclares(q, tempId)) &&
+            (q.status === "pending" || q.status === "processing")
+        )
         .first();
-      const live =
-        producer &&
-        (producer.status === "pending" || producer.status === "processing");
-      if (!live) return true; // this dependency will never resolve
+      if (!producer) return true; // this dependency will never resolve
     }
     return false;
   }

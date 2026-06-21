@@ -254,15 +254,13 @@ input[type="date"] {
    fallback); stays 0 on web/SSR so layout is unchanged. */
 :root { --keyboard-inset: 0px; }
 
-/* Uniform 3/4-screen height for all content bottom sheets.
-   vh first as a WebView fallback; dvh + keyboard-inset override for modern
-   browsers. Subtracting --keyboard-inset keeps the sheet (top, content, footer)
-   above the soft keyboard instead of letting the focused input hide behind it. */
-.sheet-3q {
-  height: 75vh;
-  height: min(75dvh, calc(100dvh - var(--keyboard-inset, 0px)));
-  max-height: calc(100dvh - var(--keyboard-inset, 0px));
-}
+/* Uniform 3/4-screen height for all content bottom sheets — FIXED, never
+   shrinks. vh first as a WebView fallback; dvh override for modern browsers.
+   With Keyboard resize:"none" (capacitor.config.ts) the WebView viewport stays
+   full-screen when the keyboard opens, so dvh is stable and this stays a true
+   3/4. The keyboard never resizes the sheet; it only slides up (see DrawerContent
+   `bottom`), so the height can never collapse to half. */
+.sheet-3q { height: 75vh; height: 75dvh; max-height: 75dvh; }
 
 /* Safe-area padding utilities (notch / home-indicator). Used across bottom
    sheets and footers; defined here because the project has no tailwind config. */
@@ -282,9 +280,9 @@ input[type="date"] {
     inset 0 -1px 1px rgba(0, 0, 0, 0.04);
 }
 
-/* Faint repeating cat-paw watermark for the lime hero card */
+/* Faint repeating cat-paw watermark for the lime accent cards */
 .wordmark-watermark {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cdefs%3E%3Cg id='p'%3E%3Cellipse cx='0' cy='12' rx='14' ry='11'/%3E%3Cellipse cx='-19' cy='-5' rx='5' ry='7'/%3E%3Cellipse cx='-7' cy='-12' rx='5' ry='7.5'/%3E%3Cellipse cx='7' cy='-12' rx='5' ry='7.5'/%3E%3Cellipse cx='19' cy='-5' rx='5' ry='7'/%3E%3C/g%3E%3C/defs%3E%3Cuse href='%23p' transform='translate(52 58) rotate(-22) scale(0.85)' fill='rgba(0,0,0,0.07)'/%3E%3Cuse href='%23p' transform='translate(182 124) rotate(34) scale(1.05)' fill='rgba(0,0,0,0.05)'/%3E%3Cuse href='%23p' transform='translate(96 196) rotate(8) scale(0.68)' fill='rgba(0,0,0,0.06)'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cdefs%3E%3Cg id='p'%3E%3Cellipse cx='0' cy='12' rx='14' ry='11'/%3E%3Cellipse cx='-19' cy='-5' rx='5' ry='7'/%3E%3Cellipse cx='-7' cy='-12' rx='5' ry='7.5'/%3E%3Cellipse cx='7' cy='-12' rx='5' ry='7.5'/%3E%3Cellipse cx='19' cy='-5' rx='5' ry='7'/%3E%3C/g%3E%3C/defs%3E%3Cuse href='%23p' transform='translate(34 40) rotate(-28) scale(0.72)' fill='rgba(0,0,0,0.07)'/%3E%3Cuse href='%23p' transform='translate(150 30) rotate(18) scale(0.9)' fill='rgba(0,0,0,0.05)'/%3E%3Cuse href='%23p' transform='translate(210 88) rotate(46) scale(0.6)' fill='rgba(0,0,0,0.06)'/%3E%3Cuse href='%23p' transform='translate(96 96) rotate(-8) scale(1.1)' fill='rgba(0,0,0,0.045)'/%3E%3Cuse href='%23p' transform='translate(186 158) rotate(30) scale(0.78)' fill='rgba(0,0,0,0.06)'/%3E%3Cuse href='%23p' transform='translate(44 150) rotate(12) scale(0.66)' fill='rgba(0,0,0,0.07)'/%3E%3Cuse href='%23p' transform='translate(120 200) rotate(-20) scale(0.85)' fill='rgba(0,0,0,0.05)'/%3E%3Cuse href='%23p' transform='translate(214 214) rotate(8) scale(0.55)' fill='rgba(0,0,0,0.06)'/%3E%3C/svg%3E");
   background-size: 240px 240px;
 }
 

@@ -50,11 +50,16 @@ export async function signup(formData: FormData) {
   redirect("/onboarding");
 }
 
+/**
+ * Clears the server session cookie. Does NOT redirect — the client must wipe its
+ * local state (`clearClientSession()`) and then hard-navigate, so the in-memory
+ * React Query cache and the previous user's IndexedDB data don't leak into the
+ * next account on the same device.
+ */
 export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
   revalidatePath("/", "layout");
-  redirect("/auth/login");
 }
 
 /**

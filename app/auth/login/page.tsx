@@ -83,12 +83,12 @@ export default function LoginPage() {
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <span className="t-label text-muted-foreground">Password</span>
-            <Link
+            {/* <Link
               href="#"
               className="t-label text-muted-foreground transition-colors hover:text-foreground"
             >
               Forgot?
-            </Link>
+            </Link> */}
           </div>
           <div className="flex items-stretch rounded-2xl border border-border bg-card transition-colors focus-within:border-[var(--accent-strong)] focus-within:ring-2 focus-within:ring-[var(--accent)]/40">
             <input

@@ -16,7 +16,7 @@ import CurrencySelector from "@/components/profile/CurrencySelector";
 import NotificationSoundSelector from "@/components/profile/NotificationSoundSelector";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { signOut, deleteAccount } from "@/lib/actions/auth";
-import { clearDB } from "@/lib/db/hydrate";
+import { clearClientSession } from "@/lib/auth/clearSession";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { useTour } from "@/lib/tour/useTour";
 import {
@@ -91,16 +91,18 @@ export default function ProfilePage() {
       </div>
 
       {/* Lime identity card */}
-      <div className="rounded-card bg-accent p-[18px] flex items-center gap-3.5 text-[var(--accent-ink)]">
+      <div className="wordmark-watermark relative overflow-hidden rounded-card bg-accent p-[18px] flex items-center gap-3.5 text-[var(--accent-ink)]">
         <button
           type="button"
           onClick={() => setAvatarOpen(true)}
           aria-label="Change avatar"
-          className="relative flex size-14 shrink-0 items-center justify-center rounded-full bg-white/55 overflow-hidden"
+          className="relative size-14 shrink-0"
         >
-          <UserAvatar id={profile?.avatar} size={56} className="size-full" />
-          <span className="absolute bottom-0 right-0 flex size-5 items-center justify-center rounded-full bg-foreground text-background ring-2 ring-accent">
-            <span className="material-symbols-outlined text-[12px] leading-none">edit</span>
+          <span className="flex size-full items-center justify-center rounded-full bg-white/55 overflow-hidden">
+            <UserAvatar id={profile?.avatar} size={56} className="size-full" />
+          </span>
+          <span className="absolute -bottom-1 -right-1 flex items-center justify-center text-[var(--accent-ink)]">
+            <span className="material-symbols-outlined text-[18px] leading-none drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]">edit</span>
           </span>
         </button>
         <div className="flex-1 min-w-0">
@@ -363,7 +365,11 @@ export default function ProfilePage() {
         onConfirm={async () => {
           if (loggingOut) return;
           setLoggingOut(true);
+          // Wipe IDB + account-scoped localStorage, drop the server session,
+          // then hard-navigate so the in-memory React Query cache is gone too.
+          await clearClientSession();
           await signOut();
+          window.location.href = "/auth/login";
         }}
         title="Log out?"
         description="You'll need to sign in again to access your account."
@@ -386,11 +392,7 @@ export default function ProfilePage() {
           }
           // Account gone server-side — wipe the local cache, then hard-navigate
           // so all in-memory React Query / provider state is dropped too.
-          try {
-            await clearDB();
-          } catch {
-            /* ignore — best effort */
-          }
+          await clearClientSession();
           window.location.href = "/auth/login";
         }}
         title="Delete account?"

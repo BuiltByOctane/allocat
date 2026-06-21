@@ -77,7 +77,7 @@ export function TrialWelcomeModal() {
               {TRIAL_DAYS} days of Premium, on us
             </Drawer.Title>
             <p className="text-sm text-muted-foreground mt-2">
-              Unlock AI insights, unlimited goals, assets, debts, and full
+              Unlock AI insights, unlimited goals, assets, debt tracking, and full
               history — free for {TRIAL_DAYS} days. No card needed.
             </p>
           </div>

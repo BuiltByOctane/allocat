@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getDB } from "@/lib/db";
+import type { SyncQueueItem } from "@/lib/db";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { NET_WORTH_KEY } from "@/lib/hooks/useNetWorth";
 import { DASHBOARD_KEY } from "@/lib/hooks/useDashboard";
@@ -54,12 +55,32 @@ function toGoalRow(asset: any): GoalRow {
   };
 }
 
-async function ensureGoalsAssetCategoryId(userId: string): Promise<string | null> {
+type EnqueueFn = (
+  item: Omit<SyncQueueItem, "id" | "retries" | "status" | "createdAt">,
+) => Promise<void>;
+
+async function ensureGoalsAssetCategoryId(
+  userId: string,
+  enqueue: EnqueueFn,
+): Promise<string | null> {
   const db = getDB();
   const all = await db.asset_categories.toArray();
   const found = all.find((c) => c.user_id === userId && c.name === "Goals");
-  if (found) return found.id;
-  // Optimistically create — server addAsset also auto-creates if missing.
+  if (found) {
+    // A real (server) id is always safe to use.
+    if (!found.id.startsWith("temp_")) return found.id;
+    // A temp id is only safe if it still has a live sync producer (or already
+    // resolved). A leftover orphan from a previously failed attempt has
+    // neither — re-enqueue its INSERT under the SAME temp id so any asset that
+    // references it can resolve, instead of failing as a doomed dependency.
+    if (await tempHasProducer(found.id)) return found.id;
+    await enqueueGoalsCategoryInsert(found.id, found.icon ?? "🎯", enqueue);
+    return found.id;
+  }
+  // Optimistically create AND enqueue its INSERT. The asset INSERT below
+  // references this temp categoryId, so the category must have a sync producer —
+  // otherwise SyncEngine flags the asset as a doomed dependency ("dependency
+  // never synced") and rolls the goal back.
   const tempId = `temp_${crypto.randomUUID()}`;
   const now = new Date().toISOString();
   await db.asset_categories.add({
@@ -70,7 +91,36 @@ async function ensureGoalsAssetCategoryId(userId: string): Promise<string | null
     color: null,
     created_at: now,
   });
+  await enqueueGoalsCategoryInsert(tempId, "🎯", enqueue);
   return tempId;
+}
+
+/** True when a temp id is already mapped to a real id, or still has a pending/
+ *  processing INSERT in the sync queue (i.e. it can still resolve). */
+async function tempHasProducer(tempId: string): Promise<boolean> {
+  const db = getDB();
+  if (await db.id_map.get(tempId)) return true;
+  const producer = await db.sync_queue
+    .filter((q) => q.tempId === tempId)
+    .first();
+  return (
+    !!producer &&
+    (producer.status === "pending" || producer.status === "processing")
+  );
+}
+
+function enqueueGoalsCategoryInsert(
+  tempId: string,
+  icon: string,
+  enqueue: EnqueueFn,
+): Promise<void> {
+  return enqueue({
+    table: "asset_categories",
+    operation: "INSERT",
+    recordId: tempId,
+    tempId,
+    payload: { name: "Goals", icon },
+  });
 }
 
 export function useGoalsData() {
@@ -104,7 +154,7 @@ export function useAddGoal() {
       // Resolve user id from any existing asset/category row in IDB
       const sample = await db.asset_categories.toCollection().first();
       const userId = sample?.user_id ?? "__pending__";
-      const categoryId = await ensureGoalsAssetCategoryId(userId);
+      const categoryId = await ensureGoalsAssetCategoryId(userId, enqueue);
 
       await db.assets.add({
         id: tempId,

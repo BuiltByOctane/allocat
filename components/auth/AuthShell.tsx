@@ -1,6 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useSyncExternalStore } from "react";
+import { Capacitor } from "@capacitor/core";
 import PawLogo from "@/components/ai/PawLogo";
 import { Button } from "@/components/ui/Button";
 
@@ -42,6 +44,18 @@ export function AuthShell({
   switchHref,
   switchCta,
 }: AuthShellProps) {
+  // Native (Capacitor) keeps the WebView full-screen when the soft keyboard
+  // opens (resize:"none"), so a `sticky bottom-0` dock gets lifted over — and
+  // hides — the focused input. In the native shell, drop the dock into normal
+  // document flow so it scrolls with the form instead of pinning to the
+  // viewport. Resolves to `false` during SSR/first paint (no hydration
+  // mismatch), then to the real platform on the client.
+  const isNative = useSyncExternalStore(
+    () => () => {},
+    () => Capacitor.isNativePlatform(),
+    () => false,
+  );
+
   return (
     <div className="relative flex min-h-[100dvh] w-full flex-col bg-background text-foreground md:items-center md:justify-center md:px-6 md:py-10">
       {/* Card wrapper — full-bleed on mobile, contained card on desktop */}
@@ -91,8 +105,14 @@ export function AuthShell({
           <div className="mx-auto w-full max-w-[420px]">{children}</div>
         </main>
 
-        {/* Bottom dock — sticky/thumb-zone on mobile, inline footer on desktop */}
-        <div className="sticky bottom-0 z-10 border-t border-border bg-background/85 px-6 pt-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] backdrop-blur-md md:static md:border-t-0 md:bg-transparent md:pb-6 md:backdrop-blur-none">
+        {/* Bottom dock — sticky thumb-zone on web/PWA, normal-flow on native
+            (keyboard overlays the full-screen WebView, so sticky would cover
+            the focused input), inline footer on desktop */}
+        <div
+          className={`${
+            isNative ? "static" : "sticky bottom-0"
+          } z-10 border-t border-border bg-background/85 px-6 pt-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] backdrop-blur-md md:static md:border-t-0 md:bg-transparent md:pb-6 md:backdrop-blur-none`}
+        >
           <div className="mx-auto w-full max-w-[420px]">
             {footer}
 

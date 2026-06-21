@@ -108,16 +108,13 @@ export default function DashboardPage({ data }: DashboardProps) {
       {/* Header */}
       <div className="flex items-center justify-between px-1 pt-1">
         <div>
-          <div className="flex items-center gap-1.5">
-            <h1 className="font-display text-[26px] font-bold leading-none tracking-[-0.03em] text-foreground">
-              {greeting
-                ? `${greeting.hi}${firstName ? `, ${firstName}` : ""}`
-                : firstName
-                  ? `Hi, ${firstName}`
-                  : "Dashboard"}
-            </h1>
-            {isPremium && <CrownBadge size={22} className="-mt-0.5" />}
-          </div>
+          <h1 className="font-display text-[26px] font-bold leading-none tracking-[-0.03em] text-foreground">
+            {greeting
+              ? `${greeting.hi}${firstName ? `, ${firstName}` : ""}`
+              : firstName
+                ? `Hi, ${firstName}`
+                : "Dashboard"}
+          </h1>
           <p className="text-[11px] font-medium text-muted-foreground mt-1">
             {greeting?.line ?? "Financial overview"}
           </p>
@@ -135,11 +132,14 @@ export default function DashboardPage({ data }: DashboardProps) {
       <div id="dashboard-budget-summary">
         {data.budget ? (
           <div className="relative overflow-hidden rounded-card bg-accent wordmark-watermark p-[18px] text-[var(--accent-ink)]">
-            <div className="flex items-center justify-between">
+            <div className="flex items-start justify-between">
               <span className="text-[11.5px] font-semibold">Left to spend · this month</span>
-              <Chip tone={overBudget ? "neg" : "good"} className="bg-white/60 border-0">
-                {overBudget ? "Over budget" : "On track"}
-              </Chip>
+              <div className="flex flex-col items-end gap-1.5">
+                <Chip tone={overBudget ? "neg" : "good"} className="bg-white/60 border-0">
+                  {overBudget ? "Over budget" : "On track"}
+                </Chip>
+                {isPremium && <CrownBadge size={60} className="absolute top-9" />}
+              </div>
             </div>
             <div className="figure text-[44px] leading-[0.92] my-2.5" style={{ color: "var(--accent-ink)" }}>
               <CurrencyText value={data.budget.remaining} />
@@ -187,7 +187,6 @@ export default function DashboardPage({ data }: DashboardProps) {
       <div className="flex gap-3">
         <Link href="/net-worth" className="flex-1" id="dashboard-net-worth-section">
           <StatCard
-            tone="dark"
             icon={<TrendingUp size={16} strokeWidth={2} />}
             chip={
               <Chip tone="onDark">

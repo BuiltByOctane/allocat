@@ -25,7 +25,7 @@ const FEATURES = [
   { icon: "auto_awesome", label: "AI chat & insights" },
   { icon: "flag", label: "Unlimited goals" },
   { icon: "savings", label: "Unlimited assets & net worth" },
-  { icon: "account_balance", label: "Unlimited debts" },
+  { icon: "account_balance", label: "Unlimited debt tracking" },
 ];
 
 const REASON_HEADLINES: Record<string, string> = {

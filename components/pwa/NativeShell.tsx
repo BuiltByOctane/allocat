@@ -46,11 +46,20 @@ export function NativeShell() {
     // Native splash is held (launchAutoHide:false) until the WebView is ready.
     // Now that the web layer has mounted, hide it — with a frame's delay so the
     // first paint lands underneath before the splash fades out.
+    let splashHidden = false;
+    let splashFallback: ReturnType<typeof setTimeout> | undefined;
     (async () => {
       const { SplashScreen } = await import("@capacitor/splash-screen");
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => void SplashScreen.hide({ fadeOutDuration: 250 }))
-      );
+      const hide = () => {
+        if (splashHidden) return;
+        splashHidden = true;
+        void SplashScreen.hide({ fadeOutDuration: 250 });
+      };
+      requestAnimationFrame(() => requestAnimationFrame(hide));
+      // Safety net: if the RAF chain never fires (WebView throttled while still
+      // warming up), force-hide so the splash can't stick indefinitely — the
+      // root cause testers saw as "stuck on the splash for a long time".
+      splashFallback = setTimeout(hide, 8000);
     })();
 
     // Reliable system-bar theming on Android 15+, where the OS forces
@@ -136,6 +145,7 @@ export function NativeShell() {
     })();
 
     return () => {
+      if (splashFallback) clearTimeout(splashFallback);
       void backHandle?.remove();
       void urlHandle?.remove();
       void resumeHandle?.remove();

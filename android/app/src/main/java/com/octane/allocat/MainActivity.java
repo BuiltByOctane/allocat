@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.webkit.CookieManager;
 
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -20,6 +21,27 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         stashDeepLink(getIntent());
         requestNotificationPermission();
+    }
+
+    /**
+     * Persist WebView cookies to disk whenever we leave the foreground. The
+     * remote-URL WebView keeps the Supabase auth session in cookies, but Android
+     * does NOT flush the in-memory cookie store to disk until told to. If the OS
+     * (or an OEM battery killer) reaps the process while backgrounded, an
+     * unflushed refreshed-session cookie is lost → the next cold launch is
+     * unauthenticated and the middleware bounces the user to /auth/login. Flushing
+     * on pause/stop closes that window. See bug: "sometimes auto-logged out".
+     */
+    @Override
+    public void onPause() {
+        super.onPause();
+        CookieManager.getInstance().flush();
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        CookieManager.getInstance().flush();
     }
 
     @Override

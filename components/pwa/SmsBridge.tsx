@@ -3,8 +3,10 @@
 import { useEffect, useRef } from "react";
 import { Capacitor } from "@capacitor/core";
 import type { PluginListenerHandle } from "@capacitor/core";
+import { useQueryClient } from "@tanstack/react-query";
 import { SmsReader, type CapturedSms } from "@/lib/native/SmsReader";
 import { useEnqueue } from "@/lib/hooks/useSync";
+import { invalidateSmsCaches } from "@/lib/hooks/useSmsTransactions";
 import { ingestSmsClient, reapplyRulesToPending } from "@/lib/sms/ingestClient";
 import { scheduleWeeklyRecap } from "@/lib/sms/recap";
 import { scheduleDebtReminders } from "@/lib/native/debtReminders";
@@ -34,6 +36,16 @@ export function SmsBridge() {
     enqueueRef.current = enqueue;
   });
 
+  // Mirror the query client so the once-registered native handlers can refresh
+  // the SMS views after ingesting a row (an open /sms reads React Query, not IDB
+  // directly — without this a notification-drained txn never appears until a
+  // remount re-reads IDB).
+  const qc = useQueryClient();
+  const qcRef = useRef(qc);
+  useEffect(() => {
+    qcRef.current = qc;
+  });
+
   // Mirror hydration into a ref so the once-registered visibilitychange handler
   // can read the latest value without re-subscribing.
   const { isHydrated } = useSyncContext();
@@ -60,14 +72,37 @@ export function SmsBridge() {
     // The last deep-link we navigated to — so re-checking on visibilitychange
     // doesn't re-assign the same URL mid-interaction.
     let lastConsumedUrl: string | null = null;
+    // Signatures of the last payloads pushed to native, so a foreground that
+    // didn't change anything skips the (4-table read +) native IPC entirely.
+    let lastRulesSig: string | null = null;
+    let lastBlocklistSig: string | null = null;
+    // Debounce the foreground burst: a quick minimize/restore shouldn't restart
+    // the whole drain + mirror storm. 0 means "never run yet".
+    let lastForegroundRun = 0;
+
+    // Run non-critical work off the foreground paint path so resuming the app
+    // doesn't freeze the UI thread. Falls back to a macrotask where idle
+    // callbacks are unavailable (older Android WebViews).
+    const runIdle = (fn: () => void) => {
+      const ric = (
+        window as unknown as {
+          requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void;
+        }
+      ).requestIdleCallback;
+      if (ric) ric(fn, { timeout: 2000 });
+      else setTimeout(fn, 200);
+    };
 
     const handle = async (m: CapturedSms, silent: boolean) => {
       try {
         await ingestSmsClient(
-          { raw: m.body, sender: m.sender },
+          { raw: m.body, sender: m.sender, receivedAt: m.ts },
           { enqueue: enqueueRef.current },
           { silent },
         );
+        // Live event: refresh the SMS views immediately so an open /sms reflects
+        // the new row. Drained batches invalidate once at the end of drain().
+        if (!silent) qcRef.current.invalidateQueries({ queryKey: ["sms-transactions"] });
       } catch (err) {
         console.warn("[SmsBridge] ingest failed:", err);
       }
@@ -82,7 +117,15 @@ export function SmsBridge() {
         const { messages } = await SmsReader.getQueued();
         for (const m of messages) await handle(m, true);
         // Catch rows that were ingested as pending before rules existed.
-        await reapplyRulesToPending({ enqueue: enqueueRef.current });
+        const { applied } = await reapplyRulesToPending({
+          enqueue: enqueueRef.current,
+        });
+        // Refresh the SMS views once per batch so a notification-drained txn
+        // shows up on an already-open /sms (the deep-link effect re-runs when
+        // its `pending` query refetches and can then find the row).
+        if (messages.length > 0 || applied > 0) {
+          invalidateSmsCaches(qcRef.current);
+        }
       } catch (err) {
         console.warn("[SmsBridge] drain failed:", err);
       } finally {
@@ -149,18 +192,27 @@ export function SmsBridge() {
             itemActual: it ? Number(it.actual_amount) : 0,
           };
         });
-        await SmsReader.setRules({ rules: JSON.stringify(payload) });
-
         // Top budget items (most-used) for the notification quick-allocate buttons.
         const targets = [...items]
           .sort((a, b) => Number(b.actual_amount) - Number(a.actual_amount))
           .slice(0, 3)
           .map((it) => ({ id: it.id, name: it.name }));
-        await SmsReader.setQuickTargets({ targets: JSON.stringify(targets) });
-        await SmsReader.setConfig({
+        const rulesStr = JSON.stringify(payload);
+        const targetsStr = JSON.stringify(targets);
+        const config = {
           confirmAutoAllocate: confirmAutoAllocate(),
           sound: nativeSoundKey(notifSound()),
-        });
+        };
+
+        // Skip the native IPC when nothing the receiver cares about changed —
+        // avoids re-serializing + re-crossing the bridge on every foreground.
+        const sig = `${rulesStr}|${targetsStr}|${JSON.stringify(config)}`;
+        if (sig === lastRulesSig) return;
+        lastRulesSig = sig;
+
+        await SmsReader.setRules({ rules: rulesStr });
+        await SmsReader.setQuickTargets({ targets: targetsStr });
+        await SmsReader.setConfig(config);
       } catch {
         /* ignore */
       }
@@ -172,7 +224,10 @@ export function SmsBridge() {
       try {
         const rows = await getDB().sms_blocklist.toArray();
         const keys = rows.map((r) => r.template_key);
-        await SmsReader.setBlocklist({ keys: JSON.stringify(keys) });
+        const keysStr = JSON.stringify(keys);
+        if (keysStr === lastBlocklistSig) return;
+        lastBlocklistSig = keysStr;
+        await SmsReader.setBlocklist({ keys: keysStr });
       } catch {
         /* ignore */
       }
@@ -226,8 +281,6 @@ export function SmsBridge() {
       } catch {
         /* plugin unavailable */
       }
-      await pushRules();
-      await pushBlocklist();
       try {
         // Live events only fire while the app is open (already hydrated), so the
         // handler stays active regardless of the hydration gate on drain().
@@ -241,19 +294,36 @@ export function SmsBridge() {
       // the initial drain when rules finish loading after this IIFE runs.
       await drain();
       await consumeDeepLink();
-      void scheduleWeeklyRecap();
-      void scheduleDebtReminders();
+      // Mirroring rules/blocklist and scheduling recaps is non-critical for the
+      // first paint — defer it off the launch path so the UI (and the first-run
+      // setup/tour modals) stay responsive instead of starving on IDB reads.
+      lastForegroundRun = Date.now();
+      runIdle(() => {
+        void pushRules();
+        void pushBlocklist();
+        void scheduleWeeklyRecap();
+        void scheduleDebtReminders();
+      });
     })();
 
     const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        void drain();
+      if (document.visibilityState !== "visible") return;
+      // Critical for responsiveness: follow a tapped-notification deep link and
+      // ingest anything queued while we were away. Both are cheap + serialized.
+      void consumeDeepLink();
+      void drain();
+
+      // Debounce the heavy mirror/schedule burst — a quick minimize/restore must
+      // not restart it — and run it off the foreground paint path.
+      const nowTs = Date.now();
+      if (nowTs - lastForegroundRun < 2000) return;
+      lastForegroundRun = nowTs;
+      runIdle(() => {
         void pushRules();
         void pushBlocklist();
-        void consumeDeepLink();
         void scheduleWeeklyRecap();
         void scheduleDebtReminders();
-      }
+      });
     };
     document.addEventListener("visibilitychange", onVisible);
 

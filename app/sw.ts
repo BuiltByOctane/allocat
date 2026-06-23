@@ -3,7 +3,7 @@
 /// <reference lib="webworker" />
 import { defaultCache } from "@serwist/next/worker";
 import type { PrecacheEntry, RuntimeCaching, SerwistGlobalConfig } from "serwist";
-import { ExpirationPlugin, Serwist, StaleWhileRevalidate } from "serwist";
+import { ExpirationPlugin, NetworkFirst, Serwist, StaleWhileRevalidate } from "serwist";
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
@@ -29,6 +29,24 @@ declare const self: ServiceWorkerGlobalScope;
 // navigations ("pages") stay NetworkFirst so a cold app launch gets a fresh
 // shell.
 const swrPageCache: RuntimeCaching[] = [
+  // Full-document navigations (the cold/warm app launch in the Capacitor WebView
+  // load the deployed shell). defaultCache serves these NetworkFirst with NO
+  // timeout, so on a slow mobile connection the launch blocks on a full origin
+  // round-trip — the native splash stays up the whole time. Cap the network wait
+  // at 3s and fall back to the cached shell; real data hydrates from IndexedDB,
+  // and the background revalidation refreshes the shell for next time. (First-ever
+  // install has nothing cached, so it still waits — inherent to remote-URL mode.)
+  {
+    matcher: ({ request, url: { pathname }, sameOrigin }) =>
+      request.destination === "document" &&
+      sameOrigin &&
+      !pathname.startsWith("/api/"),
+    handler: new NetworkFirst({
+      cacheName: "pages",
+      networkTimeoutSeconds: 3,
+      plugins: [new ExpirationPlugin({ maxEntries: 32, maxAgeSeconds: 24 * 60 * 60 })],
+    }),
+  },
   {
     matcher: ({ request, url: { pathname }, sameOrigin }) =>
       request.headers.get("RSC") === "1" &&

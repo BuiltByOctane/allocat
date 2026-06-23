@@ -176,11 +176,15 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     hydrateAllTables()
       .then(async () => {
         if (!mounted) return;
-        // Warm all page queries before marking hydration done —
-        // pages render instantly with no skeletons on first navigation.
-        await prefetchAllQueries(qc);
+        // IDB is now populated → pages can read it. Mark hydrated + start the
+        // engine FIRST so the UI (and the first-run setup/tour modals) become
+        // interactive immediately. Warming the React Query cache is a no-skeleton
+        // optimization, not a correctness gate, so do it in the background —
+        // awaiting it here used to keep the WebView's main thread busy through a
+        // 4-query prefetch on launch, which froze the first-run modals.
         setIsHydrated(true);
         engine.start();
+        void prefetchAllQueries(qc).catch(() => {});
         const count = await engine.getPendingCount();
         if (mounted) setPendingCount(count);
       })

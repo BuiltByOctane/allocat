@@ -17,6 +17,10 @@ export function NativeSetup() {
   const [show, setShow] = useState(false);
   const [notif, setNotif] = useState<boolean | null>(null);
   const [sms, setSms] = useState<boolean | null>(null);
+  // Which step's permission request is in flight — so its button shows a busy
+  // state instead of looking frozen while the native OS prompt + grant round-trip
+  // resolves.
+  const [busy, setBusy] = useState<number | null>(null);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -67,10 +71,12 @@ export function NativeSetup() {
         <Step
           n={1}
           done={notif === true}
+          busy={busy === 1}
           title="Allow notifications"
           desc="So budget and transaction alerts can reach you."
           action="Allow"
           onClick={async () => {
+            setBusy(1);
             try {
               const { LocalNotifications } = await import(
                 "@capacitor/local-notifications"
@@ -80,6 +86,8 @@ export function NativeSetup() {
               if (p.display !== "granted") await SmsReader.openAppSettings();
             } catch {
               /* ignore */
+            } finally {
+              setBusy(null);
             }
           }}
         />
@@ -87,16 +95,20 @@ export function NativeSetup() {
         <Step
           n={2}
           done={sms === true}
+          busy={busy === 2}
           title="Allow SMS access"
           desc="Only financial transaction SMS are read — on-device, never sent."
           action="Allow"
           onClick={async () => {
+            setBusy(2);
             try {
               const r = await SmsReader.requestPermission();
               setSms(r.granted);
               if (!r.granted) await SmsReader.openAppSettings();
             } catch {
               /* ignore */
+            } finally {
+              setBusy(null);
             }
           }}
         />
@@ -137,6 +149,7 @@ function Step({
   action,
   onClick,
   done,
+  busy,
 }: {
   n: number;
   title: string;
@@ -144,6 +157,7 @@ function Step({
   action: string;
   onClick: () => void;
   done?: boolean;
+  busy?: boolean;
 }) {
   return (
     <div className="flex gap-3 border border-border p-3">
@@ -155,10 +169,10 @@ function Step({
         <p className="mt-0.5 text-xs text-muted-foreground">{desc}</p>
         <button
           onClick={onClick}
-          disabled={done}
+          disabled={done || busy}
           className="mt-2 border border-border px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest disabled:opacity-40"
         >
-          {done ? "Granted" : action}
+          {done ? "Granted" : busy ? "Requesting…" : action}
         </button>
       </div>
     </div>

@@ -180,3 +180,42 @@ describe("ingestSmsClient — OTP / non-debit rejection", () => {
     expect(enqueue).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("ingestSmsClient — occurred_at uses the SMS receipt time (Bug F)", () => {
+  beforeEach(() => {
+    freshTables();
+  });
+
+  it("stores occurred_at from receivedAt (real clock time, not date-only 00:00)", async () => {
+    const enqueue = vi.fn().mockResolvedValue(undefined);
+    // 2026-06-02 14:23:45 IST = 08:53:45 UTC.
+    const receivedAt = Date.parse("2026-06-02T08:53:45.000Z");
+
+    const res = await ingestSmsClient(
+      { ...SMS, receivedAt },
+      { enqueue },
+      { silent: true },
+    );
+    expect(res.skipped).toBeFalsy();
+
+    const row = tables.sms_transactions.rows[0];
+    expect(row.occurred_at).toBe(new Date(receivedAt).toISOString());
+    // Not a date-only string (which is what produced the wrong 05:30 display).
+    expect(row.occurred_at).not.toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+    // The synced payload carries the same precise timestamp.
+    const payload = enqueue.mock.calls[0][0].payload as { occurredAt: string };
+    expect(payload.occurredAt).toBe(new Date(receivedAt).toISOString());
+  });
+
+  it("falls back to a full timestamp when no receivedAt is given (dev paste)", async () => {
+    const enqueue = vi.fn().mockResolvedValue(undefined);
+    const res = await ingestSmsClient(SMS, { enqueue }, { silent: true });
+    expect(res.skipped).toBeFalsy();
+
+    const occurredAt = tables.sms_transactions.rows[0].occurred_at as string;
+    // Always a full ISO timestamp now — never a bare date.
+    expect(occurredAt).not.toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(() => new Date(occurredAt).toISOString()).not.toThrow();
+  });
+});

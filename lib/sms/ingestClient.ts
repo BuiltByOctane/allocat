@@ -85,7 +85,7 @@ async function loadPeriodContextIDB(
 }
 
 export async function ingestSmsClient(
-  input: { raw: string; sender?: string | null },
+  input: { raw: string; sender?: string | null; receivedAt?: number },
   deps: { enqueue: EnqueueFn },
   opts: { silent?: boolean } = {},
 ): Promise<IngestClientResult> {
@@ -129,7 +129,15 @@ export async function ingestSmsClient(
     const currency = parsed.currency;
     const merchant = parsed.merchant;
     const direction = parsed.direction;
-    const occurredAt = parsed.occurredAt;
+    // When the transaction happened, as a full ISO timestamp. The native receiver
+    // hands us the SMS receipt time (epoch ms) — authoritative and precise. The
+    // text parser only ever yields a DATE-ONLY string (no clock time); storing
+    // that rendered as 00:00 UTC = 05:30 IST on display (the "always 5:30" bug),
+    // so we never use it for occurred_at. Fall back to now only for the dev paste
+    // harness, which has no real receipt time.
+    const occurredAt = new Date(
+      input.receivedAt ?? Date.now(),
+    ).toISOString();
 
     // Nothing spendable parsed → not worth recording.
     if (amount === null || amount <= 0) {

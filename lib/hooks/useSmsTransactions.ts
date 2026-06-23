@@ -22,7 +22,7 @@ export function itemTxKey(itemId: string) {
 }
 
 /** Invalidate every query that an allocate/reverse touches. */
-function invalidateSmsCaches(qc: ReturnType<typeof useQueryClient>) {
+export function invalidateSmsCaches(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: SMS_TX_KEY });
   qc.invalidateQueries({ queryKey: SMS_CATEGORIZED_KEY });
   qc.invalidateQueries({ queryKey: ALL_TX_KEY });

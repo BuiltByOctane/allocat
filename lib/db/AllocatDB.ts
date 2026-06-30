@@ -270,5 +270,12 @@ export class AllocatDB extends Dexie {
     this.version(16).upgrade(async (tx) => {
       await tx.table("sync_meta").delete("sms_transactions");
     });
+
+    // v17: budget_items.overspend_count. Per-item, per-month overspend tally driving
+    // escalating notification tiers. Auto-resets monthly via fresh item UUIDs. Non-indexed,
+    // so the schema string is unchanged; this bump only invalidates hydration to refetch it.
+    this.version(17).upgrade(async (tx) => {
+      await tx.table("sync_meta").delete("budget_items");
+    });
   }
 }

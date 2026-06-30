@@ -181,6 +181,7 @@ export type Database = {
           template_item_id: string | null
           created_at: string
           updated_at: string
+          overspend_count: number
         }
         Insert: {
           id?: string
@@ -198,6 +199,7 @@ export type Database = {
           template_item_id?: string | null
           created_at?: string
           updated_at?: string
+          overspend_count?: number
         }
         Update: {
           name?: string
@@ -211,6 +213,7 @@ export type Database = {
           template_id?: string | null
           template_item_id?: string | null
           updated_at?: string
+          overspend_count?: number
         }
         Relationships: [
           {

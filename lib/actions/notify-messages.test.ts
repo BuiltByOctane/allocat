@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { pickOverspendMessage, type OverspendCtx } from "@/lib/notify/messages";
 
 vi.mock("@/lib/server/openrouter", () => ({
@@ -13,6 +13,16 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
+const ORIGINAL_KEY = process.env.OPENROUTER_API_KEY;
+beforeEach(() => {
+  vi.clearAllMocks();
+  process.env.OPENROUTER_API_KEY = "test-key";
+});
+afterEach(() => {
+  if (ORIGINAL_KEY === undefined) delete process.env.OPENROUTER_API_KEY;
+  else process.env.OPENROUTER_API_KEY = ORIGINAL_KEY;
+});
+
 const ctx: OverspendCtx = {
   itemName: "Groceries",
   tier: 2,
@@ -24,7 +34,6 @@ const ctx: OverspendCtx = {
 };
 
 describe("resolveOverspendMessage", () => {
-  beforeEach(() => vi.clearAllMocks());
   it("falls back to the exact static message on AI failure", async () => {
     const { resolveOverspendMessage } = await import("./notify-messages");
     const msg = await resolveOverspendMessage(ctx);
@@ -35,6 +44,8 @@ describe("resolveOverspendMessage", () => {
 describe("generateOverspendMessage", () => {
   it("returns null on AI failure (never throws)", async () => {
     const { generateOverspendMessage, toDerived } = await import("./notify-messages");
+    const { openRouterChat } = await import("@/lib/server/openrouter");
     await expect(generateOverspendMessage(toDerived(ctx))).resolves.toBeNull();
+    expect(openRouterChat).toHaveBeenCalled();
   });
 });

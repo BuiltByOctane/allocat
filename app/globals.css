@@ -289,6 +289,14 @@ input[type="date"] {
     calc(var(--app-vh, 100dvh) - var(--keyboard-inset, 0px))
   );
   max-height: calc(var(--app-vh, 100dvh) - var(--keyboard-inset, 0px));
+  /* Lift the whole sheet to sit ON TOP of the open keyboard. These sheets are
+     raw vaul Drawer.Content anchored at bottom:0 — they do NOT use the
+     DrawerContent wrapper, so the lift must live here or the shrunk sheet stays
+     pinned to the bottom with its lower half hidden behind the keyboard. Paired
+     with the height cap above (appvh - keyboard), the sheet's top can never clip
+     off-screen: bottom(kbd) + height(<= appvh - kbd) <= appvh. */
+  bottom: var(--keyboard-inset, 0px);
+  transition: bottom 0.22s ease;
 }
 
 /* Safe-area padding utilities (notch / home-indicator). Used across bottom

@@ -39,15 +39,13 @@ const DrawerContent = React.forwardRef<
     <DrawerPrimitive.Content
       ref={ref}
       className={`fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-sheet bg-card transition-[bottom] duration-200 ${className ?? ""}`}
-      // Slide the sheet UP above the soft keyboard (position only — never resize,
-      // so the 3/4 height can't collapse). Clamp the lift to the free space above
-      // a 75% sheet (25%) so the top/handle never clips off-screen. Uses the
-      // stable --app-vh (px, immune to keyboard resize) when set, falling back to
-      // 100dvh on web so the clamp can't drift as the keyboard toggles.
-      style={{
-        bottom:
-          "min(var(--keyboard-inset, 0px), calc(var(--app-vh, 100dvh) * 0.25))",
-      }}
+      // Lift the sheet by the FULL keyboard height so it sits exactly on top of
+      // the keyboard (position only — never resize). The companion .sheet-3q
+      // height caps at (appvh - keyboard), so a full-inset lift can't push the
+      // top/handle off-screen: bottom(kbd) + height(<= appvh - kbd) <= appvh.
+      // (The previous 25% clamp under-lifted tall keyboards, leaving the sheet's
+      // lower half — and its action buttons — hidden behind the keyboard.)
+      style={{ bottom: "var(--keyboard-inset, 0px)" }}
       {...props}
     >
       <div className="mx-auto mt-3 h-1 w-9 rounded-full bg-border" />

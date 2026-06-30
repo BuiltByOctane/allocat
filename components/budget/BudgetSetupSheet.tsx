@@ -527,6 +527,7 @@ export function BudgetSetupSheet({
             link_id: linkId,
             template_id: templateItemId ? budgetTemplateId : null,
             template_item_id: templateItemId,
+            overspend_count: 0,
             created_at: now,
             updated_at: now,
           });

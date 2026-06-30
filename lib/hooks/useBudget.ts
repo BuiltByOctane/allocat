@@ -317,6 +317,7 @@ export function useAddBudgetItem() {
         // Added directly to a budget (not from a template item) → no durable id.
         template_id: null,
         template_item_id: null,
+        overspend_count: 0,
         created_at: now,
         updated_at: now,
       });

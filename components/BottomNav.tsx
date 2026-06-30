@@ -4,39 +4,14 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion, type Transition } from "motion/react";
-import { LayoutGrid, Wallet, TrendingUp, CreditCard, User, type LucideIcon } from "lucide-react";
 import { useHaptic } from "@/lib/hooks/useHaptic";
+import { navItems, hrefForPath } from "@/lib/nav/navItems";
 
-type NavItem = { label: string; href: string; Icon: LucideIcon };
-
-const navItems: NavItem[] = [
-  { label: "Home", href: "/dashboard", Icon: LayoutGrid },
-  { label: "Budget", href: "/budget", Icon: Wallet },
-  { label: "Net Worth", href: "/net-worth", Icon: TrendingUp },
-  { label: "Debt", href: "/debt", Icon: CreditCard },
-  { label: "Profile", href: "/profile", Icon: User },
-];
-
-// Secondary routes that don't have their own tab but are reached *through*
-// Profile. Keep the Profile pill active on these so the dock doesn't jump to
-// Home. Profile sub-routes (/profile/*) are handled by the startsWith pass.
-const PROFILE_OWNED = ["/activity", "/sms", "/transactions", "/reports"];
-
-function hrefForPath(pathname: string): string {
-  const match = navItems.find(
-    (item) => pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href)),
-  );
-  if (match) return match.href;
-  if (PROFILE_OWNED.some((r) => pathname === r || pathname.startsWith(`${r}/`))) {
-    return "/profile";
-  }
-  return "/dashboard";
-}
-
-// Long-press duration before the dock turns into a slider, and how far the
-// finger may drift in that window before we treat it as a swipe (= cancel).
-const LONG_PRESS_MS = 280;
-const MOVE_CANCEL_PX = 12;
+// Horizontal drift (px) before a press turns into a scrub-slide. Small so it
+// feels instant, but large enough that a plain tap never engages. The gesture
+// also requires horizontal dominance (|dx| > |dy|) so a vertical drag near the
+// dock doesn't get hijacked into a scrub.
+const ENGAGE_PX = 7;
 const PAD = 6; // nav padding (p-1.5)
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
@@ -56,9 +31,9 @@ export default function BottomNav() {
   const navRef = useRef<HTMLElement | null>(null);
 
   // Gesture bookkeeping (refs so pointer handlers read the latest value).
-  const lpTimer = useRef<number | null>(null);
   const pointerId = useRef<number | null>(null);
   const startX = useRef(0);
+  const startY = useRef(0);
   const lastX = useRef(0);
   const scrubbingRef = useRef(false);
   const justScrubbed = useRef(false); // swallow the click that follows a scrub
@@ -77,13 +52,6 @@ export default function BottomNav() {
     : { type: "spring", stiffness: 520, damping: 42, mass: 0.7 };
 
   // --- Slider gesture --------------------------------------------------------
-  const clearTimer = () => {
-    if (lpTimer.current != null) {
-      window.clearTimeout(lpTimer.current);
-      lpTimer.current = null;
-    }
-  };
-
   // Fixed equal-width hit zones (stable even as the active pill expands, so the
   // selection never oscillates near a boundary).
   const zoneFor = (localX: number, width: number) => {
@@ -122,9 +90,8 @@ export default function BottomNav() {
     justScrubbed.current = false;
     pointerId.current = e.pointerId;
     startX.current = e.clientX;
+    startY.current = e.clientY;
     lastX.current = e.clientX;
-    clearTimer();
-    lpTimer.current = window.setTimeout(engageScrub, LONG_PRESS_MS);
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -132,8 +99,13 @@ export default function BottomNav() {
     lastX.current = e.clientX;
 
     if (!scrubbingRef.current) {
-      // Pre-engage: a real drag means the user is swiping, not long-pressing.
-      if (Math.abs(e.clientX - startX.current) > MOVE_CANCEL_PX) clearTimer();
+      // Engage the scrub as soon as the finger moves horizontally past the
+      // threshold (no long-press wait). Require horizontal dominance so a
+      // vertical drag near the dock doesn't get hijacked into a scrub.
+      if (pointerId.current == null) return;
+      const dx = e.clientX - startX.current;
+      const dy = e.clientY - startY.current;
+      if (Math.abs(dx) > ENGAGE_PX && Math.abs(dx) > Math.abs(dy)) engageScrub();
       return;
     }
 
@@ -144,7 +116,6 @@ export default function BottomNav() {
   };
 
   const endGesture = () => {
-    clearTimer();
     if (!scrubbingRef.current) return;
     scrubbingRef.current = false;
     justScrubbed.current = true; // prevent the synthetic click from re-navigating

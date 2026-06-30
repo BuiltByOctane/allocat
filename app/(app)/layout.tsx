@@ -17,6 +17,7 @@ import { EntitlementProvider } from "@/lib/providers/EntitlementProvider";
 import { PaywallProvider } from "@/lib/providers/PaywallProvider";
 import { TrialWelcomeModal } from "@/components/subscription/TrialWelcomeModal";
 import { PullToRefresh } from "@/components/PullToRefresh";
+import { PagerGate } from "@/components/pager/PagerGate";
 
 export default async function AppLayout({
   children,
@@ -47,9 +48,7 @@ export default async function AppLayout({
             page content behind it. Desktop keeps its own h-screen scroller. */}
         <main className="flex-1 pb-28 md:pb-0 no-scrollbar md:h-screen md:overflow-y-auto w-full relative">
           <PullToRefresh>
-            <div className="md:max-w-5xl md:mx-auto w-full pb-10">
-              {children}
-            </div>
+            <PagerGate>{children}</PagerGate>
           </PullToRefresh>
         </main>
         <InstallPrompt />

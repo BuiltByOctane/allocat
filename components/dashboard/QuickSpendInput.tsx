@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
+import { Drawer } from "vaul";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { CurrencySymbol } from "@/components/ui/CurrencySymbol";
 import { useFormatCurrency } from "@/lib/hooks/useFormatCurrency";
@@ -26,6 +26,9 @@ interface SpendResult {
   planned: number;
   actual: number;
 }
+
+/** The two views that slide inside the single target-picker drawer. */
+type View = "category" | "item";
 
 function AllocationStatus({ result }: { result: SpendResult }) {
   const { remaining, planned, itemName } = result;
@@ -84,6 +87,9 @@ export default function QuickSpendInput({ categories }: QuickSpendInputProps) {
   const [validationError, setValidationError] = useState<string>("");
   const [lastResult, setLastResult] = useState<SpendResult | null>(null);
   const [sharedNote, setSharedNote] = useState<string>("");
+  // Single sliding target-picker drawer: open state + which view is showing.
+  const [pickerOpen, setPickerOpen] = useState<boolean>(false);
+  const [view, setView] = useState<View>("category");
 
   const haptic = useHaptic();
   const router = useRouter();
@@ -116,11 +122,31 @@ export default function QuickSpendInput({ categories }: QuickSpendInputProps) {
     });
   }, [searchParams, router, haptic]);
 
+  function openPicker() {
+    // Always open on the category view; if a category is already chosen the
+    // user can still drill straight into items via the auto-slide below.
+    setView(selectedCategoryId ? "item" : "category");
+    setPickerOpen(true);
+  }
+
+  // Tapping a category sets it AND slides to the item view automatically.
   function handleCategoryChange(catId: string) {
     setSelectedCategoryId(catId);
     setSelectedItemId("");
     setLastResult(null);
     setValidationError("");
+    setView("item");
+    haptic.selection();
+  }
+
+  // Tapping an item sets it and closes the sheet (no auto-submit — the user may
+  // still be typing the amount above).
+  function handleItemChange(itemId: string) {
+    setSelectedItemId(itemId);
+    setLastResult(null);
+    setValidationError("");
+    setPickerOpen(false);
+    haptic.selection();
   }
 
   function validate(): boolean {
@@ -181,6 +207,7 @@ export default function QuickSpendInput({ categories }: QuickSpendInputProps) {
   }));
 
   const selectedItem = mappedItems.find((i) => i.id === selectedItemId);
+  const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
 
   return (
     <section ref={sectionRef}>
@@ -217,37 +244,59 @@ export default function QuickSpendInput({ categories }: QuickSpendInputProps) {
       )}
 
       <div className="space-y-3.5">
-        {/* Category + Item row */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mb-1.5 block">
-              Category
-            </label>
-            <BottomSheetSelect
-              title="Select Category"
-              placeholder="Category…"
-              options={categoryOptions}
-              value={selectedCategoryId}
-              onChange={handleCategoryChange}
-            />
-          </div>
-          <div>
-            <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mb-1.5 block">
-              Item
-            </label>
-            <BottomSheetSelect
-              title="Select Item"
-              placeholder={
-                itemsLoading ? "Loading…" :
-                !selectedCategoryId ? "Pick category" :
-                items.length === 0 ? "No items" : "Item…"
-              }
-              options={itemOptions}
-              value={selectedItemId}
-              onChange={(val) => { setSelectedItemId(val); setLastResult(null); setValidationError(""); }}
-              disabled={!selectedCategoryId || itemsLoading || items.length === 0}
-            />
-          </div>
+        {/* Amount — primary, always-visible control */}
+        <div>
+          <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mb-1.5 block">
+            Amount (<CurrencySymbol className="currency-symbol" />)
+          </label>
+          <input
+            type="number"
+            inputMode="decimal"
+            min="0"
+            placeholder="0"
+            value={amount}
+            onChange={(e) => { setAmount(e.target.value); setValidationError(""); setLastResult(null); }}
+            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+            className="w-full bg-card border border-border rounded-[13px] px-3.5 py-3 text-lg font-bold text-foreground tabular-nums focus:outline-none focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40 transition-colors"
+          />
+        </div>
+
+        {/* Category · Item target selector — opens the single sliding sheet */}
+        <div>
+          <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mb-1.5 block">
+            Category · Item
+          </label>
+          <button
+            type="button"
+            onClick={openPicker}
+            className="w-full flex items-center justify-between gap-2 bg-card border border-border rounded-[13px] px-3.5 py-3 text-left focus:outline-none focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40 transition-colors"
+          >
+            {selectedItem ? (
+              <span className="flex items-center gap-2 min-w-0">
+                {selectedCategory?.icon && (
+                  <span className="text-base leading-none shrink-0">
+                    {selectedCategory.icon}
+                  </span>
+                )}
+                <span className="text-sm font-semibold text-foreground truncate">
+                  {selectedCategory?.name}
+                </span>
+                <span className="material-symbols-outlined text-muted-foreground text-[16px] shrink-0">
+                  chevron_right
+                </span>
+                <span className="text-sm font-semibold text-foreground truncate">
+                  {selectedItem.name}
+                </span>
+              </span>
+            ) : (
+              <span className="text-sm font-medium text-muted-foreground truncate">
+                Choose category &amp; item
+              </span>
+            )}
+            <span className="material-symbols-outlined text-muted-foreground text-[18px] shrink-0 ml-2">
+              expand_more
+            </span>
+          </button>
         </div>
 
         {/* Remaining hint */}
@@ -271,23 +320,6 @@ export default function QuickSpendInput({ categories }: QuickSpendInputProps) {
           </p>
         )}
 
-        {/* Amount */}
-        <div>
-          <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mb-1.5 block">
-            Amount (<CurrencySymbol className="currency-symbol" />)
-          </label>
-          <input
-            type="number"
-            inputMode="decimal"
-            min="0"
-            placeholder="0"
-            value={amount}
-            onChange={(e) => { setAmount(e.target.value); setValidationError(""); setLastResult(null); }}
-            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-            className="w-full bg-card border border-border rounded-[13px] px-3.5 py-3 text-sm font-semibold text-foreground tabular-nums focus:outline-none focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40 transition-colors"
-          />
-        </div>
-
         {validationError && (
           <p className="text-[11px] font-medium text-neg">{validationError}</p>
         )}
@@ -302,6 +334,148 @@ export default function QuickSpendInput({ categories }: QuickSpendInputProps) {
 
         {lastResult && <AllocationStatus result={lastResult} />}
       </div>
+
+      {/* Single sliding target picker: category → item in one drawer */}
+      <Drawer.Root open={pickerOpen} onOpenChange={setPickerOpen}>
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 bg-black/60 z-40" />
+          <Drawer.Content
+            aria-describedby={undefined}
+            className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card sheet-3q focus:outline-none"
+          >
+            {/* Drag handle */}
+            <div className="flex justify-center pt-3 pb-1 shrink-0">
+              <div className="w-9 h-1 bg-border rounded-full" />
+            </div>
+
+            <Drawer.Title className="sr-only">Choose category and item</Drawer.Title>
+
+            {/* Sliding track: two panes side-by-side, translate between views */}
+            <div className="relative flex-1 overflow-hidden">
+              <div
+                className="flex h-full w-[200%] transition-transform duration-300 ease-out"
+                style={{ transform: view === "category" ? "translateX(0)" : "translateX(-50%)" }}
+              >
+                {/* View: category */}
+                <div className="w-1/2 h-full flex flex-col">
+                  <div className="px-5 py-3 shrink-0">
+                    <p className="font-display text-[18px] font-bold tracking-[-0.02em] text-foreground m-0">
+                      Select Category
+                    </p>
+                  </div>
+                  <div className="overflow-y-auto overscroll-contain flex-1 pb-safe">
+                    {categoryOptions.length === 0 ? (
+                      <p className="px-5 py-8 text-center text-sm text-muted-foreground">
+                        No categories yet. Create a budget first.
+                      </p>
+                    ) : (
+                      <ul className="px-2 py-2 space-y-0.5">
+                        {categoryOptions.map((opt) => {
+                          const isSelected = opt.value === selectedCategoryId;
+                          return (
+                            <li key={opt.value}>
+                              <button
+                                type="button"
+                                onClick={() => handleCategoryChange(opt.value)}
+                                className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl text-left transition-colors ${
+                                  isSelected
+                                    ? "bg-muted text-foreground"
+                                    : "text-muted-foreground hover:bg-muted/50 active:bg-muted"
+                                }`}
+                              >
+                                <div className="flex items-center gap-3 min-w-0">
+                                  {opt.icon && (
+                                    <span className="text-lg leading-none shrink-0">
+                                      {opt.icon}
+                                    </span>
+                                  )}
+                                  <span className="text-sm font-medium block truncate">
+                                    {opt.label}
+                                  </span>
+                                </div>
+                                <span className="material-symbols-outlined text-muted-foreground text-[18px] shrink-0 ml-2">
+                                  chevron_right
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                    <div className="h-6" />
+                  </div>
+                </div>
+
+                {/* View: item */}
+                <div className="w-1/2 h-full flex flex-col">
+                  <div className="px-3 py-3 shrink-0 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setView("category")}
+                      className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted/50 active:bg-muted transition-colors shrink-0"
+                      aria-label="Back to categories"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">
+                        arrow_back
+                      </span>
+                    </button>
+                    <p className="font-display text-[18px] font-bold tracking-[-0.02em] text-foreground m-0 truncate">
+                      {selectedCategory ? selectedCategory.name : "Select Item"}
+                    </p>
+                  </div>
+                  <div className="overflow-y-auto overscroll-contain flex-1 pb-safe">
+                    {itemsLoading ? (
+                      <p className="px-5 py-8 text-center text-sm text-muted-foreground">
+                        Loading…
+                      </p>
+                    ) : itemOptions.length === 0 ? (
+                      <p className="px-5 py-8 text-center text-sm text-muted-foreground">
+                        No items in this category yet.
+                      </p>
+                    ) : (
+                      <ul className="px-2 py-2 space-y-0.5">
+                        {itemOptions.map((opt) => {
+                          const isSelected = opt.value === selectedItemId;
+                          return (
+                            <li key={opt.value}>
+                              <button
+                                type="button"
+                                onClick={() => handleItemChange(opt.value)}
+                                className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl text-left transition-colors ${
+                                  isSelected
+                                    ? "bg-muted text-foreground"
+                                    : "text-muted-foreground hover:bg-muted/50 active:bg-muted"
+                                }`}
+                              >
+                                <div className="min-w-0">
+                                  <span className="text-sm font-medium block truncate">
+                                    {opt.label}
+                                  </span>
+                                  {opt.description && (
+                                    <span className="text-[11px] text-muted-foreground block mt-0.5 font-mono tabular-nums truncate">
+                                      {opt.description}
+                                    </span>
+                                  )}
+                                </div>
+                                {isSelected && (
+                                  <span className="material-symbols-outlined text-foreground text-[18px] shrink-0 ml-2">
+                                    check
+                                  </span>
+                                )}
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                    <div className="h-6" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
     </section>
   );
 }

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Capacitor } from "@capacitor/core";
 import { getDB } from "@/lib/db";
-import type { SmsTransactionRow } from "@/lib/db";
+import type { SmsTransactionRow, SmsBlocklistRow } from "@/lib/db";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { ingestSmsClient } from "@/lib/sms/ingestClient";
 import { smsTemplateKey } from "@/lib/sms/match";
@@ -15,6 +15,7 @@ import { NET_WORTH_KEY } from "./useNetWorth";
 
 export const SMS_TX_KEY = ["sms-transactions"] as const;
 export const SMS_CATEGORIZED_KEY = ["sms-transactions", "categorized"] as const;
+export const SMS_BLOCKLIST_KEY = ["sms-blocklist"] as const;
 export const ALL_TX_KEY = ["transactions", "all"] as const;
 export const ITEM_TX_KEY = ["item-transactions"] as const;
 export function itemTxKey(itemId: string) {
@@ -183,6 +184,13 @@ export async function getItemTransactionsFromIDB(
     .sort((a, b) => txnSortTime(b).localeCompare(txnSortTime(a)));
 }
 
+/** The user's SMS blocklist rows ("not a transaction" templates), newest first. */
+export async function getBlocklistFromIDB(): Promise<SmsBlocklistRow[]> {
+  const db = getDB();
+  const rows = await db.sms_blocklist.toArray();
+  return rows.sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
 // ─── Query ────────────────────────────────────────────────────────────────────
 
 export function usePendingSms() {
@@ -213,6 +221,14 @@ export function useItemTransactions(itemId: string) {
     queryKey: itemTxKey(itemId),
     queryFn: () => getItemTransactionsFromIDB(itemId),
     enabled: !!itemId,
+  });
+}
+
+/** The user's SMS blocklist (reported "not a transaction" templates). */
+export function useBlocklist() {
+  return useQuery({
+    queryKey: SMS_BLOCKLIST_KEY,
+    queryFn: () => getBlocklistFromIDB(),
   });
 }
 
@@ -481,6 +497,34 @@ export function useReportSmsMistake() {
   });
 }
 
+/**
+ * Unblock an SMS template: optimistically delete the blocklist IDB row and
+ * enqueue a server DELETE. Unblocking lets future SMS of this template be
+ * tracked again — it does NOT restore already-removed transactions. Invalidates
+ * SMS_TX_KEY too so a freshly-tracked ingest surfaces in the pending list.
+ */
+export function useUnblockSms() {
+  const qc = useQueryClient();
+  const enqueue = useEnqueue();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const db = getDB();
+      await db.sms_blocklist.delete(id);
+      await enqueue({
+        table: "sms_blocklist",
+        operation: "DELETE",
+        recordId: id,
+        payload: { id },
+      });
+      return { ok: true };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SMS_BLOCKLIST_KEY });
+      qc.invalidateQueries({ queryKey: SMS_TX_KEY });
+    },
+  });
+}
+
 /** Reverse a categorized txn's spend and move it back to pending. */
 export function useUnallocateSms() {
   const qc = useQueryClient();
@@ -638,6 +682,7 @@ export async function writeManualTransaction(
     direction: "debit",
     occurred_at: now,
     dedupe_key: dedupeKey,
+    app_source: null,
     status: "categorized",
     matched_rule_id: null,
     budget_item_id: input.budgetItemId,

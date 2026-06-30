@@ -14,6 +14,7 @@ import { parseTransactionSms, isOtpOrVerification } from "@/lib/ai/parseSmsTrans
 import { normalizeMerchant, matchMerchantRules, txnDedupeKey, smsTemplateKey } from "@/lib/sms/match";
 import type { MerchantRule } from "@/lib/sms/match";
 import { selectRuleForPeriod, type RuleResolutionContext } from "@/lib/sms/resolveRuleItem";
+import { detectAppSource } from "@/lib/sms/appSource";
 import { randomUUID } from "@/lib/utils/uuid";
 import { notifyLocal } from "@/lib/native/notify";
 import { nearLimitFromIDB, paceFromIDB, ordinal } from "@/lib/sms/nearLimit";
@@ -154,6 +155,9 @@ export async function ingestSmsClient(
 
     const isDebit = true;
     const merchantNormalized = merchant ? normalizeMerchant(merchant) : null;
+    // Derive the originating UPI/payment app from the sender, on-device. The
+    // sender itself stays local — only this short label (e.g. "gpay") syncs.
+    const appSource = detectAppSource(sender);
 
     // Match learned rules from IDB (holds only the current user's rows), then
     // pick the first that resolves to THIS month's item — a rule keyed to last
@@ -223,6 +227,7 @@ export async function ingestSmsClient(
           label: null,
           source: "sms",
           original_amount: null,
+          app_source: appSource,
           created_at: now,
         });
 
@@ -257,6 +262,7 @@ export async function ingestSmsClient(
         occurredAt,
         dedupeKey,
         templateKey,
+        appSource,
       },
     });
 

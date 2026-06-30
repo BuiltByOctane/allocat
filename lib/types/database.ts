@@ -545,6 +545,8 @@ export type Database = {
           label: string | null
           source: "sms" | "manual"
           original_amount: number | null
+          /** Derived UPI/payment-app key (e.g. "gpay"). Sender stays on-device. */
+          app_source: string | null
           created_at: string
         }
         Insert: {
@@ -565,6 +567,7 @@ export type Database = {
           label?: string | null
           source?: "sms" | "manual"
           original_amount?: number | null
+          app_source?: string | null
           created_at?: string
         }
         Update: {
@@ -575,6 +578,7 @@ export type Database = {
           label?: string | null
           amount?: number | null
           original_amount?: number | null
+          app_source?: string | null
         }
         Relationships: [
           {
@@ -629,6 +633,23 @@ export type Database = {
         Update: {
           kind?: "bug" | "feature" | "feedback"
           message?: string
+        }
+        Relationships: []
+      }
+      app_config: {
+        Row: {
+          id: number
+          min_android_version_code: number
+          update_message: string | null
+        }
+        Insert: {
+          id?: number
+          min_android_version_code?: number
+          update_message?: string | null
+        }
+        Update: {
+          min_android_version_code?: number
+          update_message?: string | null
         }
         Relationships: []
       }

@@ -57,6 +57,7 @@ import {
   unallocateSmsTransaction,
   recategorizeSmsTransaction,
   reportSmsMistake,
+  deleteBlocklistEntry,
   type IngestSmsInput,
   type CategorizeSmsInput,
   type RecategorizeSmsInput,
@@ -269,6 +270,7 @@ export class SyncEngine {
             sampleLabel?: string | null;
           },
         ),
+      DELETE: (p) => deleteBlocklistEntry(p.id as string),
     },
   };
 

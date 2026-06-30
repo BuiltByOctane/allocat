@@ -261,5 +261,14 @@ export class AllocatDB extends Dexie {
         await meta.delete("budget_items");
         await meta.delete("merchant_rules");
       });
+
+    // v16: sms_transactions.app_source added (derived UPI/payment-app label, e.g.
+    // "gpay"/"phonepe"). Non-indexed display field → schema string unchanged; the
+    // bump only forces re-hydration so the new column lands on cached rows. The
+    // raw sender stays on-device; only this short derived label syncs.
+    // See lib/sms/appSource.ts.
+    this.version(16).upgrade(async (tx) => {
+      await tx.table("sync_meta").delete("sms_transactions");
+    });
   }
 }

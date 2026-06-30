@@ -583,7 +583,11 @@ export function ItemDetailSheet({
 
               {/* Transactions — per-item activity history */}
               {!isNew && item ? (
-                <ItemTransactionList itemId={item.id} />
+                <ItemTransactionList
+                  itemId={item.id}
+                  itemEmoji={emoji ?? item.emoji ?? null}
+                  categoryIcon={category.icon}
+                />
               ) : null}
 
               {/* Actions */}

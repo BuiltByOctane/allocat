@@ -2,6 +2,7 @@
 
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { useItemTransactions } from "@/lib/hooks/useSmsTransactions";
+import { AppSourceBadge } from "@/components/sms/AppSourceBadge";
 import type { SmsTransactionRow } from "@/lib/db";
 
 function formatDateTime(iso: string) {
@@ -22,10 +23,23 @@ function whenOf(txn: SmsTransactionRow): string {
   return txn.occurred_at ?? txn.created_at;
 }
 
-export function ItemTransactionList({ itemId }: { itemId: string }) {
+export function ItemTransactionList({
+  itemId,
+  itemEmoji,
+  categoryIcon,
+}: {
+  itemId: string;
+  /** Item's own display emoji (preferred glyph). */
+  itemEmoji?: string | null;
+  /** Category icon — fallback glyph when the item has no emoji. */
+  categoryIcon?: string | null;
+}) {
   const { data, isLoading } = useItemTransactions(itemId);
 
   const txns = data ?? [];
+  // Item emoji first, category icon fallback. No first-letter fallback here —
+  // these rows lead with a glyph only when one is configured.
+  const glyph = itemEmoji || categoryIcon || null;
 
   return (
     <div className="space-y-2">
@@ -50,11 +64,15 @@ export function ItemTransactionList({ itemId }: { itemId: string }) {
                 key={txn.id}
                 className="w-full flex items-center gap-3 rounded-tile bg-tile px-3.5 py-2.5 text-left"
               >
+                {glyph && (
+                  <span className="shrink-0 text-base leading-none">{glyph}</span>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <p className="text-[12.5px] font-semibold text-foreground leading-snug truncate">
                       {title}
                     </p>
+                    <AppSourceBadge source={txn.app_source} />
                     <span className="shrink-0 rounded-full bg-card px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-muted-foreground">
                       {txn.source === "manual" ? "Manual" : "SMS"}
                     </span>

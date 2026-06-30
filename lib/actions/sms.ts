@@ -105,6 +105,11 @@ export interface IngestSmsInput {
   budgetItemId?: string | null;
   /** Optional human-readable name for the transaction. */
   label?: string | null;
+  /**
+   * Derived UPI/payment-app label (e.g. "gpay") computed on-device from the SMS
+   * sender. Low-sensitivity (like merchant) — the raw sender never syncs.
+   */
+  appSource?: string | null;
 }
 
 /**
@@ -155,6 +160,7 @@ export async function ingestSmsTransaction(input: IngestSmsInput) {
         label: input.label ?? null,
         source: "manual",
         original_amount: null,
+        app_source: input.appSource ?? null,
       })
       .select()
       .single();
@@ -210,6 +216,8 @@ export async function ingestSmsTransaction(input: IngestSmsInput) {
       occurred_at: input.occurredAt ?? null,
       dedupe_key: input.dedupeKey,
       status: initialStatus,
+      // Derived UPI/payment-app label (sender stays on-device).
+      app_source: input.appSource ?? null,
     })
     .select()
     .single();
@@ -514,6 +522,17 @@ export async function reportSmsMistake(input: ReportSmsMistakeInput) {
     );
   if (blockErr) throw new Error(blockErr.message);
 
+  // Read back the canonical blocklist row so the sync engine can reconcile the
+  // optimistic temp_ row to its real id (the INSERT enqueue carries a tempId).
+  // Without a returned `id`, the temp row would never map → it'd linger in IDB
+  // and duplicate the hydrated real row in the Blocked list.
+  const { data: blockRow } = await supabase
+    .from("sms_blocklist")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("template_key", input.templateKey)
+    .maybeSingle();
+
   // Refund (if categorized) + delete the offending transaction.
   const txn = await refundAndDeleteTxn(supabase, user.id, input.txnId);
 
@@ -538,6 +557,36 @@ export async function reportSmsMistake(input: ReportSmsMistakeInput) {
     },
   });
 
+  // Return the blocklist row (with its real id) so SyncEngine reconciles the
+  // optimistic temp_ row. Fall back to a bare ok if the read-back somehow missed.
+  return blockRow ?? { ok: true as const };
+}
+
+/** The user's SMS blocklist rows (reported "not a transaction" templates). */
+export async function getBlocklist() {
+  const { supabase, user } = await getAuthed();
+  const { data, error } = await supabase
+    .from("sms_blocklist")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+/**
+ * Unblock: remove a blocklist row so future SMS of that template are tracked
+ * again. Idempotent — deleting a missing row is a no-op. Does NOT restore any
+ * already-removed transactions.
+ */
+export async function deleteBlocklistEntry(id: string) {
+  const { supabase, user } = await getAuthed();
+  const { error } = await supabase
+    .from("sms_blocklist")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", user.id);
+  if (error) throw new Error(error.message);
   return { ok: true as const };
 }
 

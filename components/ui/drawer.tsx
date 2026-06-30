@@ -41,8 +41,13 @@ const DrawerContent = React.forwardRef<
       className={`fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-sheet bg-card transition-[bottom] duration-200 ${className ?? ""}`}
       // Slide the sheet UP above the soft keyboard (position only — never resize,
       // so the 3/4 height can't collapse). Clamp the lift to the free space above
-      // a 75dvh sheet (25dvh) so the top/handle never clips off-screen.
-      style={{ bottom: "min(var(--keyboard-inset, 0px), 25dvh)" }}
+      // a 75% sheet (25%) so the top/handle never clips off-screen. Uses the
+      // stable --app-vh (px, immune to keyboard resize) when set, falling back to
+      // 100dvh on web so the clamp can't drift as the keyboard toggles.
+      style={{
+        bottom:
+          "min(var(--keyboard-inset, 0px), calc(var(--app-vh, 100dvh) * 0.25))",
+      }}
       {...props}
     >
       <div className="mx-auto mt-3 h-1 w-9 rounded-full bg-border" />

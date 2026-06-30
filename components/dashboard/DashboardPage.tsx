@@ -40,6 +40,24 @@ function getGreetingSnapshot(): { hi: string; line: string } {
 }
 const subscribeNoop = () => () => {};
 
+// Days remaining in the current month. Date-dependent + impure, so it lives in a
+// module fn served through useSyncExternalStore (null on server/first paint) to
+// avoid an SSR/client hydration mismatch — same pattern as the greeting above.
+// Mirrors the math in lib/sms/insightStats.ts (month is 1-indexed there too).
+function getDaysLeftSnapshot(): number {
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+  const daysInMonth = new Date(year, month, 0).getDate();
+  return daysInMonth - now.getDate();
+}
+
+function daysLeftLabel(daysLeft: number): string {
+  if (daysLeft <= 0) return "Last day";
+  if (daysLeft === 1) return "1 day left";
+  return `${daysLeft} days left`;
+}
+
 function NetWorthSparkline({ data }: { data: { net_worth: number | string }[] }) {
   if (data.length < 2) return null;
   const values = data.map((d) => Number(d.net_worth));
@@ -78,6 +96,8 @@ export default function DashboardPage({ data }: DashboardProps) {
   // synchronous setState-in-effect, so React 19's cascading-render warning
   // never fires.
   const greeting = useSyncExternalStore(subscribeNoop, getGreetingSnapshot, () => null);
+  // null on the server / first client paint, then the live count after hydration.
+  const daysLeft = useSyncExternalStore(subscribeNoop, getDaysLeftSnapshot, () => null);
 
   const currentNetWorth =
     data.netWorthHistory.length > 0
@@ -135,9 +155,16 @@ export default function DashboardPage({ data }: DashboardProps) {
             <div className="flex items-start justify-between">
               <span className="text-[11.5px] font-semibold">Left to spend · this month</span>
               <div className="flex flex-col items-end gap-1.5">
-                <Chip tone={overBudget ? "neg" : "good"} className="bg-white/60 border-0">
-                  {overBudget ? "Over budget" : "On track"}
-                </Chip>
+                <div className="flex items-center gap-1.5">
+                  {daysLeft !== null && (
+                    <Chip tone="neutral" className="bg-white/40 border-0">
+                      {daysLeftLabel(daysLeft)}
+                    </Chip>
+                  )}
+                  <Chip tone={overBudget ? "neg" : "good"} className="bg-white/60 border-0">
+                    {overBudget ? "Over budget" : "On track"}
+                  </Chip>
+                </div>
                 {isPremium && <CrownBadge size={60} className="absolute top-9" />}
               </div>
             </div>

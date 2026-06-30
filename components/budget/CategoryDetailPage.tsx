@@ -647,7 +647,7 @@ function CategoryDetailContent({
                         color: categoryColor,
                       }}
                     >
-                      {item.emoji || item.name.charAt(0).toUpperCase() || "•"}
+                      {item.emoji || icon || item.name.charAt(0).toUpperCase() || "•"}
                     </div>
                   )}
                   <div className="flex-1 min-w-0">

@@ -17,7 +17,10 @@ import {
   useUnallocateSms,
   useRecategorizeSms,
   useReportSmsMistake,
+  useBlocklist,
+  useUnblockSms,
 } from "@/lib/hooks/useSmsTransactions";
+import { AppSourceBadge } from "@/components/sms/AppSourceBadge";
 import { useAddBudgetItem } from "@/lib/hooks/useBudget";
 import { useTourDriver } from "@/lib/tour/useTourDriver";
 import {
@@ -80,6 +83,7 @@ async function loadPickerData(): Promise<PickerData> {
         itemName: item.name,
         categoryName: cat.name,
         icon: cat.icon,
+        emoji: item.emoji ?? null,
         planned: Number(item.planned_amount) || 0,
         actual: Number(item.actual_amount) || 0,
       });
@@ -133,9 +137,11 @@ export default function SmsPage() {
   const unallocate = useUnallocateSms();
   const recategorize = useRecategorizeSms();
   const report = useReportSmsMistake();
+  const { data: blocklist } = useBlocklist();
+  const unblock = useUnblockSms();
   const addItem = useAddBudgetItem();
 
-  const [tab, setTab] = useState<"pending" | "allocated">("pending");
+  const [tab, setTab] = useState<"pending" | "allocated" | "blocked">("pending");
   // The categorized txn being moved/renamed via the reallocate sheet.
   const [reallocTxn, setReallocTxn] = useState<SmsTransactionRow | null>(null);
 
@@ -421,14 +427,16 @@ export default function SmsPage() {
           <p className="text-[11px] font-medium text-muted-foreground mt-1">
             {tab === "pending"
               ? `Awaiting allocation${!isLoading && pending ? ` · ${pending.length}` : ""}`
-              : `Allocated${categorized ? ` · ${categorized.length}` : ""}`}
+              : tab === "allocated"
+                ? `Allocated${categorized ? ` · ${categorized.length}` : ""}`
+                : `Blocked SMS types${blocklist ? ` · ${blocklist.length}` : ""}`}
           </p>
         </div>
       </div>
 
       {/* Pending / Allocated tabs */}
       <div id="sms-tabs" className="flex gap-1 rounded-pill border border-border bg-card p-1">
-        {(["pending", "allocated"] as const).map((t) => (
+        {(["pending", "allocated", "blocked"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -438,7 +446,9 @@ export default function SmsPage() {
                 : "text-muted-foreground"
             }`}
           >
-            {t}
+            {t === "blocked" && blocklist && blocklist.length > 0
+              ? `Blocked · ${blocklist.length}`
+              : t}
           </button>
         ))}
       </div>
@@ -478,8 +488,11 @@ export default function SmsPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex min-w-0 flex-col">
                     <span className="figure text-[26px] text-foreground">{money(txn)}</span>
-                    <span className="truncate text-[13px] font-bold text-foreground mt-0.5">
-                      {txn.merchant_raw ?? "Unknown merchant"}
+                    <span className="flex items-center gap-1.5 mt-0.5 min-w-0">
+                      <span className="truncate text-[13px] font-bold text-foreground">
+                        {txn.merchant_raw ?? "Unknown merchant"}
+                      </span>
+                      <AppSourceBadge source={txn.app_source} />
                     </span>
                   </div>
                   {meta && <Chip tone="neutral">{meta}</Chip>}
@@ -538,8 +551,10 @@ export default function SmsPage() {
             allocatedGroups.map((group) => (
               <Card key={group.itemId} className="flex flex-col gap-2.5">
                 <div className="flex items-center gap-2 border-b border-border pb-2">
-                  {group.item?.icon && (
-                    <span className="text-lg leading-none shrink-0">{group.item.icon}</span>
+                  {(group.item?.emoji || group.item?.icon) && (
+                    <span className="text-lg leading-none shrink-0">
+                      {group.item?.emoji || group.item?.icon}
+                    </span>
                   )}
                   <div className="min-w-0">
                     <p className="truncate text-[13px] font-bold text-foreground">
@@ -557,8 +572,11 @@ export default function SmsPage() {
                     <div key={txn.id} className="flex flex-col gap-2">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex min-w-0 flex-col">
-                          <span className="truncate text-sm font-bold text-foreground">
-                            {txn.label || txn.merchant_raw || "Unknown"}
+                          <span className="flex items-center gap-1.5 min-w-0">
+                            <span className="truncate text-sm font-bold text-foreground">
+                              {txn.label || txn.merchant_raw || "Unknown"}
+                            </span>
+                            <AppSourceBadge source={txn.app_source} />
                           </span>
                           {when && (
                             <span className="text-[11px] text-muted-foreground mt-0.5">{when}</span>
@@ -601,6 +619,62 @@ export default function SmsPage() {
                 })}
               </Card>
             ))
+          )}
+        </section>
+      )}
+
+      {/* Blocked list — reported "not a transaction" SMS templates, with unblock */}
+      {tab === "blocked" && (
+        <section className="flex flex-col gap-3">
+          {!blocklist || blocklist.length === 0 ? (
+            <Card className="flex flex-col items-center gap-2 py-12 text-center">
+              <div className="flex size-12 items-center justify-center rounded-[14px] bg-tile text-muted-foreground mb-1">
+                <Inbox size={24} strokeWidth={1.7} />
+              </div>
+              <p className="text-sm font-bold text-foreground">No blocked SMS types</p>
+              <p className="text-xs text-muted-foreground">
+                When you tap &ldquo;Not a transaction&rdquo; on a message, that kind
+                of SMS is blocked and listed here so you can undo it later.
+              </p>
+            </Card>
+          ) : (
+            <>
+              <p className="rounded-xl border border-border bg-card px-3 py-2.5 text-[11.5px] font-medium text-muted-foreground">
+                Unblocking lets future messages of this type be tracked again.
+                Already-removed transactions won&apos;t return.
+              </p>
+              {blocklist.map((b) => {
+                const created = new Date(b.created_at);
+                const when = isNaN(created.getTime())
+                  ? null
+                  : created.toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    });
+                return (
+                  <Card key={b.id} className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 flex-col">
+                      <span className="truncate text-[13px] font-bold text-foreground">
+                        {b.sample_label || "Blocked message"}
+                      </span>
+                      {when && (
+                        <span className="text-[11px] text-muted-foreground mt-0.5">
+                          Blocked {when}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => unblock.mutate(b.id)}
+                      disabled={unblock.isPending}
+                      className="h-9 px-4 shrink-0 rounded-pill border border-border text-xs font-bold text-foreground active:scale-[0.98] transition-transform disabled:opacity-40"
+                    >
+                      Unblock
+                    </button>
+                  </Card>
+                );
+              })}
+            </>
           )}
         </section>
       )}

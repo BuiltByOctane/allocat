@@ -40,6 +40,36 @@ describe("detectAppSource", () => {
     expect(detectAppSource(null)).toBeNull();
     expect(detectAppSource(undefined)).toBeNull();
   });
+
+  it("detects an explicit app mention in the body (bank sender)", () => {
+    expect(
+      detectAppSource("AD-HDFCBK", "Rs.150 debited via Google Pay. UPI Ref 123"),
+    ).toBe("gpay");
+    expect(
+      detectAppSource("VK-ICICIB", "Paid using PhonePe to Cafe. Ref 99"),
+    ).toBe("phonepe");
+  });
+
+  it("detects the app from a counterparty UPI VPA handle in the body", () => {
+    expect(
+      detectAppSource("AD-HDFCBK", "Rs 200 sent to cafe@okhdfcbank UPI:123"),
+    ).toBe("gpay");
+    expect(
+      detectAppSource("VM-AXISBK", "Paid Rs 50 to shop@ybl on 01-Jul"),
+    ).toBe("phonepe");
+    expect(
+      detectAppSource("AD-SBIINB", "Debited Rs 75 to vendor@paytm Ref 7"),
+    ).toBe("paytm");
+  });
+
+  it("does NOT tag bare merchant 'Amazon' in the body as amazonpay", () => {
+    expect(
+      detectAppSource("AD-HDFCBK", "Rs 499 spent at Amazon. UPI Ref 321"),
+    ).toBeNull();
+    expect(
+      detectAppSource("AD-HDFCBK", "Rs 499 paid via Amazon Pay balance"),
+    ).toBe("amazonpay");
+  });
 });
 
 describe("appSourceDisplay", () => {

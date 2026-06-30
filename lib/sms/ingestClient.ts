@@ -155,9 +155,11 @@ export async function ingestSmsClient(
 
     const isDebit = true;
     const merchantNormalized = merchant ? normalizeMerchant(merchant) : null;
-    // Derive the originating UPI/payment app from the sender, on-device. The
-    // sender itself stays local — only this short label (e.g. "gpay") syncs.
-    const appSource = detectAppSource(sender);
+    // Derive the originating UPI/payment app from the sender AND body, on-device.
+    // A bank debit SMS rarely names the app in the sender, so we also scan the
+    // body for an explicit app mention or the counterparty's UPI VPA handle. The
+    // sender/body stay local — only this short label (e.g. "gpay") syncs.
+    const appSource = detectAppSource(sender, raw);
 
     // Match learned rules from IDB (holds only the current user's rows), then
     // pick the first that resolves to THIS month's item — a rule keyed to last

@@ -283,19 +283,18 @@ input[type="date"] {
    a sheet can never extend behind an open keyboard. vh first as a legacy
    WebView fallback. */
 .sheet-3q {
-  /* Tall (90%) content sheet that stays fully on-screen with the keyboard open.
-     Height is based on the STABLE --app-vh (set once by KeyboardInset, immune to
-     keyboard resize), so the sheet can never get stuck small after the keyboard
-     closes. When the keyboard IS open we shrink the sheet to the space above it
-     (appvh - keyboard) and lift it by the keyboard height, so the top of the
-     sheet — where an input often sits — stays visible instead of being pushed
-     off-screen. Keyboard closed (--keyboard-inset 0): a plain 90% sheet at the
-     bottom. Falls back to 100dvh on web/SSR. */
-  height: min(
-    calc(var(--app-vh, 100dvh) * 0.9),
-    calc(var(--app-vh, 100dvh) - var(--keyboard-inset, 0px))
-  );
-  max-height: calc(var(--app-vh, 100dvh) - var(--keyboard-inset, 0px));
+  /* Tall content sheet whose TOP edge stays fixed at the 90% line — a constant
+     10% gap at the top whether or not the keyboard is open. Height is based on
+     the STABLE --app-vh (set once by KeyboardInset, immune to keyboard resize),
+     so it can never get stuck small after the keyboard closes.
+       top edge = bottom + height = keyboard + (0.9*appvh - keyboard) = 0.9*appvh
+     Keyboard closed (inset 0): a 90% sheet at the bottom. Keyboard open: the
+     bottom lifts to sit on the keyboard and the sheet shrinks by exactly the
+     keyboard height, so the top never moves and never reaches the screen top,
+     while the action buttons at the sheet's bottom float just above the keyboard.
+     Falls back to 100dvh on web/SSR. */
+  height: calc(var(--app-vh, 100dvh) * 0.9 - var(--keyboard-inset, 0px));
+  max-height: calc(var(--app-vh, 100dvh) * 0.9 - var(--keyboard-inset, 0px));
   bottom: var(--keyboard-inset, 0px);
   transition: bottom 0.2s ease, height 0.2s ease;
 }

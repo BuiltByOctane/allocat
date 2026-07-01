@@ -283,16 +283,21 @@ input[type="date"] {
    a sheet can never extend behind an open keyboard. vh first as a legacy
    WebView fallback. */
 .sheet-3q {
-  /* Tall (90%), keyboard-STABLE content sheet. Height is 90% of the stable --app-vh
-     (set once by KeyboardInset, immune to keyboard resize), so opening the soft
-     keyboard NEVER shrinks the sheet and closing it never leaves it stuck small.
-     The keyboard simply overlays the bottom; each sheet's own inner
-     `overflow-y-auto` body scrolls and the focused field auto-scrolls into view
-     (KeyboardInset). Falls back to 100dvh on web/SSR. Scrolling stays in the
-     inner body — the outer stays non-scrolling so the drag handle can't drift. */
-  height: calc(var(--app-vh, 100dvh) * 0.9);
-  max-height: calc(var(--app-vh, 100dvh) * 0.9);
-  bottom: 0;
+  /* Tall (90%) content sheet that stays fully on-screen with the keyboard open.
+     Height is based on the STABLE --app-vh (set once by KeyboardInset, immune to
+     keyboard resize), so the sheet can never get stuck small after the keyboard
+     closes. When the keyboard IS open we shrink the sheet to the space above it
+     (appvh - keyboard) and lift it by the keyboard height, so the top of the
+     sheet — where an input often sits — stays visible instead of being pushed
+     off-screen. Keyboard closed (--keyboard-inset 0): a plain 90% sheet at the
+     bottom. Falls back to 100dvh on web/SSR. */
+  height: min(
+    calc(var(--app-vh, 100dvh) * 0.9),
+    calc(var(--app-vh, 100dvh) - var(--keyboard-inset, 0px))
+  );
+  max-height: calc(var(--app-vh, 100dvh) - var(--keyboard-inset, 0px));
+  bottom: var(--keyboard-inset, 0px);
+  transition: bottom 0.2s ease, height 0.2s ease;
 }
 
 /* Safe-area padding utilities (notch / home-indicator). Used across bottom

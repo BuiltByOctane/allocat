@@ -293,22 +293,22 @@ export function AddAssetSheet({ open, defaultCategoryId, onClose }: AddAssetShee
               {error && (
                 <p className="text-xs text-neg font-medium">{error}</p>
               )}
+            </div>
 
-              <div className="flex flex-col gap-3 pt-1">
-                <button
-                  onClick={handleSave}
-                  disabled={isSaving}
-                  className="w-full h-[48px] rounded-pill bg-[var(--pill)] text-[var(--pill-foreground)] text-sm font-bold active:scale-[0.98] transition-all disabled:opacity-50"
-                >
-                  {isSaving ? "Saving…" : "Save asset"}
-                </button>
-                <button
-                  onClick={onClose}
-                  className="w-full h-[48px] rounded-pill bg-muted text-foreground text-sm font-semibold"
-                >
-                  Cancel
-                </button>
-              </div>
+            <div className="shrink-0 flex flex-col gap-3 px-6 pt-3 pb-6 border-t border-border/60 bg-card">
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="w-full h-[48px] rounded-pill bg-[var(--pill)] text-[var(--pill-foreground)] text-sm font-bold active:scale-[0.98] transition-all disabled:opacity-50"
+              >
+                {isSaving ? "Saving…" : "Save asset"}
+              </button>
+              <button
+                onClick={onClose}
+                className="w-full h-[48px] rounded-pill bg-muted text-foreground text-sm font-semibold"
+              >
+                Cancel
+              </button>
             </div>
           </Drawer.Content>
         </Drawer.Portal>

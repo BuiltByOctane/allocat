@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { animate, motion, useMotionValue, useReducedMotion } from "motion/react";
 import { navItems } from "@/lib/nav/navItems";
 import { useHaptic } from "@/lib/hooks/useHaptic";
+import { QuickActionActiveProvider } from "@/lib/providers/QuickActionProvider";
 import DashboardScreen from "@/app/(app)/dashboard/page";
 import BudgetScreen from "@/app/(app)/budget/page";
 import NetWorthScreen from "@/app/(app)/net-worth/page";
@@ -225,9 +226,11 @@ export function TabPager() {
             }}
           >
             {mounted.has(i) ? (
-              <div className="md:max-w-5xl md:mx-auto w-full pb-28">
-                <Screen />
-              </div>
+              <QuickActionActiveProvider active={i === index}>
+                <div className="md:max-w-5xl md:mx-auto w-full pb-28">
+                  <Screen />
+                </div>
+              </QuickActionActiveProvider>
             ) : null}
           </div>
         ))}

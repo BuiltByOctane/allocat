@@ -726,7 +726,10 @@ async function notifyIfNearLimit(
   const actual = Number(item.actual_amount);
   // Item OVERSPEND web-push is owned by quickLogSpend (escalating, per-overspend).
   // Always preceded by a quickLogSpend call in this module — skip here to avoid a duplicate.
-  if (planned > 0 && actual >= planned) return;
+  // Use STRICT `>` to match quickLogSpend's ownership (isOver = newActual > planned):
+  // at exactly actual === planned quickLogSpend does NOT fire, so we must fall through
+  // to the near-limit branch below rather than skip and drop the push.
+  if (planned > 0 && actual > planned) return;
   if (planned > 0 && actual / planned >= NEAR_LIMIT_RATIO) {
     await sendNearLimitPush(userId, item.name, actual, planned, currency);
     return;

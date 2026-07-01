@@ -66,10 +66,50 @@ const tables = {
   merchant_rules: makeTable(),
   categories: makeTable(),
   sms_blocklist: makeTable(),
+  budgets: makeTable(),
 };
 
 const dbStub = {
   ...tables,
+  // Override budgets to support the "[month+year]" compound index query used by
+  // loadPeriodContextIDB. The generic makeTable uses strict === which can't
+  // compare array values produced by Dexie compound keys.
+  budgets: {
+    rows: tables.budgets.rows,
+    async get(id: string) {
+      return tables.budgets.rows.find((r) => r.id === id);
+    },
+    async add(row: Row) {
+      tables.budgets.rows.push(row);
+      return row.id;
+    },
+    async toArray() {
+      return [...tables.budgets.rows];
+    },
+    where(field: string) {
+      return {
+        equals(value: unknown) {
+          const serialized = JSON.stringify(value);
+          return {
+            async first() {
+              return tables.budgets.rows.find((r) =>
+                field === "[month+year]"
+                  ? JSON.stringify([r.month, r.year]) === serialized
+                  : r[field] === value,
+              );
+            },
+            async toArray() {
+              return tables.budgets.rows.filter((r) =>
+                field === "[month+year]"
+                  ? JSON.stringify([r.month, r.year]) === serialized
+                  : r[field] === value,
+              );
+            },
+          };
+        },
+      };
+    },
+  },
   // Dexie's transaction serializes its callback; in single-threaded JS our
   // callback runs to its first await atomically w.r.t. the synchronous re-check,
   // which is what the dedupe guard relies on. Just run and return the result.
@@ -217,5 +257,55 @@ describe("ingestSmsClient — occurred_at uses the SMS receipt time (Bug F)", ()
     // Always a full ISO timestamp now — never a bare date.
     expect(occurredAt).not.toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(() => new Date(occurredAt).toISOString()).not.toThrow();
+  });
+});
+
+describe("ingestSmsClient — overspend_count increment (Task 6)", () => {
+  beforeEach(() => {
+    freshTables();
+  });
+
+  it("increments overspend_count once when an auto-applied spend goes over plan", async () => {
+    const enqueue = vi.fn().mockResolvedValue(undefined);
+
+    // Budget for the current period — no receivedAt is passed so ingestSmsClient
+    // uses Date.now(), and loadPeriodContextIDB looks up [month+year] from that.
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
+
+    tables.budgets.rows.push({ id: "budget1", month, year, template_id: null });
+    tables.categories.rows.push({ id: "cat1", budget_id: "budget1" });
+    // planned_amount = 1000, actual_amount = 500 → debit of 1500 pushes
+    // newActual (2000) past planned (1000), so overspend_count must go to 1.
+    tables.budget_items.rows.push({
+      id: "item1",
+      category_id: "cat1",
+      planned_amount: 1000,
+      actual_amount: 500,
+      overspend_count: 0,
+      template_id: null,
+      template_item_id: null,
+    });
+    // Legacy rule (no template_id/template_item_id): resolves via budget_item_id
+    // existing in this period's items list.
+    tables.merchant_rules.rows.push({
+      id: "rule1",
+      pattern: "amazon",
+      match_type: "exact",
+      auto_apply: true,
+      budget_item_id: "item1",
+      template_id: null,
+      template_item_id: null,
+    });
+
+    // SMS debits Rs.1,500 at amazon@ybl — matches rule1 → auto-applies to item1.
+    const result = await ingestSmsClient(SMS, { enqueue }, { silent: true });
+
+    expect(result.skipped).toBeFalsy();
+    expect(result.autoApplied).toBe(true);
+
+    const item = tables.budget_items.rows.find((r) => r.id === "item1");
+    expect(item?.overspend_count).toBe(1);
   });
 });

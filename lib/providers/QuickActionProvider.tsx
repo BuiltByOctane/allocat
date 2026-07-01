@@ -31,6 +31,29 @@ interface QuickActionContextValue {
 
 const QuickActionContext = createContext<QuickActionContextValue | null>(null);
 
+/**
+ * Whether the subtree owns the visible slot. Defaults to `true` (web/desktop
+ * render one page at a time). The native TabPager keeps several tab screens
+ * mounted at once, so it wraps each pane and sets this `false` for off-screen
+ * panes — otherwise every mounted screen's `useRegisterQuickAction` would race
+ * and a background pane could win the dock. See TabPager.
+ */
+const QuickActionActiveContext = createContext<boolean>(true);
+
+export function QuickActionActiveProvider({
+  active,
+  children,
+}: {
+  active: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <QuickActionActiveContext.Provider value={active}>
+      {children}
+    </QuickActionActiveContext.Provider>
+  );
+}
+
 export function QuickActionProvider({ children }: { children: ReactNode }) {
   const [action, setAction] = useState<QuickAction | null>(null);
 
@@ -68,6 +91,7 @@ export function useQuickAction(): QuickActionContextValue {
  */
 export function useRegisterQuickAction(action: QuickAction | null) {
   const ctx = useContext(QuickActionContext);
+  const active = useContext(QuickActionActiveContext);
   const register = ctx?.register;
   const unregister = ctx?.unregister;
 
@@ -77,8 +101,11 @@ export function useRegisterQuickAction(action: QuickAction | null) {
   const onTrigger = action?.onTrigger;
 
   useEffect(() => {
+    // Off-screen panes (native pager neighbours) stay mounted but must not
+    // claim the dock — only the visible pane registers.
+    if (!active) return;
     if (!register || !unregister || !id || !label || !icon || !onTrigger) return;
     register({ id, label, icon, onTrigger });
     return () => unregister(id);
-  }, [register, unregister, id, label, icon, onTrigger]);
+  }, [active, register, unregister, id, label, icon, onTrigger]);
 }

@@ -8,6 +8,7 @@ import { ACCENT_IDS, ACCENT_STORAGE_KEY } from "@/lib/theme/accents";
 import RegisterPWA from "@/components/ui/RegisterPWA";
 import { NativeShell } from "@/components/pwa/NativeShell";
 import { AndroidWebGate } from "@/components/pwa/AndroidWebGate";
+import { ForceUpdateGate } from "@/components/pwa/ForceUpdateGate";
 
 const hankenGrotesque = Hanken_Grotesk({
   subsets: ["latin"],
@@ -173,10 +174,18 @@ export default function RootLayout({
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
+        {/* Material Symbols icon font is self-hosted (@font-face in globals.css,
+            /fonts/material-symbols-outlined.woff2). The previous Google Fonts
+            <link rel="stylesheet" ...> was removed because the async CDN swap
+            raced first paint in the native WebView and intermittently left
+            ligature names ("expand_more") as plain text. */}
+        {/* Preload the local glyph font so it's ready before icons paint. */}
         <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block"
+          rel="preload"
+          href="/fonts/material-symbols-outlined.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
         />
         {/* Apply the saved accent before first paint — no lime flash. Mirrors
             next-themes' class strategy; lime is the default (no attribute). */}
@@ -209,6 +218,7 @@ export default function RootLayout({
           <RegisterPWA />
           <NativeShell />
           <AndroidWebGate />
+          <ForceUpdateGate />
         </ThemeProvider>
       </body>
     </html>

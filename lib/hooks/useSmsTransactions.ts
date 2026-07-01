@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Capacitor } from "@capacitor/core";
 import { getDB } from "@/lib/db";
-import type { SmsTransactionRow } from "@/lib/db";
+import type { SmsTransactionRow, SmsBlocklistRow } from "@/lib/db";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { ingestSmsClient } from "@/lib/sms/ingestClient";
 import { smsTemplateKey } from "@/lib/sms/match";
@@ -10,11 +10,13 @@ import { randomUUID } from "@/lib/utils/uuid";
 import { notifyLocal } from "@/lib/native/notify";
 import { SmsReader } from "@/lib/native/SmsReader";
 import { formatCurrency } from "@/lib/number-format";
+import { pickOverspendMessage, tierForCount } from "@/lib/notify/messages";
 import { DASHBOARD_KEY } from "./useDashboard";
 import { NET_WORTH_KEY } from "./useNetWorth";
 
 export const SMS_TX_KEY = ["sms-transactions"] as const;
 export const SMS_CATEGORIZED_KEY = ["sms-transactions", "categorized"] as const;
+export const SMS_BLOCKLIST_KEY = ["sms-blocklist"] as const;
 export const ALL_TX_KEY = ["transactions", "all"] as const;
 export const ITEM_TX_KEY = ["item-transactions"] as const;
 export function itemTxKey(itemId: string) {
@@ -120,6 +122,7 @@ async function pushRulesToNative(): Promise<void> {
         itemName: it?.name ?? "",
         itemPlanned: it ? Number(it.planned_amount) : 0,
         itemActual: it ? Number(it.actual_amount) : 0,
+        itemOverspendCount: it ? Number(it.overspend_count ?? 0) : 0,
       };
     });
     await SmsReader.setRules({ rules: JSON.stringify(payload) });
@@ -183,6 +186,13 @@ export async function getItemTransactionsFromIDB(
     .sort((a, b) => txnSortTime(b).localeCompare(txnSortTime(a)));
 }
 
+/** The user's SMS blocklist rows ("not a transaction" templates), newest first. */
+export async function getBlocklistFromIDB(): Promise<SmsBlocklistRow[]> {
+  const db = getDB();
+  const rows = await db.sms_blocklist.toArray();
+  return rows.sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
 // ─── Query ────────────────────────────────────────────────────────────────────
 
 export function usePendingSms() {
@@ -213,6 +223,14 @@ export function useItemTransactions(itemId: string) {
     queryKey: itemTxKey(itemId),
     queryFn: () => getItemTransactionsFromIDB(itemId),
     enabled: !!itemId,
+  });
+}
+
+/** The user's SMS blocklist (reported "not a transaction" templates). */
+export function useBlocklist() {
+  return useQuery({
+    queryKey: SMS_BLOCKLIST_KEY,
+    queryFn: () => getBlocklistFromIDB(),
   });
 }
 
@@ -282,9 +300,15 @@ export function useCategorizeSms() {
       });
       const item = await db.budget_items.get(input.budgetItemId);
       if (item && typeof spendAmount === "number") {
-        await db.budget_items.update(input.budgetItemId, {
-          actual_amount: Number(item.actual_amount) + spendAmount,
-        });
+        const newActual = Number(item.actual_amount) + spendAmount;
+        const planned = Number(item.planned_amount);
+        const patch: { actual_amount: number; overspend_count?: number } = {
+          actual_amount: newActual,
+        };
+        if (planned > 0 && newActual > planned) {
+          patch.overspend_count = Number(item.overspend_count ?? 0) + 1;
+        }
+        await db.budget_items.update(input.budgetItemId, patch);
       }
 
       // Optimistically persist the learned rule to IDB so the *next* SMS from
@@ -329,17 +353,30 @@ export function useCategorizeSms() {
       // Device-visible near-limit alert (native; no-op on web).
       const nl = await nearLimitFromIDB(input.budgetItemId);
       if (nl) {
-        const left = formatCurrency(nl.remaining, {
-          code: txn.currency ?? "INR",
-          maximumFractionDigits: 0,
-        });
-        await notifyLocal({
-          title: nl.over ? "🙀 Budget blown!" : "😼 Budget's getting thin",
-          body: nl.over
-            ? `${nl.name} is over budget. The cat's out of the bag.`
-            : `${nl.name} at ${Math.round(nl.ratio * 100)}% — only ${left} left. Tread softly.`,
-          url: "/budget",
-        });
+        if (nl.over) {
+          const fresh = await db.budget_items.get(input.budgetItemId);
+          const count = Number(fresh?.overspend_count ?? 1) || 1;
+          const msg = pickOverspendMessage({
+            itemName: nl.name,
+            tier: tierForCount(count),
+            count,
+            over: Math.max(0, Number(fresh?.actual_amount ?? 0) - Number(fresh?.planned_amount ?? 0)),
+            currency: txn.currency ?? "INR",
+            firstOverspend: count === 1,
+            seed: `${input.budgetItemId}:${count}`,
+          });
+          await notifyLocal({ title: msg.title, body: msg.body, url: "/budget" });
+        } else {
+          const left = formatCurrency(nl.remaining, {
+            code: txn.currency ?? "INR",
+            maximumFractionDigits: 0,
+          });
+          await notifyLocal({
+            title: "😼 Budget's getting thin",
+            body: `${nl.name} at ${Math.round(nl.ratio * 100)}% — only ${left} left. Tread softly.`,
+            url: "/budget",
+          });
+        }
       }
 
       await enqueue({
@@ -478,6 +515,34 @@ export function useReportSmsMistake() {
       return { ok: true };
     },
     onSuccess: () => invalidateSmsCaches(qc),
+  });
+}
+
+/**
+ * Unblock an SMS template: optimistically delete the blocklist IDB row and
+ * enqueue a server DELETE. Unblocking lets future SMS of this template be
+ * tracked again — it does NOT restore already-removed transactions. Invalidates
+ * SMS_TX_KEY too so a freshly-tracked ingest surfaces in the pending list.
+ */
+export function useUnblockSms() {
+  const qc = useQueryClient();
+  const enqueue = useEnqueue();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const db = getDB();
+      await db.sms_blocklist.delete(id);
+      await enqueue({
+        table: "sms_blocklist",
+        operation: "DELETE",
+        recordId: id,
+        payload: { id },
+      });
+      return { ok: true };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SMS_BLOCKLIST_KEY });
+      qc.invalidateQueries({ queryKey: SMS_TX_KEY });
+    },
   });
 }
 
@@ -638,6 +703,7 @@ export async function writeManualTransaction(
     direction: "debit",
     occurred_at: now,
     dedupe_key: dedupeKey,
+    app_source: null,
     status: "categorized",
     matched_rule_id: null,
     budget_item_id: input.budgetItemId,

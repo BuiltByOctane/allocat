@@ -196,6 +196,17 @@ body {
 }
 
 /* ===== Material Symbols ===== */
+/* Self-hosted so the glyph font is available at first paint — no async CDN
+   swap and no reshape race in the native WebView, which intermittently left
+   ligature names ("expand_more") rendered as plain text. Works offline. */
+@font-face {
+  font-family: 'Material Symbols Outlined';
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: block;
+  src: url('/fonts/material-symbols-outlined.woff2') format('woff2-variations');
+}
+
 .material-symbols-outlined {
   font-family: 'Material Symbols Outlined', sans-serif;
   font-weight: normal;
@@ -254,13 +265,39 @@ input[type="date"] {
    fallback); stays 0 on web/SSR so layout is unchanged. */
 :root { --keyboard-inset: 0px; }
 
+/* Stable full viewport height, in px — immune to soft-keyboard resize. Set at
+   runtime by components/pwa/KeyboardInset.tsx from the FULL window height,
+   captured on mount (before any keyboard) and only refreshed on genuine
+   orientation/resize events (never while a keyboard is open). Unset on
+   web/SSR, where the `100dvh` fallback below applies. This is the
+   belt-and-suspenders against a WebView that lets `dvh` shrink (and stay
+   shrunk) when the keyboard toggles. */
+
 /* Uniform 3/4-screen height for all content bottom sheets — FIXED, never
-   shrinks. vh first as a WebView fallback; dvh override for modern browsers.
-   With Keyboard resize:"none" (capacitor.config.ts) the WebView viewport stays
-   full-screen when the keyboard opens, so dvh is stable and this stays a true
-   3/4. The keyboard never resizes the sheet; it only slides up (see DrawerContent
-   `bottom`), so the height can never collapse to half. */
-.sheet-3q { height: 75vh; height: 75dvh; max-height: 75dvh; }
+   shrinks. `--app-vh` (a stable px height set by KeyboardInset.tsx) is used
+   when available, falling back to `dvh` on web/SSR. With Keyboard resize:"none"
+   + windowSoftInputMode="adjustNothing", the WebView viewport stays full-screen
+   when the keyboard opens, so the height stays a true 3/4 across keyboard
+   open/close. The keyboard never resizes the sheet; it only slides up (see
+   DrawerContent `bottom`). The `- var(--keyboard-inset)` term is a safety cap so
+   a sheet can never extend behind an open keyboard. vh first as a legacy
+   WebView fallback. */
+.sheet-3q {
+  /* Tall content sheet whose TOP edge stays fixed at the 90% line — a constant
+     10% gap at the top whether or not the keyboard is open. Height is based on
+     the STABLE --app-vh (set once by KeyboardInset, immune to keyboard resize),
+     so it can never get stuck small after the keyboard closes.
+       top edge = bottom + height = keyboard + (0.9*appvh - keyboard) = 0.9*appvh
+     Keyboard closed (inset 0): a 90% sheet at the bottom. Keyboard open: the
+     bottom lifts to sit on the keyboard and the sheet shrinks by exactly the
+     keyboard height, so the top never moves and never reaches the screen top,
+     while the action buttons at the sheet's bottom float just above the keyboard.
+     Falls back to 100dvh on web/SSR. */
+  height: calc(var(--app-vh, 100dvh) * 0.9 - var(--keyboard-inset, 0px));
+  max-height: calc(var(--app-vh, 100dvh) * 0.9 - var(--keyboard-inset, 0px));
+  bottom: var(--keyboard-inset, 0px);
+  transition: bottom 0.2s ease, height 0.2s ease;
+}
 
 /* Safe-area padding utilities (notch / home-indicator). Used across bottom
    sheets and footers; defined here because the project has no tailwind config. */

@@ -229,6 +229,7 @@ function CategoryDetailContent({
         // Added directly to a budget (not from a template item) → no durable id.
         template_id: null,
         template_item_id: null,
+        overspend_count: 0,
         created_at: now,
         updated_at: now,
       });
@@ -647,7 +648,7 @@ function CategoryDetailContent({
                         color: categoryColor,
                       }}
                     >
-                      {item.emoji || item.name.charAt(0).toUpperCase() || "•"}
+                      {item.emoji || icon || item.name.charAt(0).toUpperCase() || "•"}
                     </div>
                   )}
                   <div className="flex-1 min-w-0">

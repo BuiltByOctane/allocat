@@ -190,6 +190,7 @@ export function SmsBridge() {
             itemName: it?.name ?? "",
             itemPlanned: it ? Number(it.planned_amount) : 0,
             itemActual: it ? Number(it.actual_amount) : 0,
+            itemOverspendCount: it ? Number(it.overspend_count ?? 0) : 0,
           };
         });
         // Top budget items (most-used) for the notification quick-allocate buttons.

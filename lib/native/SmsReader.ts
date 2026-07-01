@@ -11,7 +11,12 @@ export interface SmsReaderPlugin {
   requestPermission(): Promise<{ granted: boolean }>;
   /** Returns and clears messages captured while the app was closed. */
   getQueued(): Promise<{ messages: CapturedSms[] }>;
-  /** Push current merchant rules so the native receiver can match when closed. */
+  /**
+   * Push current merchant rules so the native receiver can match when closed.
+   * Rule shape: { match_type, pattern, category, allocated, spent, itemName,
+   * itemPlanned, itemActual, itemOverspendCount: number (durable per-item
+   * overspend base count; native adds its ephemeral tally on top) }
+   */
   setRules(options: { rules: string }): Promise<void>;
   /** Push template keys (JSON string[]) the user reported as mistakes; the
    * closed-app receiver skips any SMS whose template key is in this set. */

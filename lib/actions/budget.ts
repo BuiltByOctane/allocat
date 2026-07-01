@@ -10,6 +10,8 @@ import {
 } from "@/lib/utils/budget-completion";
 import { addAssetEntry } from "@/lib/actions/asset-history";
 import { makePayment, reverseDebtPayment } from "@/lib/actions/debt";
+import { resolveOverspendMessage } from "@/lib/actions/notify-messages";
+import { tierForCount } from "@/lib/notify/messages";
 
 type LinkType = "asset" | "debt";
 
@@ -814,11 +816,14 @@ export async function quickLogSpend(
   const previousCompleted = Boolean(item.is_completed);
   const newActual = previousActual + Number(amount);
   const planned = Number(item.planned_amount);
+  const previousOverspendCount = Number(item.overspend_count ?? 0);
+  const isOver = planned > 0 && newActual > planned;
+  const nextOverspendCount = isOver ? previousOverspendCount + 1 : previousOverspendCount;
   const nextCompleted = computeAutoCompletion(planned, newActual, previousCompleted);
 
   const { data: updatedItem, error } = await supabase
     .from("budget_items")
-    .update({ actual_amount: newActual, is_completed: nextCompleted })
+    .update({ actual_amount: newActual, is_completed: nextCompleted, overspend_count: nextOverspendCount })
     .eq("id", itemId)
     .eq("user_id", user.id)
     .select()
@@ -858,7 +863,7 @@ export async function quickLogSpend(
       // Revert the item update so client retry doesn't double-spend
       await supabase
         .from("budget_items")
-        .update({ actual_amount: previousActual, is_completed: previousCompleted })
+        .update({ actual_amount: previousActual, is_completed: previousCompleted, overspend_count: previousOverspendCount })
         .eq("id", itemId)
         .eq("user_id", user.id);
       throw cascadeErr;
@@ -910,12 +915,23 @@ export async function quickLogSpend(
     });
   }
 
-  // Push: budget overrun alert (fire on transition only).
-  if (planned > 0 && previousActual <= planned && newActual > planned) {
+  // Push: escalating budget-overspend alert (fires on EVERY overspend, not just the
+  // crossing). AI-generated when available, static pool fallback on any failure.
+  if (isOver) {
     const over = newActual - planned;
+    const tier = tierForCount(nextOverspendCount);
+    const msg = await resolveOverspendMessage({
+      itemName: updatedItem.name,
+      tier,
+      count: nextOverspendCount,
+      over,
+      currency: cur,
+      firstOverspend: nextOverspendCount === 1,
+      seed: `${itemId}:${nextOverspendCount}`,
+    });
     notifyUser(user.id, {
-      title: "Budget overrun",
-      body: `${updatedItem.name} is ${fmt(over, cur)} over plan.`,
+      title: msg.title,
+      body: msg.body,
       tag: `overrun-${itemId}`,
       url: "/budget",
     }).catch(() => {});
@@ -959,6 +975,7 @@ export async function reverseSpend(
   const previousCompleted = Boolean(item.is_completed);
   const newActual = Math.max(0, previousActual - Number(amount));
   const planned = Number(item.planned_amount);
+  // overspend_count intentionally NOT decremented on reversal (counts the event, resets monthly).
   // Reopen when actual drops below planned ("this spend didn't happen").
   const nextCompleted = planned > 0 ? newActual >= planned : previousCompleted;
 

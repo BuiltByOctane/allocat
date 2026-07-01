@@ -3,13 +3,17 @@
 import { useState } from "react";
 import { Drawer } from "vaul";
 import { hasNumericText, formatCurrency } from "@/lib/number-format";
+import { AppSourceBadge } from "@/components/sms/AppSourceBadge";
 import type { SmsTransactionRow } from "@/lib/db";
 
 export interface AllocatePickerItem {
   id: string;
   itemName: string;
   categoryName: string;
+  /** Category icon (fallback glyph). */
   icon?: string | null;
+  /** Item's own display emoji (preferred glyph). */
+  emoji?: string | null;
   /** Planned + actual for the "<amount> left" hint (optional). */
   planned?: number;
   actual?: number;
@@ -125,8 +129,11 @@ export function AllocateSheet({
                     placeholder={amountLabel}
                     className="figure min-w-0 flex-1 bg-transparent text-[26px] font-bold text-foreground focus:outline-none"
                   />
-                  <span className="truncate text-[13px] font-bold text-foreground shrink-0">
-                    {merchant}
+                  <span className="flex items-center gap-1.5 shrink-0">
+                    <AppSourceBadge source={txn?.app_source} />
+                    <span className="truncate text-[13px] font-bold text-foreground">
+                      {merchant}
+                    </span>
                   </span>
                 </div>
                 {!amountValid && (
@@ -188,9 +195,9 @@ export function AllocateSheet({
                             }`}
                           >
                             <div className="flex items-center gap-3 min-w-0">
-                              {it.icon && (
+                              {(it.emoji || it.icon) && (
                                 <span className="text-lg leading-none shrink-0">
-                                  {it.icon}
+                                  {it.emoji || it.icon}
                                 </span>
                               )}
                               <div className="min-w-0">

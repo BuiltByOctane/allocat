@@ -583,42 +583,48 @@ export function ItemDetailSheet({
 
               {/* Transactions — per-item activity history */}
               {!isNew && item ? (
-                <ItemTransactionList itemId={item.id} />
+                <ItemTransactionList
+                  itemId={item.id}
+                  itemEmoji={emoji ?? item.emoji ?? null}
+                  categoryIcon={category.icon}
+                />
               ) : null}
 
-              {/* Actions */}
-              <div className="flex gap-3 pt-1">
-                {isNew ? (
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="flex-1 h-[48px] rounded-pill bg-muted text-foreground text-sm font-semibold active:scale-[0.98] transition-all"
-                  >
-                    Cancel
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleDelete}
-                    className={`flex-1 h-[48px] rounded-pill text-sm font-bold active:scale-[0.98] transition-all ${
-                      confirmDelete
-                        ? "bg-[var(--neg-dim)] text-neg"
-                        : "border border-border bg-card text-neg"
-                    }`}
-                  >
-                    {confirmDelete ? "Confirm delete" : "Delete"}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={isSaving}
-                  className="flex-[2] h-[48px] rounded-pill bg-[var(--pill)] text-[var(--pill-foreground)] text-sm font-bold disabled:opacity-50 active:scale-[0.98] transition-all"
-                >
-                  {isSaving ? "Saving…" : isNew ? "Add Item" : "Save"}
-                </button>
-              </div>
             </div>
+          </div>
+
+          {/* Pinned action footer — OUTSIDE the scroll body (shrink-0) so it
+              stays above the keyboard, matching DebtDetailSheet. */}
+          <div className="shrink-0 flex gap-3 px-6 pt-3 pb-6 border-t border-border/60 bg-card">
+            {isNew ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 h-[48px] rounded-pill bg-muted text-foreground text-sm font-semibold active:scale-[0.98] transition-all"
+              >
+                Cancel
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleDelete}
+                className={`flex-1 h-[48px] rounded-pill text-sm font-bold active:scale-[0.98] transition-all ${
+                  confirmDelete
+                    ? "bg-[var(--neg-dim)] text-neg"
+                    : "border border-border bg-card text-neg"
+                }`}
+              >
+                {confirmDelete ? "Confirm delete" : "Delete"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isSaving}
+              className="flex-[2] h-[48px] rounded-pill bg-[var(--pill)] text-[var(--pill-foreground)] text-sm font-bold disabled:opacity-50 active:scale-[0.98] transition-all"
+            >
+              {isSaving ? "Saving…" : isNew ? "Add Item" : "Save"}
+            </button>
           </div>
         </Drawer.Content>
       </Drawer.Portal>

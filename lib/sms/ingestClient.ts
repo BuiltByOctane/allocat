@@ -14,11 +14,13 @@ import { parseTransactionSms, isOtpOrVerification } from "@/lib/ai/parseSmsTrans
 import { normalizeMerchant, matchMerchantRules, txnDedupeKey, smsTemplateKey } from "@/lib/sms/match";
 import type { MerchantRule } from "@/lib/sms/match";
 import { selectRuleForPeriod, type RuleResolutionContext } from "@/lib/sms/resolveRuleItem";
+import { detectAppSource } from "@/lib/sms/appSource";
 import { randomUUID } from "@/lib/utils/uuid";
 import { notifyLocal } from "@/lib/native/notify";
 import { nearLimitFromIDB, paceFromIDB, ordinal } from "@/lib/sms/nearLimit";
 import { confirmAutoAllocate } from "@/lib/sms/notifPrefs";
 import { formatCurrency } from "@/lib/number-format";
+import { pickOverspendMessage, tierForCount } from "@/lib/notify/messages";
 
 type EnqueueFn = (
   item: Omit<SyncQueueItem, "id" | "retries" | "status" | "createdAt">,
@@ -154,6 +156,11 @@ export async function ingestSmsClient(
 
     const isDebit = true;
     const merchantNormalized = merchant ? normalizeMerchant(merchant) : null;
+    // Derive the originating UPI/payment app from the sender AND body, on-device.
+    // A bank debit SMS rarely names the app in the sender, so we also scan the
+    // body for an explicit app mention or the counterparty's UPI VPA handle. The
+    // sender/body stay local — only this short label (e.g. "gpay") syncs.
+    const appSource = detectAppSource(sender, raw);
 
     // Match learned rules from IDB (holds only the current user's rows), then
     // pick the first that resolves to THIS month's item — a rule keyed to last
@@ -223,6 +230,7 @@ export async function ingestSmsClient(
           label: null,
           source: "sms",
           original_amount: null,
+          app_source: appSource,
           created_at: now,
         });
 
@@ -230,9 +238,15 @@ export async function ingestSmsClient(
         if (autoApplied && resolvedItemId) {
           const item = await db.budget_items.get(resolvedItemId);
           if (item) {
-            await db.budget_items.update(resolvedItemId, {
-              actual_amount: Number(item.actual_amount) + amount,
-            });
+            const newActual = Number(item.actual_amount) + amount;
+            const planned = Number(item.planned_amount);
+            const patch: { actual_amount: number; overspend_count?: number } = {
+              actual_amount: newActual,
+            };
+            if (planned > 0 && newActual > planned) {
+              patch.overspend_count = Number(item.overspend_count ?? 0) + 1;
+            }
+            await db.budget_items.update(resolvedItemId, patch);
           }
         }
         return null; // inserted — continue with enqueue + notify below
@@ -257,6 +271,7 @@ export async function ingestSmsClient(
         occurredAt,
         dedupeKey,
         templateKey,
+        appSource,
       },
     });
 
@@ -272,13 +287,26 @@ export async function ingestSmsClient(
     if (autoApplied && resolvedItemId) {
       const nl = await nearLimitFromIDB(resolvedItemId);
       if (nl) {
-        await notifyLocal({
-          title: nl.over ? "🙀 Budget blown!" : "😼 Budget's getting thin",
-          body: nl.over
-            ? `${nl.name} is over budget. The cat's out of the bag.`
-            : `${nl.name} at ${Math.round(nl.ratio * 100)}% — only ${money(nl.remaining)} left. Tread softly.`,
-          url: "/budget",
-        });
+        if (nl.over) {
+          const fresh = await db.budget_items.get(resolvedItemId);
+          const count = Number(fresh?.overspend_count ?? 1) || 1;
+          const msg = pickOverspendMessage({
+            itemName: nl.name,
+            tier: tierForCount(count),
+            count,
+            over: Math.max(0, Number(fresh?.actual_amount ?? 0) - Number(fresh?.planned_amount ?? 0)),
+            currency: currency ?? "INR",
+            firstOverspend: count === 1,
+            seed: `${resolvedItemId}:${count}`,
+          });
+          await notifyLocal({ title: msg.title, body: msg.body, url: "/budget" });
+        } else {
+          await notifyLocal({
+            title: "😼 Budget's getting thin",
+            body: `${nl.name} at ${Math.round(nl.ratio * 100)}% — only ${money(nl.remaining)} left. Tread softly.`,
+            url: "/budget",
+          });
+        }
       } else {
         const pace = await paceFromIDB(resolvedItemId);
         if (pace) {
@@ -378,9 +406,16 @@ export async function reapplyRulesToPending(deps: {
           });
           const item = await db.budget_items.get(resolvedItemId);
           if (item) {
-            await db.budget_items.update(resolvedItemId, {
-              actual_amount: Number(item.actual_amount) + (row.amount as number),
-            });
+            const amt = row.amount as number;
+            const newActual = Number(item.actual_amount) + amt;
+            const planned = Number(item.planned_amount);
+            const patch: { actual_amount: number; overspend_count?: number } = {
+              actual_amount: newActual,
+            };
+            if (planned > 0 && newActual > planned) {
+              patch.overspend_count = Number(item.overspend_count ?? 0) + 1;
+            }
+            await db.budget_items.update(resolvedItemId, patch);
           }
           return true;
         },

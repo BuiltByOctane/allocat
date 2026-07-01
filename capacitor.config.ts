@@ -46,10 +46,15 @@ const config: CapacitorConfig = {
       iconColor: "#F4A340",
     },
     // resize:"none" keeps the WebView layout viewport full-screen when the soft
-    // keyboard opens, so 100dvh/75dvh never shrink (and never get stuck at the
-    // shrunken value after the keyboard hides — the root cause of bottom sheets
-    // collapsing to half height). The keyboard overlays the page; the web layer
-    // lifts sheets above it via the --keyboard-inset var (KeyboardInset.tsx).
+    // keyboard opens, so the viewport height never shrinks (and never gets stuck
+    // at the shrunken value after the keyboard hides — the root cause of bottom
+    // sheets collapsing to half height). It MUST be paired with
+    // android:windowSoftInputMode="adjustNothing" on MainActivity
+    // (AndroidManifest.xml): without an explicit mode the Android window itself
+    // resizes on keyboard show regardless of this flag, which is what was still
+    // collapsing the sheets. The keyboard overlays the page; the web layer lifts
+    // sheets above it via --keyboard-inset and sizes them off the stable
+    // --app-vh (both set by KeyboardInset.tsx).
     Keyboard: {
       resize: KeyboardResize.None,
       resizeOnFullScreen: true,

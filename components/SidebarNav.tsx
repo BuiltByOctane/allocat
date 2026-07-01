@@ -3,18 +3,9 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LayoutGrid, Wallet, TrendingUp, CreditCard, User, Smartphone, X, type LucideIcon } from "lucide-react";
+import { Smartphone, X } from "lucide-react";
 import { useHaptic } from "@/lib/hooks/useHaptic";
-
-type NavItem = { label: string; href: string; Icon: LucideIcon };
-
-const navItems: NavItem[] = [
-  { label: "Home", href: "/dashboard", Icon: LayoutGrid },
-  { label: "Budget", href: "/budget", Icon: Wallet },
-  { label: "Net Worth", href: "/net-worth", Icon: TrendingUp },
-  { label: "Debt", href: "/debt", Icon: CreditCard },
-  { label: "Profile", href: "/profile", Icon: User },
-];
+import { navItems } from "@/lib/nav/navItems";
 
 export default function SidebarNav() {
   const pathname = usePathname();

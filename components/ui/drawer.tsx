@@ -38,14 +38,11 @@ const DrawerContent = React.forwardRef<
     <DrawerOverlay />
     <DrawerPrimitive.Content
       ref={ref}
-      className={`fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-sheet bg-card transition-[bottom] duration-200 ${className ?? ""}`}
-      // Lift the sheet by the FULL keyboard height so it sits exactly on top of
-      // the keyboard (position only — never resize). The companion .sheet-3q
-      // height caps at (appvh - keyboard), so a full-inset lift can't push the
-      // top/handle off-screen: bottom(kbd) + height(<= appvh - kbd) <= appvh.
-      // (The previous 25% clamp under-lifted tall keyboards, leaving the sheet's
-      // lower half — and its action buttons — hidden behind the keyboard.)
-      style={{ bottom: "var(--keyboard-inset, 0px)" }}
+      className={`fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-sheet bg-card ${className ?? ""}`}
+      // No keyboard lift/resize here anymore. Sheets that need to survive the
+      // keyboard use the `.sheet-3q` class, which is full-screen and stable via
+      // --app-vh; the keyboard overlays and the focused field scrolls into view
+      // (see components/pwa/KeyboardInset.tsx).
       {...props}
     >
       <div className="mx-auto mt-3 h-1 w-9 rounded-full bg-border" />

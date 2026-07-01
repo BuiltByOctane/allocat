@@ -10,6 +10,7 @@ import { randomUUID } from "@/lib/utils/uuid";
 import { notifyLocal } from "@/lib/native/notify";
 import { SmsReader } from "@/lib/native/SmsReader";
 import { formatCurrency } from "@/lib/number-format";
+import { pickOverspendMessage, tierForCount } from "@/lib/notify/messages";
 import { DASHBOARD_KEY } from "./useDashboard";
 import { NET_WORTH_KEY } from "./useNetWorth";
 
@@ -121,6 +122,7 @@ async function pushRulesToNative(): Promise<void> {
         itemName: it?.name ?? "",
         itemPlanned: it ? Number(it.planned_amount) : 0,
         itemActual: it ? Number(it.actual_amount) : 0,
+        itemOverspendCount: it ? Number(it.overspend_count ?? 0) : 0,
       };
     });
     await SmsReader.setRules({ rules: JSON.stringify(payload) });
@@ -298,9 +300,15 @@ export function useCategorizeSms() {
       });
       const item = await db.budget_items.get(input.budgetItemId);
       if (item && typeof spendAmount === "number") {
-        await db.budget_items.update(input.budgetItemId, {
-          actual_amount: Number(item.actual_amount) + spendAmount,
-        });
+        const newActual = Number(item.actual_amount) + spendAmount;
+        const planned = Number(item.planned_amount);
+        const patch: { actual_amount: number; overspend_count?: number } = {
+          actual_amount: newActual,
+        };
+        if (planned > 0 && newActual > planned) {
+          patch.overspend_count = Number(item.overspend_count ?? 0) + 1;
+        }
+        await db.budget_items.update(input.budgetItemId, patch);
       }
 
       // Optimistically persist the learned rule to IDB so the *next* SMS from
@@ -345,17 +353,30 @@ export function useCategorizeSms() {
       // Device-visible near-limit alert (native; no-op on web).
       const nl = await nearLimitFromIDB(input.budgetItemId);
       if (nl) {
-        const left = formatCurrency(nl.remaining, {
-          code: txn.currency ?? "INR",
-          maximumFractionDigits: 0,
-        });
-        await notifyLocal({
-          title: nl.over ? "🙀 Budget blown!" : "😼 Budget's getting thin",
-          body: nl.over
-            ? `${nl.name} is over budget. The cat's out of the bag.`
-            : `${nl.name} at ${Math.round(nl.ratio * 100)}% — only ${left} left. Tread softly.`,
-          url: "/budget",
-        });
+        if (nl.over) {
+          const fresh = await db.budget_items.get(input.budgetItemId);
+          const count = Number(fresh?.overspend_count ?? 1) || 1;
+          const msg = pickOverspendMessage({
+            itemName: nl.name,
+            tier: tierForCount(count),
+            count,
+            over: Math.max(0, Number(fresh?.actual_amount ?? 0) - Number(fresh?.planned_amount ?? 0)),
+            currency: txn.currency ?? "INR",
+            firstOverspend: count === 1,
+            seed: `${input.budgetItemId}:${count}`,
+          });
+          await notifyLocal({ title: msg.title, body: msg.body, url: "/budget" });
+        } else {
+          const left = formatCurrency(nl.remaining, {
+            code: txn.currency ?? "INR",
+            maximumFractionDigits: 0,
+          });
+          await notifyLocal({
+            title: "😼 Budget's getting thin",
+            body: `${nl.name} at ${Math.round(nl.ratio * 100)}% — only ${left} left. Tread softly.`,
+            url: "/budget",
+          });
+        }
       }
 
       await enqueue({

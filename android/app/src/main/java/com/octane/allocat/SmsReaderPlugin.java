@@ -132,6 +132,7 @@ public class SmsReaderPlugin extends Plugin {
         SmsRules.set(getContext(), call.getString("rules", "[]"));
         // Fresh snapshot reflects all synced spends → reset the closed-session accumulator.
         SmsAccum.clear(getContext());
+        SmsOverspend.clear(getContext());
         call.resolve();
     }
 

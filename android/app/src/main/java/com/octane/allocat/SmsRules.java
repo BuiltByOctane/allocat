@@ -27,6 +27,7 @@ final class SmsRules {
         String itemName = "";
         double itemPlanned = 0;
         double itemActual = 0;
+        int itemOverspendCount = 0;
     }
 
     static void set(Context c, String json) {
@@ -54,6 +55,7 @@ final class SmsRules {
                         m.itemName = o.optString("itemName", "");
                         m.itemPlanned = o.optDouble("itemPlanned", 0);
                         m.itemActual = o.optDouble("itemActual", 0);
+                        m.itemOverspendCount = o.optInt("itemOverspendCount", 0);
                         return m;
                     }
                 }

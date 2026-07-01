@@ -107,9 +107,20 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
                     url = "/budget";
                     progressPct = Math.min(100, (int) Math.round(used / total * 100));
                     if (used >= total) {
-                        notifTitle = "🙀 Budget blown!";
-                        notifBody = name + " is over by ₹" + Math.round(used - total)
-                            + ". The cat's out of the bag.";
+                        if (itemNear) {
+                            // Item overspend: escalating, per-item tally (durable base from the
+                            // snapshot + ephemeral closed-app pending + this spend).
+                            int count = mr.itemOverspendCount + SmsOverspend.get(context, mr.itemName) + 1;
+                            SmsOverspend.add(context, mr.itemName, 1);
+                            String[] m = SmsMessages.pick(count, mr.itemName, "₹" + Math.round(used - total));
+                            notifTitle = m[0];
+                            notifBody = m[1];
+                        } else {
+                            // Category overspend: no per-category counter, keep single-tier static.
+                            notifTitle = "🙀 Budget blown!";
+                            notifBody = name + " is over by ₹" + Math.round(used - total)
+                                + ". The cat's out of the bag.";
+                        }
                     } else {
                         notifTitle = "😼 Budget's getting thin";
                         notifBody = name + " at " + Math.round(used / total * 100)

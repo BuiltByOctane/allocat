@@ -16,6 +16,7 @@ import {
   OVERSPEND_SYSTEM,
   buildOverspendPrompt,
   parseOverspendResponse,
+  toDerived,
   type OverspendDerived,
 } from "@/lib/ai/overspendPrompt";
 import {
@@ -24,18 +25,10 @@ import {
   type NotifMessage,
 } from "@/lib/notify/messages";
 
+// NOTE: this file is "use server" — every EXPORT must be an async function.
+// Pure helpers (toDerived) live in lib/ai/overspendPrompt.ts; module-local
+// non-exported helpers (timeout, constants) are allowed.
 const AI_TIMEOUT_MS = 1500;
-
-export function toDerived(ctx: OverspendCtx): OverspendDerived {
-  return {
-    itemName: ctx.itemName,
-    amount: ctx.over, // the triggering over amount; callers may override
-    count: ctx.count,
-    tier: ctx.tier,
-    currency: ctx.currency,
-    over: ctx.over,
-  };
-}
 
 function timeout<T>(ms: number): Promise<T> {
   return new Promise((_, reject) =>

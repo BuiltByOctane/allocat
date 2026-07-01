@@ -43,7 +43,8 @@ describe("resolveOverspendMessage", () => {
 
 describe("generateOverspendMessage", () => {
   it("returns null on AI failure (never throws)", async () => {
-    const { generateOverspendMessage, toDerived } = await import("./notify-messages");
+    const { generateOverspendMessage } = await import("./notify-messages");
+    const { toDerived } = await import("@/lib/ai/overspendPrompt");
     const { openRouterChat } = await import("@/lib/server/openrouter");
     await expect(generateOverspendMessage(toDerived(ctx))).resolves.toBeNull();
     expect(openRouterChat).toHaveBeenCalled();

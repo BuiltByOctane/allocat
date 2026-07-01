@@ -1,3 +1,5 @@
+import type { OverspendCtx } from "@/lib/notify/messages";
+
 const TITLE_MAX = 40;
 const BODY_MAX = 120;
 
@@ -22,6 +24,22 @@ export const OVERSPEND_SYSTEM = [
   `title <= ${TITLE_MAX} chars, body <= ${BODY_MAX} chars.`,
   "Do NOT use the em-dash character. Use periods or commas instead.",
 ].join(" ");
+
+/**
+ * Map the notification context to the privacy-safe derived fields the AI prompt uses.
+ * Lives here (a pure module) rather than in the "use server" action file, where every
+ * export must be an async function.
+ */
+export function toDerived(ctx: OverspendCtx): OverspendDerived {
+  return {
+    itemName: ctx.itemName,
+    amount: ctx.over, // the triggering over amount
+    count: ctx.count,
+    tier: ctx.tier,
+    currency: ctx.currency,
+    over: ctx.over,
+  };
+}
 
 export function buildOverspendPrompt(d: OverspendDerived): string {
   return JSON.stringify({

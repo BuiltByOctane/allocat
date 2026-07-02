@@ -74,7 +74,10 @@ export default function CategoryDetailPage({ categoryId }: { categoryId: string 
   }
 
   if (!data) return null;
-  return <CategoryDetailContent categoryId={categoryId} data={data} />;
+  // Use the durable row id (data.id), not the URL param — the param may be a
+  // temp_ id that SyncEngine has already swapped, and all of the content's
+  // mutations + item foreign keys must target the real, persisted category.
+  return <CategoryDetailContent categoryId={data.id} data={data} />;
 }
 
 interface CategoryData {

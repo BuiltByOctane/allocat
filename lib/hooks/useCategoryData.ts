@@ -6,11 +6,25 @@ export function categoryDataKey(categoryId: string) {
   return ["categoryData", categoryId] as const;
 }
 
-async function getCategoryFromIDB(categoryId: string) {
+export async function getCategoryFromIDB(categoryId: string) {
   const db = getDB();
 
-  const category = await db.categories.get(categoryId);
+  let category = await db.categories.get(categoryId);
+  if (!category) {
+    // The URL may still point at an optimistic `temp_` id that SyncEngine has
+    // since swapped for the real server id — `replaceIDBRecord` deletes the temp
+    // row, leaving only an `id_map` entry. Resolve it so the detail page keeps
+    // working right after creation (and after a reload). Mirrors useSmsTransactions.
+    const mapped = await db.id_map.get(categoryId);
+    if (mapped?.realId) {
+      category = await db.categories.get(mapped.realId);
+    }
+  }
   if (!category) return null;
+
+  // Use the durable row id for all downstream lookups — `categoryId` may be a
+  // now-dead temp id, but item FKs and sibling categories key off the real id.
+  const realCategoryId = category.id;
 
   const budget = await db.budgets.get(category.budget_id);
   if (!budget) return null;
@@ -22,12 +36,12 @@ async function getCategoryFromIDB(categoryId: string) {
 
   const items = await db.budget_items
     .where("category_id")
-    .equals(categoryId)
+    .equals(realCategoryId)
     .toArray();
 
   // Use category.allocated_amount directly — no need to sum other categories' items
   const otherAllocated = allCategories.reduce((s, cat) => {
-    if (cat.id === categoryId) return s;
+    if (cat.id === realCategoryId) return s;
     return s + Number(cat.allocated_amount);
   }, 0);
 

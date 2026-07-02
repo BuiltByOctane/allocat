@@ -129,7 +129,7 @@ public class SmsReaderPlugin extends Plugin {
     /** JS pushes the current merchant rules so the receiver can match when closed. */
     @PluginMethod
     public void setRules(PluginCall call) {
-        SmsRules.set(getContext(), call.getString("rules", "[]"));
+        SmsRules.set(getContext(), call.getString("rules", "[]"), call.getString("period", ""));
         // Fresh snapshot reflects all synced spends → reset the closed-session accumulator.
         SmsAccum.clear(getContext());
         SmsOverspend.clear(getContext());

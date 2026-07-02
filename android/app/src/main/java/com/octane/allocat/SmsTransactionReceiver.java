@@ -76,7 +76,11 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
             log("queued + emitted (app open)");
         } else if (parsed.amount != null) {
             // App closed → notify natively right now.
-            SmsRules.Match mr = SmsRules.match(context, parsed.merchantNormalized);
+            String period = new java.text.SimpleDateFormat("yyyy-MM", java.util.Locale.US)
+                .format(new java.util.Date(ts));
+            SmsRules.Match mr = SmsRules.isFresh(context, period)
+                ? SmsRules.match(context, parsed.merchantNormalized)
+                : null;
             String merch = parsed.merchant != null ? parsed.merchant : "someone";
             String amt = "₹" + Math.round(parsed.amount);
             String notifTitle = "";

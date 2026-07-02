@@ -12,13 +12,13 @@ import {
   usePendingSms,
   useCategorizeSms,
   useIgnoreSms,
-  useCategorizedSms,
   useDeleteSms,
   useUnallocateSms,
   useRecategorizeSms,
   useReportSmsMistake,
   useBlocklist,
   useUnblockSms,
+  useMonthAllocations,
 } from "@/lib/hooks/useSmsTransactions";
 import { AppSourceBadge } from "@/components/sms/AppSourceBadge";
 import { useAddBudgetItem } from "@/lib/hooks/useBudget";
@@ -130,7 +130,6 @@ export default function SmsPage() {
   const qc = useQueryClient();
   useTourDriver("sms");
   const { data: pending, isLoading } = usePendingSms();
-  const { data: categorized } = useCategorizedSms();
   const categorize = useCategorizeSms();
   const ignore = useIgnoreSms();
   const del = useDeleteSms();
@@ -153,6 +152,26 @@ export default function SmsPage() {
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
+
+  // Allocated tab's month scope — defaults to the current month. A txn belongs
+  // to the month of the BUDGET ITEM it's allocated to (authoritative), not its
+  // occurred_at; see lib/sms/monthAllocations.ts for the grouping rules.
+  const [allocPeriod, setAllocPeriod] = useState(() => ({ month, year }));
+  const isCurrentAllocPeriod =
+    allocPeriod.month === month && allocPeriod.year === year;
+  const { data: allocGroups } = useMonthAllocations(
+    allocPeriod.month,
+    allocPeriod.year,
+  );
+  function shiftAllocPeriod(delta: number) {
+    setAllocPeriod((p) => {
+      let m = p.month + delta;
+      let y = p.year;
+      if (m < 1) { m = 12; y -= 1; }
+      if (m > 12) { m = 1; y += 1; }
+      return { month: m, year: y };
+    });
+  }
 
   // Allocate sheet (existing-item flow) + create flow (new item).
   const [allocateTxn, setAllocateTxn] = useState<SmsTransactionRow | null>(null);
@@ -389,25 +408,9 @@ export default function SmsPage() {
     ? pickerData?.metaById[createFlow.categoryId]
     : undefined;
 
-  // Resolve an allocated txn's budget item for the Allocated tab grouping.
-  const itemMetaById = new Map(
-    (pickerData?.items ?? []).map((i) => [i.id, i] as const),
-  );
-  // Group categorized txns by budget item, preserving newest-first order.
-  const allocatedGroups: Array<{ itemId: string; item?: AllocatePickerItem; txns: SmsTransactionRow[] }> = [];
-  {
-    const index = new Map<string, number>();
-    for (const t of categorized ?? []) {
-      const key = t.budget_item_id ?? "__unknown__";
-      let pos = index.get(key);
-      if (pos === undefined) {
-        pos = allocatedGroups.length;
-        index.set(key, pos);
-        allocatedGroups.push({ itemId: key, item: itemMetaById.get(key), txns: [] });
-      }
-      allocatedGroups[pos].txns.push(t);
-    }
-  }
+  const allocCount = allocGroups?.reduce((s, g) => s + g.txns.length, 0);
+  const allocMonthLabel = new Date(allocPeriod.year, allocPeriod.month - 1, 1)
+    .toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 
   return (
     <div className="px-4 pt-4 flex flex-col gap-3">
@@ -428,7 +431,7 @@ export default function SmsPage() {
             {tab === "pending"
               ? `Awaiting allocation${!isLoading && pending ? ` · ${pending.length}` : ""}`
               : tab === "allocated"
-                ? `Allocated${categorized ? ` · ${categorized.length}` : ""}`
+                ? `Allocated${allocCount !== undefined ? ` · ${allocCount}` : ""}`
                 : `Blocked SMS types${blocklist ? ` · ${blocklist.length}` : ""}`}
           </p>
         </div>
@@ -536,24 +539,50 @@ export default function SmsPage() {
       {/* Allocated list — grouped by budget item, with edit/unallocate/delete */}
       {tab === "allocated" && (
         <section className="flex flex-col gap-3">
-          {!categorized || categorized.length === 0 ? (
+          {/* Month picker — a txn belongs to the month of the budget item it's
+              allocated to, not its own SMS timestamp. Forward nav caps at the
+              current month; past months are browsable but read-mostly. */}
+          <div className="flex items-center justify-between rounded-card border border-border bg-card px-2 py-2">
+            <button
+              onClick={() => shiftAllocPeriod(-1)}
+              aria-label="Previous month"
+              className="flex size-9 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground transition-colors active:scale-95"
+            >
+              <span className="material-symbols-outlined text-[20px]">chevron_left</span>
+            </button>
+            <span className="font-display text-[15px] font-bold text-foreground">
+              {allocMonthLabel}
+            </span>
+            <button
+              onClick={() => shiftAllocPeriod(1)}
+              aria-label="Next month"
+              disabled={isCurrentAllocPeriod}
+              className="flex size-9 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground transition-colors active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
+            >
+              <span className="material-symbols-outlined text-[20px]">chevron_right</span>
+            </button>
+          </div>
+
+          {!allocGroups || allocGroups.length === 0 ? (
             <Card className="flex flex-col items-center gap-2 py-12 text-center">
               <div className="flex size-12 items-center justify-center rounded-[14px] bg-tile text-muted-foreground mb-1">
                 <Inbox size={24} strokeWidth={1.7} />
               </div>
-              <p className="text-sm font-bold text-foreground">No allocated spends yet</p>
+              <p className="text-sm font-bold text-foreground">
+                {isCurrentAllocPeriod ? "No allocated spends yet" : "Nothing allocated this month"}
+              </p>
               <p className="text-xs text-muted-foreground">
                 Once you allocate a transaction from the Pending tab, it shows here
                 with the budget category it landed in.
               </p>
             </Card>
           ) : (
-            allocatedGroups.map((group) => (
+            allocGroups.map((group) => (
               <Card key={group.itemId} className="flex flex-col gap-2.5">
                 <div className="flex items-center gap-2 border-b border-border pb-2">
-                  {(group.item?.emoji || group.item?.icon) && (
+                  {group.item?.icon && (
                     <span className="text-lg leading-none shrink-0">
-                      {group.item?.emoji || group.item?.icon}
+                      {group.item.icon}
                     </span>
                   )}
                   <div className="min-w-0">
@@ -585,15 +614,22 @@ export default function SmsPage() {
                         <span className="figure text-[17px] text-foreground shrink-0">{money(txn)}</span>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => {
-                            setAllocError(null);
-                            setReallocTxn(txn);
-                          }}
-                          className="h-8 px-3 rounded-pill border border-border text-xs font-semibold text-foreground active:scale-[0.98] transition-transform"
-                        >
-                          Edit / Move
-                        </button>
+                        {/* Edit/Move is hidden for past months — its picker only
+                            offers current-month targets, so it can't move a txn
+                            correctly here. Unallocate/Delete/Not-a-transaction
+                            still operate on the txn's stored budget_item_id and
+                            stay available. */}
+                        {isCurrentAllocPeriod && (
+                          <button
+                            onClick={() => {
+                              setAllocError(null);
+                              setReallocTxn(txn);
+                            }}
+                            className="h-8 px-3 rounded-pill border border-border text-xs font-semibold text-foreground active:scale-[0.98] transition-transform"
+                          >
+                            Edit / Move
+                          </button>
+                        )}
                         <button
                           onClick={() => unallocate.mutate(txn.id)}
                           className="h-8 px-3 rounded-pill border border-border text-xs font-semibold text-muted-foreground active:scale-[0.98] transition-transform"

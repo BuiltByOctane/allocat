@@ -5,6 +5,7 @@ import { useEnqueue } from "@/lib/hooks/useSync";
 import { ingestSmsClient } from "@/lib/sms/ingestClient";
 import { smsTemplateKey } from "@/lib/sms/match";
 import { nearLimitFromIDB } from "@/lib/sms/nearLimit";
+import { groupAllocationsForMonth, type AllocatedGroup } from "@/lib/sms/monthAllocations";
 import { randomUUID } from "@/lib/utils/uuid";
 import { notifyLocal } from "@/lib/native/notify";
 import { pushSmsMirrorToNative } from "@/lib/sms/nativeMirror";
@@ -20,6 +21,14 @@ export const ALL_TX_KEY = ["transactions", "all"] as const;
 export const ITEM_TX_KEY = ["item-transactions"] as const;
 export function itemTxKey(itemId: string) {
   return ["item-transactions", itemId] as const;
+}
+/**
+ * Extends SMS_CATEGORIZED_KEY so `invalidateQueries({ queryKey: SMS_CATEGORIZED_KEY })`
+ * (the default partial-match behavior) already covers every month's key —
+ * `invalidateSmsCaches` needs no changes to also refresh this.
+ */
+export function monthAllocationsKey(month: number, year: number) {
+  return [...SMS_CATEGORIZED_KEY, month, year] as const;
 }
 
 /** Invalidate every query that an allocate/reverse touches. */
@@ -127,6 +136,46 @@ export async function getBlocklistFromIDB(): Promise<SmsBlocklistRow[]> {
   return rows.sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
+/**
+ * Categorized SMS transactions grouped by budget item, scoped to a single
+ * month's budget — for the Allocated tab's month picker. A txn belongs to the
+ * month of the BUDGET ITEM it's allocated to (authoritative), not its own
+ * occurred_at; orphans (unlinked or deleted-item txns) fall back to their own
+ * timestamp. See `lib/sms/monthAllocations.ts` for the grouping rules.
+ */
+export async function getMonthAllocationsFromIDB(
+  month: number,
+  year: number,
+): Promise<AllocatedGroup<SmsTransactionRow>[]> {
+  const db = getDB();
+
+  const budget = await db.budgets
+    .where("[month+year]")
+    .equals([month, year])
+    .first();
+
+  const monthCats = budget
+    ? await db.categories.where("budget_id").equals(budget.id).toArray()
+    : [];
+  const monthItems = monthCats.length
+    ? await db.budget_items
+        .where("category_id")
+        .anyOf(monthCats.map((c) => c.id))
+        .toArray()
+    : [];
+  const allItemIds = new Set(await db.budget_items.toCollection().primaryKeys());
+  const txns = await getCategorizedSmsFromIDB();
+
+  return groupAllocationsForMonth({
+    txns,
+    monthItems,
+    monthCats,
+    allItemIds,
+    month,
+    year,
+  });
+}
+
 // ─── Query ────────────────────────────────────────────────────────────────────
 
 export function usePendingSms() {
@@ -165,6 +214,14 @@ export function useBlocklist() {
   return useQuery({
     queryKey: SMS_BLOCKLIST_KEY,
     queryFn: () => getBlocklistFromIDB(),
+  });
+}
+
+/** Categorized transactions grouped by item, scoped to a single month's budget. */
+export function useMonthAllocations(month: number, year: number) {
+  return useQuery({
+    queryKey: monthAllocationsKey(month, year),
+    queryFn: () => getMonthAllocationsFromIDB(month, year),
   });
 }
 

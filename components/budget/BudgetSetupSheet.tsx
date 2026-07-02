@@ -17,6 +17,7 @@ import {
   updateBudgetTemplate,
   deleteBudgetTemplate,
   type SaveTemplateInput,
+  type StampTemplateInput,
 } from "@/lib/actions/budget-templates";
 
 type LinkType = "asset" | "debt";
@@ -36,11 +37,28 @@ interface SetupItem {
    * budget item; falls back to the row's `id` for brand-new manual items.
    */
   templateItemId?: string | null;
+  /**
+   * The real `budget_items.id` this form item was prefilled from (may be a
+   * `temp_` id if the budget was built offline). Only set by `prefillFromBudget`
+   * ("Save as template" from an existing budget) — undefined for the template
+   * picker / manual-create paths, where there is no underlying row yet.
+   */
+  sourceItemId?: string | null;
 }
 
 /** Stable durable id for an item — its template id, or its row id as a fallback. */
 function itemTemplateItemId(i: SetupItem): string {
   return i.templateItemId ?? i.id;
+}
+
+/**
+ * Durable id used when capturing an EXISTING budget as a template
+ * ("Save as template"). Must resolve to the same id that gets stamped onto the
+ * underlying `budget_items` row (`sourceItemId`), not the ephemeral form-item
+ * id, so the saved template's `templateItemId`s line up with what's stamped.
+ */
+function saveTemplateDurableId(i: SetupItem): string {
+  return i.templateItemId ?? i.sourceItemId ?? i.id;
 }
 
 interface SetupCategory {
@@ -195,6 +213,9 @@ export function BudgetSetupSheet({
           linkId: it.link_id,
           // Preserve durable identity when capturing a budget as a template.
           templateItemId: it.template_item_id ?? null,
+          // The real budget_items row this form item mirrors — needed to stamp
+          // template identity back onto it (and its merchant rules) on save.
+          sourceItemId: it.id,
         })),
       });
     }
@@ -222,6 +243,12 @@ export function BudgetSetupSheet({
 
   // Build the template payload from current step-2 state (shared by all modes).
   function buildTemplatePayload(): SaveTemplateInput {
+    // "saveTemplate" captures an EXISTING budget — its durable id must match
+    // what gets stamped onto the underlying budget_items row (sourceItemId),
+    // not the ephemeral form-item id. Every other mode has no pre-existing row
+    // to align with, so the row's own id is a fine fallback.
+    const durableId =
+      internalMode === "saveTemplate" ? saveTemplateDurableId : itemTemplateItemId;
     return {
       name: templateName.trim(),
       description: selectedTemplate?.description?.trim() || "Custom template",
@@ -237,7 +264,7 @@ export function BudgetSetupSheet({
           name: i.name,
           // Same durable id the budget items are stamped with — keeps a saved
           // template aligned with the budget it was captured from.
-          templateItemId: itemTemplateItemId(i),
+          templateItemId: durableId(i),
           plannedAmount: i.allocation > 0 ? i.allocation : undefined,
           linkType: i.linkType ?? undefined,
           linkId: i.linkId ?? undefined,
@@ -408,6 +435,76 @@ export function BudgetSetupSheet({
       try {
         if (internalMode === "editTemplate" && editingTemplateId) {
           await updateBudgetTemplate(editingTemplateId, buildTemplatePayload());
+        } else if (internalMode === "saveTemplate") {
+          // Saving an EXISTING budget as a template: mint the template id here
+          // (rather than letting the server assign one) so the same id can be
+          // stamped onto this month's budget/items/rules below — that's what
+          // lets next month's budget (created from this template) resolve the
+          // rules learned this month. See lib/sms/resolveRuleItem.ts.
+          const templateId = crypto.randomUUID();
+          await saveBudgetTemplate(buildTemplatePayload(), templateId);
+
+          const db = getDB();
+          const stampItems: StampTemplateInput["items"] = [];
+
+          // Single rw transaction: stamp the budget, each source item, and any
+          // merchant rules learned against those items, all-or-nothing.
+          await db.transaction(
+            "rw",
+            [db.budgets, db.budget_items, db.merchant_rules],
+            async () => {
+              await db.budgets.update(budgetId, { template_id: templateId });
+
+              const allRules = await db.merchant_rules.toArray();
+              for (const cat of categories) {
+                for (const item of cat.items) {
+                  if (!item.sourceItemId) continue;
+                  const durableId = saveTemplateDurableId(item);
+                  stampItems.push({
+                    itemId: item.sourceItemId,
+                    templateItemId: durableId,
+                  });
+                  await db.budget_items.update(item.sourceItemId, {
+                    template_id: templateId,
+                    template_item_id: durableId,
+                  });
+                  for (const rule of allRules) {
+                    if (rule.budget_item_id !== item.sourceItemId) continue;
+                    await db.merchant_rules.update(rule.id, {
+                      template_id: templateId,
+                      template_item_id: durableId,
+                    });
+                  }
+                }
+              }
+            }
+          );
+
+          if (stampItems.length > 0) {
+            await enqueue({
+              table: "budgets",
+              operation: "STAMP_TEMPLATE",
+              recordId: budgetId,
+              payload: {
+                budgetId,
+                templateId,
+                items: stampItems,
+              },
+            });
+          }
+
+          // Re-apply any SMS that landed pending before the rules carried
+          // durable identity — best-effort, same pattern as the create path.
+          try {
+            await reapplyRulesToPending({ enqueue });
+          } catch {
+            /* best-effort — manual allocation still available */
+          }
+          try {
+            await pushSmsMirrorToNative();
+          } catch {
+            /* best-effort */
+          }
         } else {
           await saveBudgetTemplate(buildTemplatePayload());
         }

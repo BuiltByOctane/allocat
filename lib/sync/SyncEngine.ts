@@ -14,6 +14,10 @@ import {
   quickLogSpend,
   setupBudgetFromTemplate,
 } from "@/lib/actions/budget";
+import {
+  stampBudgetTemplateIdentity,
+  type StampTemplateInput,
+} from "@/lib/actions/budget-templates";
 
 type BulkSetupCategoryInput = {
   tempId: string;
@@ -133,6 +137,8 @@ export class SyncEngine {
           p.categories as BulkSetupCategoryInput[],
           (p.templateId as string | null) ?? null
         ),
+      STAMP_TEMPLATE: (p) =>
+        stampBudgetTemplateIdentity(p as unknown as StampTemplateInput),
     },
     categories: {
       INSERT: (p) =>

@@ -127,6 +127,54 @@ export async function updateBudgetTemplate(
   return rowToTemplate(data);
 }
 
+export interface StampTemplateInput {
+  budgetId: string;
+  templateId: string;
+  items: Array<{ itemId: string; templateItemId: string }>;
+}
+
+/**
+ * Backfill durable template identity onto a budget, its items, and the
+ * merchant rules learned against those items — used when "Save as template"
+ * captures an EXISTING budget (`saveTemplate` mode has no other budget
+ * writes). Without this, the month's items/rules stay legacy and next month's
+ * budget built from this template can't resolve them. See
+ * lib/sms/resolveRuleItem.ts and components/budget/BudgetSetupSheet.tsx.
+ *
+ * Pure UPDATEs scoped to the current user — idempotent by construction, safe
+ * to retry from the sync queue.
+ */
+export async function stampBudgetTemplateIdentity(
+  input: StampTemplateInput
+): Promise<void> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const { error: budgetError } = await supabase
+    .from("budgets")
+    .update({ template_id: input.templateId })
+    .eq("id", input.budgetId)
+    .eq("user_id", user.id);
+  if (budgetError) throw new Error(budgetError.message);
+
+  for (const { itemId, templateItemId } of input.items) {
+    const { error: itemError } = await supabase
+      .from("budget_items")
+      .update({ template_id: input.templateId, template_item_id: templateItemId })
+      .eq("id", itemId)
+      .eq("user_id", user.id);
+    if (itemError) throw new Error(itemError.message);
+
+    const { error: ruleError } = await supabase
+      .from("merchant_rules")
+      .update({ template_id: input.templateId, template_item_id: templateItemId })
+      .eq("budget_item_id", itemId)
+      .eq("user_id", user.id);
+    if (ruleError) throw new Error(ruleError.message);
+  }
+}
+
 /** Delete a custom template by id (RLS scopes to the owner). */
 export async function deleteBudgetTemplate(id: string): Promise<void> {
   const supabase = await createClient();

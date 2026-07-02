@@ -103,6 +103,10 @@ Keep `SmsParser.java` regex in sync with `lib/ai/parseSmsTransaction.ts` (both a
 
 **Serwist** (`@serwist/next`), not next-pwa. The service worker source is `app/sw.ts`, configured via `serwist.config.js`; `npm run build` runs `serwist build` after `next build`. Disabled in dev. Manifest at `app/manifest.ts` (includes `share_target` and shortcuts). Install prompt UI in `components/ui/InstallPrompt.tsx`.
 
+## Git commit messages
+
+Keep commit messages short and precise. No detailed explanations/bodies needed for routine commits — a single concise subject line is enough.
+
 ## Path alias
 
 `@/*` → repo root (see `tsconfig.json`). Use it for all internal imports.

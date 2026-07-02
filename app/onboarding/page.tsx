@@ -20,7 +20,9 @@ export default function OnboardingFlow() {
   // Warm the dashboard route + data so landing after onboarding has no skeleton.
   useEffect(() => {
     router.prefetch("/dashboard");
-    qc.prefetchQuery({
+    // fetchQuery (not prefetchQuery): with staleTime:Infinity prefetchQuery skips
+    // an already-cached key, serving a stale snapshot (see lib/db/prefetch.ts).
+    qc.fetchQuery({
       queryKey: DASHBOARD_KEY,
       queryFn: () => getDashboardData(),
     }).catch(() => {});

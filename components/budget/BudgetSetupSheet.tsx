@@ -20,11 +20,28 @@ import {
   type StampTemplateInput,
 } from "@/lib/actions/budget-templates";
 import { saveTemplateDurableId } from "@/lib/budget/saveTemplateDurableId";
+import {
+  diffTemplateToBudget,
+  type BudgetSideCategory,
+  type TemplateSideCategory,
+} from "@/lib/budget/diffTemplateToBudget";
 
 type LinkType = "asset" | "debt";
 
-/** "create" builds a new budget; "saveTemplate"/"editTemplate" only persist a template. */
-type SetupMode = "create" | "saveTemplate" | "editTemplate";
+/**
+ * "create" builds a new budget. Template-only modes persist a template:
+ * "saveTemplate" captures the current budget as a NEW template; "editTemplate"
+ * edits a template from the picker; "updateTemplate" pushes the current budget
+ * into an existing template (budget → template); "editLinkedTemplate" edits the
+ * linked template AND syncs the edits back into the current budget (template →
+ * budget).
+ */
+type SetupMode =
+  | "create"
+  | "saveTemplate"
+  | "editTemplate"
+  | "editLinkedTemplate"
+  | "updateTemplate";
 
 interface SetupItem {
   id: string;
@@ -68,8 +85,15 @@ interface BudgetSetupSheetProps {
   existingTotalBudget: number;
   onDone: () => void;
   /** "create" (default) = pick/build a budget. "saveTemplate" = capture the
-   *  current budget as a template only (no budget writes). */
-  mode?: "create" | "saveTemplate";
+   *  current budget as a template only. "updateTemplate" / "editLinkedTemplate"
+   *  operate on the already-linked template (see SetupMode). */
+  mode?:
+    | "create"
+    | "saveTemplate"
+    | "editLinkedTemplate"
+    | "updateTemplate";
+  /** The budget's resolved linked template — required for edit/update modes. */
+  linkedTemplate?: BudgetTemplate | null;
 }
 
 function templateToCategories(
@@ -120,6 +144,7 @@ export function BudgetSetupSheet({
   existingTotalBudget,
   onDone,
   mode = "create",
+  linkedTemplate = null,
 }: BudgetSetupSheetProps) {
   const haptic = useHaptic();
   const fmt = useFormatCurrency();
@@ -132,14 +157,16 @@ export function BudgetSetupSheet({
   const [selectedTemplate, setSelectedTemplate] =
     useState<BudgetTemplate | null>(null);
 
-  const isTemplateMode =
-    internalMode === "saveTemplate" || internalMode === "editTemplate";
+  // Every mode except "create" persists a template (no budget-build path).
+  const isTemplateMode = internalMode !== "create";
 
   // Step 2 state
   const [totalBudget, setTotalBudget] = useState("");
   const [categories, setCategories] = useState<SetupCategory[]>([]);
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   const [templateName, setTemplateName] = useState("");
+  // "editLinkedTemplate" only: also overwrite this month's amounts (default off).
+  const [overwriteAmounts, setOverwriteAmounts] = useState(false);
   const [newCatName, setNewCatName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState("");
@@ -153,10 +180,25 @@ export function BudgetSetupSheet({
     setError("");
     setEditingTemplateId(null);
     setSelectedTemplate(null);
+    setOverwriteAmounts(false);
     setInternalMode(mode);
 
     if (mode === "saveTemplate") {
       void prefillFromBudget();
+      return;
+    }
+
+    // Push the current budget INTO an existing template (budget → template).
+    if (mode === "updateTemplate" && linkedTemplate) {
+      setEditingTemplateId(linkedTemplate.id);
+      setSelectedTemplate(linkedTemplate);
+      void prefillFromBudget(linkedTemplate.name);
+      return;
+    }
+
+    // Edit the linked template from its own body; save syncs template → budget.
+    if (mode === "editLinkedTemplate" && linkedTemplate) {
+      enterEditTemplate(linkedTemplate, "editLinkedTemplate");
       return;
     }
 
@@ -174,11 +216,11 @@ export function BudgetSetupSheet({
     };
     // prefillFromBudget reads stable refs (budgetId); excluded intentionally.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, mode]);
+  }, [isOpen, mode, linkedTemplate]);
 
   // Build step-2 state from the current budget's IDB rows (categories + items,
   // preserving each item's asset/debt link).
-  async function prefillFromBudget() {
+  async function prefillFromBudget(presetName = "") {
     const db = getDB();
     const [budget, cats] = await Promise.all([
       db.budgets.get(budgetId),
@@ -213,16 +255,20 @@ export function BudgetSetupSheet({
     setTotalBudget(budget?.total_budget ? String(budget.total_budget) : "");
     setCategories(setupCats);
     setSaveAsTemplate(true);
-    setTemplateName("");
+    setTemplateName(presetName);
     setStep(2);
   }
 
-  // Enter "edit existing template" mode from the step-1 picker.
-  function enterEditTemplate(t: BudgetTemplate) {
+  // Enter an "edit template" mode from the picker (editTemplate) or the budget
+  // header (editLinkedTemplate — also syncs edits back into the current budget).
+  function enterEditTemplate(
+    t: BudgetTemplate,
+    targetMode: "editTemplate" | "editLinkedTemplate" = "editTemplate"
+  ) {
     haptic.selection();
     setSelectedTemplate(t);
     setEditingTemplateId(t.id);
-    setInternalMode("editTemplate");
+    setInternalMode(targetMode);
     const budget = existingTotalBudget > 0 ? existingTotalBudget : 0;
     setTotalBudget(budget > 0 ? String(budget) : "");
     setCategories(templateToCategories(t, budget));
@@ -238,8 +284,13 @@ export function BudgetSetupSheet({
     // what gets stamped onto the underlying budget_items row (sourceItemId),
     // not the ephemeral form-item id. Every other mode has no pre-existing row
     // to align with, so the row's own id is a fine fallback.
+    // saveTemplate / updateTemplate capture an EXISTING budget (prefillFromBudget
+    // gives items a sourceItemId), so align the durable id with what gets stamped
+    // onto those rows. Other modes have no pre-existing row → row id fallback.
     const durableId =
-      internalMode === "saveTemplate" ? saveTemplateDurableId : itemTemplateItemId;
+      internalMode === "saveTemplate" || internalMode === "updateTemplate"
+        ? saveTemplateDurableId
+        : itemTemplateItemId;
     return {
       name: templateName.trim(),
       description: selectedTemplate?.description?.trim() || "Custom template",
@@ -407,6 +458,274 @@ export function BudgetSetupSheet({
     }
   }
 
+  /**
+   * Stamp durable template identity (budget → template capture) onto the current
+   * budget, its source items, and the merchant rules learned against them, then
+   * enqueue the server-side stamp. Used by both "saveTemplate" (new id) and
+   * "updateTemplate" (existing id). The step-2 `categories` come from
+   * prefillFromBudget, so each item carries a real `sourceItemId`.
+   */
+  async function stampBudgetWithTemplate(templateId: string) {
+    const db = getDB();
+    const stampItems: StampTemplateInput["items"] = [];
+
+    await db.transaction(
+      "rw",
+      [db.budgets, db.budget_items, db.merchant_rules],
+      async () => {
+        await db.budgets.update(budgetId, { template_id: templateId });
+
+        const allRules = await db.merchant_rules.toArray();
+        for (const cat of categories) {
+          for (const item of cat.items) {
+            if (!item.sourceItemId) continue;
+            const durableId = saveTemplateDurableId(item);
+            stampItems.push({ itemId: item.sourceItemId, templateItemId: durableId });
+            await db.budget_items.update(item.sourceItemId, {
+              template_id: templateId,
+              template_item_id: durableId,
+            });
+            for (const rule of allRules) {
+              if (rule.budget_item_id !== item.sourceItemId) continue;
+              await db.merchant_rules.update(rule.id, {
+                template_id: templateId,
+                template_item_id: durableId,
+              });
+            }
+          }
+        }
+      }
+    );
+
+    // Always enqueue, even with zero items — the budget's own template_id stamp
+    // must sync regardless of an item breakdown to carry along.
+    await enqueue({
+      table: "budgets",
+      operation: "STAMP_TEMPLATE",
+      recordId: budgetId,
+      payload: { budgetId, templateId, items: stampItems },
+    });
+
+    try {
+      await reapplyRulesToPending({ enqueue });
+    } catch {
+      /* best-effort — manual allocation still available */
+    }
+    try {
+      await pushSmsMirrorToNative();
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  /**
+   * Sync an edited template back into the current month's budget (template →
+   * budget). Adds new categories/items, applies renames, and — per the confirmed
+   * removal rule — keeps+unlinks removed items that have recorded spend while
+   * deleting unspent ones. Amounts are only overwritten when the user opts in.
+   */
+  async function applyTemplateEditsToBudget(templateId: string) {
+    const db = getDB();
+    const now = new Date().toISOString();
+
+    const cats = await db.categories
+      .where("budget_id")
+      .equals(budgetId)
+      .toArray();
+    const budgetSide: BudgetSideCategory[] = await Promise.all(
+      cats.map(async (c) => {
+        const items = await db.budget_items
+          .where("category_id")
+          .equals(c.id)
+          .toArray();
+        return {
+          id: c.id,
+          name: c.name,
+          allocation: c.allocated_amount,
+          items: items.map((it) => ({
+            id: it.id,
+            name: it.name,
+            template_item_id: it.template_item_id ?? null,
+            planned_amount: it.planned_amount,
+            actual_amount: Number(it.actual_amount),
+          })),
+        };
+      })
+    );
+
+    // Template side = the edited step-2 form state (the template body).
+    const templateSide: TemplateSideCategory[] = categories.map((c) => ({
+      name: c.name.trim(),
+      icon: c.icon,
+      allocation: c.allocation,
+      items: c.items
+        .filter((i) => i.name.trim())
+        .map((i) => ({
+          name: i.name.trim(),
+          templateItemId: itemTemplateItemId(i),
+          allocation: i.allocation,
+        })),
+    }));
+
+    const diff = diffTemplateToBudget(budgetSide, templateSide, {
+      overwriteAmounts,
+    });
+
+    // New categories (+ their items), stamped with the template identity.
+    for (const ac of diff.addCategories) {
+      const catTempId = `temp_${crypto.randomUUID()}`;
+      await db.categories.add({
+        id: catTempId,
+        budget_id: budgetId,
+        user_id: "__pending__",
+        name: ac.name,
+        icon: ac.icon,
+        color: null,
+        type: "misc",
+        allocated_amount: ac.allocation,
+        created_at: now,
+        updated_at: now,
+      });
+      await enqueue({
+        table: "categories",
+        operation: "INSERT",
+        recordId: catTempId,
+        tempId: catTempId,
+        payload: {
+          budgetId,
+          name: ac.name,
+          type: "misc",
+          allocated_amount: ac.allocation,
+          icon: ac.icon,
+        },
+      });
+      for (const it of ac.items) {
+        await addTemplateItem(catTempId, it, templateId, now);
+      }
+    }
+
+    // New items under existing categories.
+    for (const ai of diff.addItems) {
+      await addTemplateItem(
+        ai.categoryId,
+        { name: ai.name, templateItemId: ai.templateItemId, allocation: ai.allocation },
+        templateId,
+        now
+      );
+    }
+
+    // Renames / amount overwrites on existing items.
+    for (const up of diff.updateItems) {
+      const updates: Record<string, unknown> = {};
+      if (up.name !== undefined) updates.name = up.name;
+      if (up.planned_amount !== undefined) updates.planned_amount = up.planned_amount;
+      await db.budget_items.update(up.itemId, { ...updates, updated_at: now });
+      await enqueue({
+        table: "budget_items",
+        operation: "UPDATE",
+        recordId: up.itemId,
+        payload: { itemId: up.itemId, updates },
+      });
+    }
+
+    // Category allocation overwrites (only when opted in).
+    for (const uc of diff.updateCategories) {
+      await db.categories.update(uc.categoryId, {
+        allocated_amount: uc.allocated_amount,
+        updated_at: now,
+      });
+      await enqueue({
+        table: "categories",
+        operation: "UPDATE",
+        recordId: uc.categoryId,
+        payload: {
+          categoryId: uc.categoryId,
+          updates: { allocated_amount: uc.allocated_amount },
+        },
+      });
+    }
+
+    // Removed-but-spent items → keep the row, drop the template link.
+    for (const itemId of diff.unlinkItems) {
+      await db.budget_items.update(itemId, {
+        template_id: null,
+        template_item_id: null,
+        updated_at: now,
+      });
+      await enqueue({
+        table: "budget_items",
+        operation: "UPDATE",
+        recordId: itemId,
+        payload: { itemId, updates: { template_id: null, template_item_id: null } },
+      });
+    }
+
+    // Removed + unspent items → delete.
+    for (const itemId of diff.deleteItems) {
+      await db.budget_items.delete(itemId);
+      await enqueue({
+        table: "budget_items",
+        operation: "DELETE",
+        recordId: itemId,
+        payload: { itemId },
+      });
+    }
+
+    try {
+      await reapplyRulesToPending({ enqueue });
+    } catch {
+      /* best-effort */
+    }
+    try {
+      await pushSmsMirrorToNative();
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  /** Optimistically insert a template-stamped budget item + enqueue the INSERT. */
+  async function addTemplateItem(
+    categoryId: string,
+    it: { name: string; templateItemId: string; allocation: number },
+    templateId: string,
+    now: string
+  ) {
+    const db = getDB();
+    const itemTempId = `temp_${crypto.randomUUID()}`;
+    await db.budget_items.add({
+      id: itemTempId,
+      category_id: categoryId,
+      user_id: "__pending__",
+      name: it.name,
+      emoji: null,
+      planned_amount: it.allocation,
+      actual_amount: 0,
+      is_completed: false,
+      notes: null,
+      link_type: null,
+      link_id: null,
+      template_id: templateId,
+      template_item_id: it.templateItemId,
+      overspend_count: 0,
+      created_at: now,
+      updated_at: now,
+    });
+    await enqueue({
+      table: "budget_items",
+      operation: "INSERT",
+      recordId: itemTempId,
+      tempId: itemTempId,
+      payload: {
+        categoryId,
+        name: it.name,
+        planned: it.allocation,
+        link: null,
+        emoji: null,
+        template: { template_id: templateId, template_item_id: it.templateItemId },
+      },
+    });
+  }
+
   async function handleCreate() {
     if (categories.length === 0) {
       setError("Add at least one category to continue.");
@@ -424,79 +743,29 @@ export function BudgetSetupSheet({
       setIsCreating(true);
       setError("");
       try {
-        if (internalMode === "editTemplate" && editingTemplateId) {
+        if (
+          (internalMode === "editTemplate" ||
+            internalMode === "editLinkedTemplate") &&
+          editingTemplateId
+        ) {
           await updateBudgetTemplate(editingTemplateId, buildTemplatePayload());
+          // editLinkedTemplate also syncs the edits back into the live budget.
+          if (internalMode === "editLinkedTemplate") {
+            await applyTemplateEditsToBudget(editingTemplateId);
+          }
+        } else if (internalMode === "updateTemplate" && editingTemplateId) {
+          // Push the current budget into the existing template (budget → template)
+          // and re-stamp so its identity re-anchors. Clears drift.
+          await updateBudgetTemplate(editingTemplateId, buildTemplatePayload());
+          await stampBudgetWithTemplate(editingTemplateId);
         } else if (internalMode === "saveTemplate") {
-          // Saving an EXISTING budget as a template: mint the template id here
-          // (rather than letting the server assign one) so the same id can be
-          // stamped onto this month's budget/items/rules below — that's what
-          // lets next month's budget (created from this template) resolve the
-          // rules learned this month. See lib/sms/resolveRuleItem.ts.
+          // Saving an EXISTING budget as a NEW template: mint the id here so the
+          // same id can be stamped onto this month's budget/items/rules — that's
+          // what lets next month's budget resolve this month's rules. See
+          // lib/sms/resolveRuleItem.ts.
           const templateId = crypto.randomUUID();
           await saveBudgetTemplate(buildTemplatePayload(), templateId);
-
-          const db = getDB();
-          const stampItems: StampTemplateInput["items"] = [];
-
-          // Single rw transaction: stamp the budget, each source item, and any
-          // merchant rules learned against those items, all-or-nothing.
-          await db.transaction(
-            "rw",
-            [db.budgets, db.budget_items, db.merchant_rules],
-            async () => {
-              await db.budgets.update(budgetId, { template_id: templateId });
-
-              const allRules = await db.merchant_rules.toArray();
-              for (const cat of categories) {
-                for (const item of cat.items) {
-                  if (!item.sourceItemId) continue;
-                  const durableId = saveTemplateDurableId(item);
-                  stampItems.push({
-                    itemId: item.sourceItemId,
-                    templateItemId: durableId,
-                  });
-                  await db.budget_items.update(item.sourceItemId, {
-                    template_id: templateId,
-                    template_item_id: durableId,
-                  });
-                  for (const rule of allRules) {
-                    if (rule.budget_item_id !== item.sourceItemId) continue;
-                    await db.merchant_rules.update(rule.id, {
-                      template_id: templateId,
-                      template_item_id: durableId,
-                    });
-                  }
-                }
-              }
-            }
-          );
-
-          // Always enqueue, even with zero items — the budget's own
-          // template_id stamp (written unconditionally above) must sync
-          // regardless of whether there's an item breakdown to carry along.
-          await enqueue({
-            table: "budgets",
-            operation: "STAMP_TEMPLATE",
-            recordId: budgetId,
-            payload: {
-              budgetId,
-              templateId,
-              items: stampItems,
-            },
-          });
-
-          // Re-apply any SMS that landed pending before the rules carried
-          // durable identity — best-effort, same pattern as the create path.
-          try {
-            await reapplyRulesToPending({ enqueue });
-          } catch {
-            /* best-effort — manual allocation still available */
-          }
-          try {
-            await pushSmsMirrorToNative();
-          } catch {
-            /* best-effort */
-          }
+          await stampBudgetWithTemplate(templateId);
         } else {
           await saveBudgetTemplate(buildTemplatePayload());
         }
@@ -831,8 +1100,13 @@ export function BudgetSetupSheet({
                 <button
                   type="button"
                   onClick={() => {
-                    // saveTemplate opens straight at step 2 — back closes.
-                    if (internalMode === "saveTemplate") {
+                    // Modes launched straight into step 2 (from the budget header)
+                    // have no step-1 to return to — back closes the sheet.
+                    if (
+                      internalMode === "saveTemplate" ||
+                      internalMode === "updateTemplate" ||
+                      internalMode === "editLinkedTemplate"
+                    ) {
                       onClose();
                     } else {
                       setInternalMode("create");
@@ -850,9 +1124,12 @@ export function BudgetSetupSheet({
                   <Drawer.Title className="font-display text-[20px] font-bold tracking-[-0.02em] text-foreground">
                     {internalMode === "saveTemplate"
                       ? "Save as template"
-                      : internalMode === "editTemplate"
-                        ? "Edit template"
-                        : (selectedTemplate?.name ?? "Custom Setup")}
+                      : internalMode === "updateTemplate"
+                        ? "Update template"
+                        : internalMode === "editTemplate" ||
+                            internalMode === "editLinkedTemplate"
+                          ? "Edit template"
+                          : (selectedTemplate?.name ?? "Custom Setup")}
                   </Drawer.Title>
                   <p id="setup-description" className="sr-only">
                     Configure your budget categories and allocations
@@ -972,17 +1249,60 @@ export function BudgetSetupSheet({
 
                 {/* Template name / Save-as-template */}
                 {isTemplateMode ? (
-                  <div className="space-y-2">
-                    <label className="t-label text-muted-foreground">
-                      Template name
-                    </label>
-                    <input
-                      type="text"
-                      value={templateName}
-                      onChange={(e) => setTemplateName(e.target.value)}
-                      placeholder="Template name…"
-                      className="w-full rounded-[13px] border border-border bg-card px-4 py-3 text-sm text-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
-                    />
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <label className="t-label text-muted-foreground">
+                        Template name
+                      </label>
+                      <input
+                        type="text"
+                        value={templateName}
+                        onChange={(e) => setTemplateName(e.target.value)}
+                        placeholder="Template name…"
+                        className="w-full rounded-[13px] border border-border bg-card px-4 py-3 text-sm text-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
+                      />
+                    </div>
+
+                    {/* Editing the linked template also updates this month's
+                        budget. Structure syncs always; amounts only on request. */}
+                    {internalMode === "editLinkedTemplate" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          haptic.selection();
+                          setOverwriteAmounts((v) => !v);
+                        }}
+                        className={`flex items-center gap-3 w-full rounded-2xl px-4 py-3 transition-all ${
+                          overwriteAmounts
+                            ? "bg-accent ring-2 ring-[var(--accent-strong)]"
+                            : "bg-tile"
+                        }`}
+                      >
+                        <span
+                          className={`material-symbols-outlined text-xl ${
+                            overwriteAmounts
+                              ? "text-[var(--accent-ink)]"
+                              : "text-muted-foreground"
+                          }`}
+                          style={{
+                            fontVariationSettings: overwriteAmounts
+                              ? "'FILL' 1"
+                              : "'FILL' 0",
+                          }}
+                        >
+                          {overwriteAmounts ? "check_box" : "check_box_outline_blank"}
+                        </span>
+                        <span
+                          className={`text-sm font-semibold text-left ${
+                            overwriteAmounts
+                              ? "text-[var(--accent-ink)]"
+                              : "text-foreground"
+                          }`}
+                        >
+                          Also update this month&rsquo;s amounts
+                        </span>
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -1048,11 +1368,14 @@ export function BudgetSetupSheet({
                     ? internalMode === "create"
                       ? "Creating…"
                       : "Saving…"
-                    : internalMode === "editTemplate"
+                    : internalMode === "editTemplate" ||
+                        internalMode === "editLinkedTemplate"
                       ? "Update template"
-                      : internalMode === "saveTemplate"
-                        ? "Save template"
-                        : "Create Budget"}
+                      : internalMode === "updateTemplate"
+                        ? "Update template"
+                        : internalMode === "saveTemplate"
+                          ? "Save template"
+                          : "Create Budget"}
                 </button>
               </div>
             </div>

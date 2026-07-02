@@ -61,6 +61,7 @@ export const mockBudgetData = {
   month: 4,
   year: 2026,
   totalBudget: 80000,
+  templateId: null,
   categories: [
     {
       id: "mock-cat-1",

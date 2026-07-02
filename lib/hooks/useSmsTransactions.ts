@@ -13,6 +13,7 @@ import { formatCurrency } from "@/lib/number-format";
 import { pickOverspendMessage, tierForCount } from "@/lib/notify/messages";
 import { DASHBOARD_KEY } from "./useDashboard";
 import { NET_WORTH_KEY } from "./useNetWorth";
+import { applyLinkedSpendCascadeIDB } from "@/lib/utils/budget-cascade";
 
 export const SMS_TX_KEY = ["sms-transactions"] as const;
 export const SMS_CATEGORIZED_KEY = ["sms-transactions", "categorized"] as const;
@@ -41,8 +42,10 @@ export function invalidateSmsCaches(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
   qc.invalidateQueries({ queryKey: ["sms-picker"] });
   qc.invalidateQueries({ queryKey: ["categoryData"] });
-  // Asset/debt cascade reversal moves net worth.
+  // Asset/debt cascade (allocate or reverse) moves net worth, goals + debt.
   qc.invalidateQueries({ queryKey: NET_WORTH_KEY });
+  qc.invalidateQueries({ queryKey: ["goals"] });
+  qc.invalidateQueries({ queryKey: ["debt"] });
   // Every SMS mutation funnels through here — re-mirror rules/targets/config
   // to native so a closed-app notification reflects the fresh numbers. No-op
   // on web; the signature guard inside makes redundant calls free.
@@ -300,6 +303,9 @@ export function useCategorizeSms() {
           patch.overspend_count = Number(item.overspend_count ?? 0) + 1;
         }
         await db.budget_items.update(input.budgetItemId, patch);
+        // Mirror the server cascade optimistically: SMS categorize funnels
+        // through quickLogSpend server-side, which moves the linked asset/debt.
+        await applyLinkedSpendCascadeIDB(item, { actual_amount: newActual });
       }
 
       // Optimistically persist the learned rule to IDB so the *next* SMS from

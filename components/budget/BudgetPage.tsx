@@ -9,7 +9,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { useRegisterQuickAction } from "@/lib/providers/QuickActionProvider";
 import QuickSpendInput from "@/components/dashboard/QuickSpendInput";
-import { useAddBudgetCategory, useUpdateBudgetTotal, budgetKey } from "@/lib/hooks/useBudget";
+import {
+  useAddBudgetCategory,
+  useUpdateBudgetTotal,
+  useBudgetTemplateHeader,
+  budgetKey,
+  TEMPLATES_KEY,
+} from "@/lib/hooks/useBudget";
+import type { BudgetTemplate } from "@/lib/budget-templates";
 import { DASHBOARD_KEY } from "@/lib/hooks/useDashboard";
 import { ensureBudgetRow } from "@/lib/actions/budget";
 import { getDB } from "@/lib/db";
@@ -43,6 +50,7 @@ interface BudgetData {
   month: number;
   year: number;
   totalBudget: number;
+  templateId: string | null;
   categories: CategoryData[];
 }
 
@@ -62,7 +70,10 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [isSetupOpen, setIsSetupOpen] = useState(false);
-  const [setupMode, setSetupMode] = useState<"create" | "saveTemplate">("create");
+  const [setupMode, setSetupMode] = useState<
+    "create" | "saveTemplate" | "editLinkedTemplate" | "updateTemplate"
+  >("create");
+  const [setupTemplate, setSetupTemplate] = useState<BudgetTemplate | null>(null);
   const [spendOpen, setSpendOpen] = useState(false);
   // When no budget row exists yet, data.id is "" (a virtual empty budget). The
   // real row is created on the first write; resolvedId holds it for this session
@@ -88,12 +99,35 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
     setIsSetupOpen(true);
   }, [haptic, ensureBudgetId]);
 
-  // Capture the current month's budget as a reusable template (budget already exists).
+  // Capture the current month's budget as a new reusable template.
   const openSaveTemplate = useCallback(() => {
     haptic.light();
+    setSetupTemplate(null);
     setSetupMode("saveTemplate");
     setIsSetupOpen(true);
   }, [haptic]);
+
+  // Edit the linked template (template → budget: also syncs into this month).
+  const openEditTemplate = useCallback(
+    (template: BudgetTemplate) => {
+      haptic.light();
+      setSetupTemplate(template);
+      setSetupMode("editLinkedTemplate");
+      setIsSetupOpen(true);
+    },
+    [haptic]
+  );
+
+  // Push the (drifted) current budget into the existing template (budget → template).
+  const openUpdateTemplate = useCallback(
+    (template: BudgetTemplate) => {
+      haptic.light();
+      setSetupTemplate(template);
+      setSetupMode("updateTemplate");
+      setIsSetupOpen(true);
+    },
+    [haptic]
+  );
 
   // Quick-action dock: log an expense against a budget item (when categories exist).
   const openSpend = useCallback(() => setSpendOpen(true), []);
@@ -248,17 +282,13 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
                 header link low-key so it doesn't compete. ＋New is the accent
                 action only once categories exist. */}
             {data.categories.length > 0 && (
-              <button
-                type="button"
-                onClick={openSaveTemplate}
-                className="flex items-center gap-1 text-[13px] font-bold text-muted-foreground"
-                aria-label="Save current budget as template"
-              >
-                <span className="material-symbols-outlined text-base leading-none">
-                  bookmark_add
-                </span>
-                Template
-              </button>
+              <TemplateControl
+                budgetId={effectiveBudgetId}
+                templateId={data.templateId}
+                onSaveTemplate={openSaveTemplate}
+                onEditTemplate={openEditTemplate}
+                onUpdateTemplate={openUpdateTemplate}
+              />
             )}
             {/* While empty, the empty-state card owns both CTAs — don't duplicate
                 "Add manually" here. ＋New only appears once categories exist. */}
@@ -335,11 +365,14 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
         isOpen={isSetupOpen}
         onClose={() => setIsSetupOpen(false)}
         mode={setupMode}
+        linkedTemplate={setupTemplate}
         budgetId={effectiveBudgetId}
         existingTotalBudget={data.totalBudget}
         onDone={() => {
           qc.invalidateQueries({ queryKey: budgetKey(defaultMonth, defaultYear) });
           qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
+          qc.invalidateQueries({ queryKey: TEMPLATES_KEY });
+          qc.invalidateQueries({ queryKey: ["budgetDriftItems", effectiveBudgetId] });
         }}
       />
 
@@ -435,6 +468,161 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
             </p>
             <div className="overflow-y-auto flex-1 px-6 pt-2 pb-8">
               <QuickSpendInput categories={data.categories} />
+            </div>
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
+    </>
+  );
+}
+
+// ─── State-aware template control (categories header) ─────────────────────────
+
+interface TemplateControlProps {
+  budgetId: string;
+  templateId: string | null;
+  onSaveTemplate: () => void;
+  onEditTemplate: (t: BudgetTemplate) => void;
+  onUpdateTemplate: (t: BudgetTemplate) => void;
+}
+
+function TemplateControl({
+  budgetId,
+  templateId,
+  onSaveTemplate,
+  onEditTemplate,
+  onUpdateTemplate,
+}: TemplateControlProps) {
+  const haptic = useHaptic();
+  const [driftedOpen, setDriftedOpen] = useState(false);
+  const { template, isCustom, isDeleted, drifted, isLoading } =
+    useBudgetTemplateHeader({ budgetId, templateId });
+
+  // Not linked (or the linked custom template was deleted) → offer to save one.
+  if (!templateId || isDeleted) {
+    return (
+      <button
+        type="button"
+        onClick={onSaveTemplate}
+        className="flex items-center gap-1 text-[13px] font-bold text-muted-foreground"
+        aria-label="Save current budget as template"
+      >
+        <span className="material-symbols-outlined text-base leading-none">
+          bookmark_add
+        </span>
+        Template
+      </button>
+    );
+  }
+
+  // Resolving the name/drift — hold a stable placeholder to avoid flicker.
+  if (!template || isLoading) {
+    return (
+      <span className="flex items-center gap-1 text-[13px] font-bold text-muted-foreground opacity-60">
+        <span className="material-symbols-outlined text-base leading-none">
+          bookmark
+        </span>
+        Template
+      </span>
+    );
+  }
+
+  // Linked + clean → name, with an edit affordance for custom templates.
+  if (!drifted) {
+    const chip = (
+      <span className="flex items-center gap-1 text-[13px] font-bold text-foreground max-w-[140px]">
+        <span className="material-symbols-outlined text-base leading-none text-accent-strong">
+          bookmark
+        </span>
+        <span className="truncate">{template.name}</span>
+      </span>
+    );
+    if (!isCustom) return chip;
+    return (
+      <button
+        type="button"
+        onClick={() => onEditTemplate(template)}
+        className="flex items-center gap-1"
+        aria-label={`Edit template ${template.name}`}
+      >
+        {chip}
+        <span className="material-symbols-outlined text-[15px] leading-none text-muted-foreground">
+          edit
+        </span>
+      </button>
+    );
+  }
+
+  // Linked + drifted → tap opens the update / save-as-new choice.
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          haptic.light();
+          setDriftedOpen(true);
+        }}
+        className="flex items-center gap-1 text-[13px] font-bold text-amber-600 dark:text-amber-500 max-w-[160px]"
+        aria-label={`Template ${template.name} modified`}
+      >
+        <span className="material-symbols-outlined text-base leading-none">
+          bookmark
+        </span>
+        <span className="truncate">{template.name}</span>
+        <span className="text-[10px] font-bold uppercase tracking-wide shrink-0">
+          · Edited
+        </span>
+      </button>
+
+      <Drawer.Root open={driftedOpen} onOpenChange={setDriftedOpen}>
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
+          <Drawer.Content
+            aria-describedby="template-drift-description"
+            className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none"
+          >
+            <div className="flex justify-center pt-3 pb-1 shrink-0">
+              <div className="w-9 h-1 bg-border rounded-full" />
+            </div>
+            <div className="px-6 py-4">
+              <Drawer.Title className="font-display text-[20px] font-bold tracking-[-0.02em] text-foreground">
+                Budget changed
+              </Drawer.Title>
+              <p
+                id="template-drift-description"
+                className="mt-1 text-[13px] text-muted-foreground"
+              >
+                This budget no longer matches{" "}
+                <span className="font-semibold text-foreground">
+                  {template.name}
+                </span>
+                . Save the changes to the template or create a new one.
+              </p>
+
+              <div className="mt-5 flex flex-col gap-3 pb-8">
+                {isCustom && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDriftedOpen(false);
+                      onUpdateTemplate(template);
+                    }}
+                    className="w-full h-[48px] rounded-pill bg-[var(--pill)] text-[var(--pill-foreground)] text-sm font-bold active:scale-[0.98] transition-all"
+                  >
+                    Update &ldquo;{template.name}&rdquo;
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDriftedOpen(false);
+                    onSaveTemplate();
+                  }}
+                  className="w-full h-[48px] rounded-pill bg-muted text-foreground text-sm font-semibold active:scale-[0.98] transition-all"
+                >
+                  Save as new template
+                </button>
+              </div>
             </div>
           </Drawer.Content>
         </Drawer.Portal>

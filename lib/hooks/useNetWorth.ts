@@ -193,6 +193,10 @@ export function useUpdateAsset() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: NET_WORTH_KEY });
+      // is_goal/target_amount changes surface on Dashboard + Goals — refresh both.
+      // ["goals"] used as a literal to avoid a useGoals↔useNetWorth import cycle.
+      qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
+      qc.invalidateQueries({ queryKey: ["goals"] });
     },
   });
 }
@@ -214,6 +218,9 @@ export function useUpdateAssetIcon() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: NET_WORTH_KEY });
+      // A goal-asset's icon also shows on Dashboard + Goals.
+      qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
+      qc.invalidateQueries({ queryKey: ["goals"] });
     },
   });
 }

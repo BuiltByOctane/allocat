@@ -9,6 +9,7 @@ import { useHaptic } from "@/lib/hooks/useHaptic";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { getDB } from "@/lib/db";
 import { reapplyRulesToPending } from "@/lib/sms/ingestClient";
+import { pushSmsMirrorToNative } from "@/lib/sms/nativeMirror";
 import { PREDEFINED_TEMPLATES, type BudgetTemplate } from "@/lib/budget-templates";
 import {
   getBudgetTemplates,
@@ -581,6 +582,15 @@ export function BudgetSetupSheet({
         } catch {
           /* best-effort — manual allocation still available */
         }
+      }
+
+      // Freshly-created items/rules mean the native mirror is stale the moment
+      // this budget exists — re-push so closed-app notifications use this
+      // month's numbers right away instead of waiting for the next foreground.
+      try {
+        await pushSmsMirrorToNative();
+      } catch {
+        /* best-effort */
       }
 
       haptic.success();

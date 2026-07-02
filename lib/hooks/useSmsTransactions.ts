@@ -1,5 +1,4 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Capacitor } from "@capacitor/core";
 import { getDB } from "@/lib/db";
 import type { SmsTransactionRow, SmsBlocklistRow } from "@/lib/db";
 import { useEnqueue } from "@/lib/hooks/useSync";
@@ -8,7 +7,7 @@ import { smsTemplateKey } from "@/lib/sms/match";
 import { nearLimitFromIDB } from "@/lib/sms/nearLimit";
 import { randomUUID } from "@/lib/utils/uuid";
 import { notifyLocal } from "@/lib/native/notify";
-import { SmsReader } from "@/lib/native/SmsReader";
+import { pushSmsMirrorToNative } from "@/lib/sms/nativeMirror";
 import { formatCurrency } from "@/lib/number-format";
 import { pickOverspendMessage, tierForCount } from "@/lib/notify/messages";
 import { DASHBOARD_KEY } from "./useDashboard";
@@ -35,6 +34,10 @@ export function invalidateSmsCaches(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ["categoryData"] });
   // Asset/debt cascade reversal moves net worth.
   qc.invalidateQueries({ queryKey: NET_WORTH_KEY });
+  // Every SMS mutation funnels through here — re-mirror rules/targets/config
+  // to native so a closed-app notification reflects the fresh numbers. No-op
+  // on web; the signature guard inside makes redundant calls free.
+  void pushSmsMirrorToNative();
 }
 
 /**
@@ -60,75 +63,6 @@ async function resolveTxn(
     }
   }
   return { txnId, txn };
-}
-
-/**
- * Mirror current merchant rules into the native receiver so a *closed-app*
- * notification can auto-sort a known merchant the instant a rule is LEARNED —
- * not only on the next app open. Mirrors the `setRules` payload shape built in
- * components/pwa/SmsBridge.tsx (pushRules). No-op on web (SmsReader is native).
- */
-async function pushRulesToNative(): Promise<void> {
-  if (!Capacitor.isNativePlatform()) return;
-  try {
-    const db = getDB();
-    const [rules, cats, items, budgets] = await Promise.all([
-      db.merchant_rules.toArray(),
-      db.categories.toArray(),
-      db.budget_items.toArray(),
-      db.budgets.toArray(),
-    ]);
-    const name = new Map(cats.map((c) => [c.id, c.name]));
-    const alloc = new Map(cats.map((c) => [c.id, Number(c.allocated_amount)]));
-    const spent = new Map<string, number>();
-    const itemsById = new Map(items.map((it) => [it.id, it]));
-    for (const it of items) {
-      spent.set(
-        it.category_id,
-        (spent.get(it.category_id) ?? 0) + Number(it.actual_amount),
-      );
-    }
-
-    // Display should name THIS month's item, not the stale cache: durable rules
-    // now resolve cross-month. Build a (template_id, template_item_id) → item map
-    // scoped to the current month's budget, preferring it over r.budget_item_id.
-    const now = new Date();
-    const curBudget = budgets.find(
-      (b) => b.month === now.getMonth() + 1 && b.year === now.getFullYear(),
-    );
-    const curCatIds = new Set(
-      cats.filter((c) => c.budget_id === curBudget?.id).map((c) => c.id),
-    );
-    const durableMap = new Map<string, (typeof items)[number]>();
-    for (const it of items) {
-      if (it.template_id && it.template_item_id && curCatIds.has(it.category_id)) {
-        durableMap.set(`${it.template_id}::${it.template_item_id}`, it);
-      }
-    }
-
-    const payload = rules.map((r) => {
-      const it =
-        (r.template_id && r.template_item_id
-          ? durableMap.get(`${r.template_id}::${r.template_item_id}`)
-          : undefined) ??
-        (r.budget_item_id ? itemsById.get(r.budget_item_id) : undefined);
-      const catId = it?.category_id ?? r.category_id ?? "";
-      return {
-        match_type: r.match_type,
-        pattern: r.pattern,
-        category: name.get(catId) ?? "",
-        allocated: alloc.get(catId) ?? 0,
-        spent: spent.get(catId) ?? 0,
-        itemName: it?.name ?? "",
-        itemPlanned: it ? Number(it.planned_amount) : 0,
-        itemActual: it ? Number(it.actual_amount) : 0,
-        itemOverspendCount: it ? Number(it.overspend_count ?? 0) : 0,
-      };
-    });
-    await SmsReader.setRules({ rules: JSON.stringify(payload) });
-  } catch {
-    /* native unavailable — ignore */
-  }
 }
 
 // ─── IDB read helper ──────────────────────────────────────────────────────────
@@ -396,7 +330,7 @@ export function useCategorizeSms() {
       // A rule was just learned → refresh the native receiver's rule set now so
       // a closed-app notification auto-sorts this merchant (instead of "A wild
       // spend appeared!") without waiting for the next app open. No-op on web.
-      if (ruleLearned) await pushRulesToNative();
+      if (ruleLearned) await pushSmsMirrorToNative();
 
       return { ok: true };
     },

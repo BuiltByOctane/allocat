@@ -1,5 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getBudgetView } from "@/lib/actions/budget";
+import { getBudgetTemplates } from "@/lib/actions/budget-templates";
+import { PREDEFINED_TEMPLATES, type BudgetTemplate } from "@/lib/budget-templates";
+import { computeTemplateDrift, type DriftCategory } from "@/lib/budget/templateDrift";
 import { getDB } from "@/lib/db";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import {
@@ -16,6 +19,18 @@ type LinkType = "asset" | "debt";
 
 export function budgetKey(month: number, year: number) {
   return ["budget", month, year] as const;
+}
+
+// Shared cache for the user's custom templates (the setup sheet also fetches
+// these ad-hoc; this key lets the budget header + sheet reconcile after edits).
+export const TEMPLATES_KEY = ["budgetTemplates"] as const;
+
+export function useBudgetTemplates() {
+  return useQuery({
+    queryKey: TEMPLATES_KEY,
+    queryFn: getBudgetTemplates,
+    staleTime: 5 * 60_000,
+  });
 }
 
 // ─── IDB read helper ──────────────────────────────────────────────────────────
@@ -61,6 +76,7 @@ export async function getBudgetFromIDB(month: number, year: number) {
     month: budget.month,
     year: budget.year,
     totalBudget: Number(budget.total_budget),
+    templateId: budget.template_id ?? null,
     categories: enrichedCategories,
   };
 }
@@ -80,9 +96,94 @@ export function useBudgetData(month: number, year: number) {
       // its empty state; a real row is created lazily on the first write action.
       const view = await getBudgetView(month, year);
       if (view) return view;
-      return { id: "", month, year, totalBudget: 0, categories: [] };
+      return { id: "", month, year, totalBudget: 0, templateId: null, categories: [] };
     },
   });
+}
+
+// ─── Template header resolution ───────────────────────────────────────────────
+
+/** Project the current budget's IDB rows down to what drift detection needs. */
+async function getBudgetDriftItems(budgetId: string): Promise<DriftCategory[]> {
+  const db = getDB();
+  const cats = await db.categories.where("budget_id").equals(budgetId).toArray();
+  return Promise.all(
+    cats.map(async (cat) => {
+      const items = await db.budget_items
+        .where("category_id")
+        .equals(cat.id)
+        .toArray();
+      return {
+        name: cat.name,
+        items: items.map((it) => ({
+          name: it.name,
+          template_item_id: it.template_item_id ?? null,
+        })),
+      };
+    })
+  );
+}
+
+export interface BudgetTemplateHeader {
+  template: BudgetTemplate | null;
+  isPredefined: boolean;
+  isCustom: boolean;
+  /** Linked to a custom template that no longer exists (deleted elsewhere). */
+  isDeleted: boolean;
+  linked: boolean;
+  drifted: boolean;
+  isLoading: boolean;
+}
+
+/**
+ * Resolve a budget's linked template (predefined or custom) and whether the
+ * budget has structurally drifted from it. Drives the state-aware template
+ * control on the budget listing header. The drift read is gated to linked
+ * budgets so the hot budgetKey query stays lean.
+ */
+export function useBudgetTemplateHeader({
+  budgetId,
+  templateId,
+}: {
+  budgetId: string;
+  templateId: string | null;
+}): BudgetTemplateHeader {
+  const templatesQuery = useBudgetTemplates();
+
+  const predefined = templateId
+    ? PREDEFINED_TEMPLATES.find((t) => t.id === templateId) ?? null
+    : null;
+  const customMatch =
+    templateId && templatesQuery.data
+      ? templatesQuery.data.find((t) => t.id === templateId) ?? null
+      : null;
+  const template: BudgetTemplate | null = predefined ?? customMatch;
+
+  const driftQuery = useQuery({
+    queryKey: ["budgetDriftItems", budgetId],
+    queryFn: () => getBudgetDriftItems(budgetId),
+    enabled: !!templateId && !!budgetId,
+  });
+
+  const { linked, drifted } = computeTemplateDrift(
+    driftQuery.data ?? [],
+    template
+  );
+
+  const isLoading =
+    templatesQuery.isLoading ||
+    (!!templateId && !!budgetId && driftQuery.isLoading);
+
+  return {
+    template,
+    isPredefined: !!predefined,
+    isCustom: !!customMatch,
+    isDeleted:
+      !!templateId && !predefined && !customMatch && !templatesQuery.isLoading,
+    linked,
+    drifted,
+    isLoading,
+  };
 }
 
 // ─── Mutations ────────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import { getDB } from "@/lib/db";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { computeMonthlyHistory } from "@/lib/utils/netWorthHistory";
 import { computeAutoCompletion } from "@/lib/utils/budget-completion";
+import { applyLinkedSpendCascadeIDB } from "@/lib/utils/budget-cascade";
 import {
   writeManualTransaction,
   ALL_TX_KEY,
@@ -219,6 +220,10 @@ export function useQuickLogSpend() {
           is_completed: nextCompleted,
           updated_at: new Date().toISOString(),
         });
+        // Mirror the server cascade optimistically: a spend on an asset/debt-
+        // linked item moves the linked target now (server quickLogSpend does the
+        // same via addAssetEntry/makePayment). Matches the item-sheet path.
+        await applyLinkedSpendCascadeIDB(item, { actual_amount: newActual });
         await enqueue({
           table: "budget_items",
           operation: "PAYMENT",
@@ -258,6 +263,11 @@ export function useQuickLogSpend() {
       qc.invalidateQueries({ queryKey: ["categoryItems"] });
       // A logged spend bumps the item's actual on the category detail screen too.
       qc.invalidateQueries({ queryKey: ["categoryData"] });
+      // Linked asset/debt targets moved via the cascade above (literals avoid an
+      // import cycle with useNetWorth/useGoals/useDebt).
+      qc.invalidateQueries({ queryKey: ["net-worth"] });
+      qc.invalidateQueries({ queryKey: ["goals"] });
+      qc.invalidateQueries({ queryKey: ["debt"] });
       // The ledger row shows in the history + per-item list.
       qc.invalidateQueries({ queryKey: ALL_TX_KEY });
       qc.invalidateQueries({ queryKey: ITEM_TX_KEY });

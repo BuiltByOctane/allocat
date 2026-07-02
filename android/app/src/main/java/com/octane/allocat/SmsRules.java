@@ -17,6 +17,7 @@ import java.util.regex.Pattern;
 final class SmsRules {
     private static final String PREF = "allocat_rules";
     private static final String KEY = "rules";
+    private static final String KEY_PERIOD = "period";
 
     private SmsRules() {}
 
@@ -30,11 +31,20 @@ final class SmsRules {
         int itemOverspendCount = 0;
     }
 
-    static void set(Context c, String json) {
+    static void set(Context c, String json, String period) {
         c.getSharedPreferences(PREF, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY, json == null ? "[]" : json)
+            .putString(KEY_PERIOD, period == null ? "" : period)
             .apply();
+    }
+
+    /** True only when a non-empty stored period stamp matches expectedPeriod.
+     * A missing/empty stamp (mirror pushed by an old app version) is treated as
+     * stale — safe default is a generic notification, not stale budget math. */
+    static boolean isFresh(Context c, String expectedPeriod) {
+        String stored = c.getSharedPreferences(PREF, Context.MODE_PRIVATE).getString(KEY_PERIOD, "");
+        return stored != null && !stored.isEmpty() && stored.equals(expectedPeriod);
     }
 
     /** Matched rule's category + budget snapshot, or null when nothing matches. */

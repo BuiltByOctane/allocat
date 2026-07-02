@@ -5,8 +5,11 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
+import { Capacitor } from "@capacitor/core";
+import type { PluginListenerHandle } from "@capacitor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { SyncEngine } from "@/lib/sync/SyncEngine";
 import { hydrateAllTables, forceRefreshTable } from "@/lib/db/hydrate";
@@ -43,6 +46,24 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   // Engine is created once — no callbacks yet (registered in the effect below)
   const [engine] = useState(() => new SyncEngine());
 
+  // Re-pull server→IDB when the app returns to the foreground / reconnects.
+  // With `staleTime: Infinity` + `refetchOnWindowFocus: false`, cold-launch
+  // hydration is otherwise the ONLY server pull, so a backgrounded WebView shows
+  // stale data on resume. Throttled so rapid focus flips don't hammer Supabase.
+  const lastRefreshRef = useRef(0);
+  const refreshFromServer = useCallback(async () => {
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    const now = Date.now();
+    if (now - lastRefreshRef.current < 20_000) return;
+    lastRefreshRef.current = now;
+    try {
+      await hydrateAllTables();
+      await qc.refetchQueries({ type: "active" });
+    } catch (err) {
+      console.warn("[SyncProvider] Foreground refresh failed:", err);
+    }
+  }, [qc]);
+
   const handleSynced = useCallback(
     async (item: SyncQueueItem) => {
       // After a successful sync, real IDs replace temp ones in IDB. Invalidate
@@ -54,6 +75,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       ) {
         qc.invalidateQueries({ queryKey: ["budget"] });
         qc.invalidateQueries({ queryKey: ["categoryData"] });
+        // Category-detail item list is keyed separately — a temp→real INSERT swap
+        // must refresh it too or the row lingers under its temp id.
+        qc.invalidateQueries({ queryKey: ["categoryItems"] });
         qc.invalidateQueries({ queryKey: ["dashboard"] });
       }
       if (
@@ -76,6 +100,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         item.table === "budget_items" &&
         (item.operation === "UPDATE" || item.operation === "PAYMENT")
       ) {
+        // UPDATE and PAYMENT (quick-spend) can both cascade server-side into a
+        // linked asset/debt — pull fresh state so IDB matches.
         try {
           await Promise.all([
             forceRefreshTable("assets"),
@@ -207,6 +233,32 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener("offline", handleOffline);
     };
   }, [engine]);
+
+  // Foreground / reconnect / native-resume → re-pull server state into IDB.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refreshFromServer();
+    };
+    const onOnline = () => void refreshFromServer();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
+
+    let resumeHandle: PluginListenerHandle | undefined;
+    if (Capacitor.isNativePlatform()) {
+      void import("@capacitor/app")
+        .then(({ App }) => App.addListener("resume", () => void refreshFromServer()))
+        .then((handle) => {
+          resumeHandle = handle;
+        })
+        .catch(() => {});
+    }
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
+      void resumeHandle?.remove();
+    };
+  }, [refreshFromServer]);
 
   return (
     <SyncContext.Provider value={{ pendingCount, isOnline, isHydrated, engine }}>

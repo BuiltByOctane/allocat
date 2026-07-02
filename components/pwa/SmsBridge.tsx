@@ -10,8 +10,7 @@ import { invalidateSmsCaches } from "@/lib/hooks/useSmsTransactions";
 import { ingestSmsClient, reapplyRulesToPending } from "@/lib/sms/ingestClient";
 import { scheduleWeeklyRecap } from "@/lib/sms/recap";
 import { scheduleDebtReminders } from "@/lib/native/debtReminders";
-import { confirmAutoAllocate, notifSound } from "@/lib/sms/notifPrefs";
-import { nativeSoundKey } from "@/lib/native/notifSounds";
+import { pushSmsMirrorToNative } from "@/lib/sms/nativeMirror";
 import { getDB } from "@/lib/db";
 import { useSyncContext } from "@/lib/providers/SyncProvider";
 
@@ -72,9 +71,9 @@ export function SmsBridge() {
     // The last deep-link we navigated to — so re-checking on visibilitychange
     // doesn't re-assign the same URL mid-interaction.
     let lastConsumedUrl: string | null = null;
-    // Signatures of the last payloads pushed to native, so a foreground that
-    // didn't change anything skips the (4-table read +) native IPC entirely.
-    let lastRulesSig: string | null = null;
+    // Signature of the last blocklist payload pushed to native, so a
+    // foreground that didn't change anything skips the native IPC entirely.
+    // (Rules/targets/config have their own guard inside pushSmsMirrorToNative.)
     let lastBlocklistSig: string | null = null;
     // Debounce the foreground burst: a quick minimize/restore shouldn't restart
     // the whole drain + mirror storm. 0 means "never run yet".
@@ -130,92 +129,6 @@ export function SmsBridge() {
         console.warn("[SmsBridge] drain failed:", err);
       } finally {
         draining = false;
-      }
-    };
-
-    // Mirror merchant rules into native so it can label closed-app notifications.
-    const pushRules = async () => {
-      try {
-        const db = getDB();
-        const [rules, cats, items, budgets] = await Promise.all([
-          db.merchant_rules.toArray(),
-          db.categories.toArray(),
-          db.budget_items.toArray(),
-          db.budgets.toArray(),
-        ]);
-        const name = new Map(cats.map((c) => [c.id, c.name]));
-        const alloc = new Map(cats.map((c) => [c.id, Number(c.allocated_amount)]));
-        const spent = new Map<string, number>();
-        const itemsById = new Map(items.map((it) => [it.id, it]));
-        for (const it of items) {
-          spent.set(
-            it.category_id,
-            (spent.get(it.category_id) ?? 0) + Number(it.actual_amount),
-          );
-        }
-
-        // Resolve durable rules to THIS month's item for correct labels (mirror
-        // of pushRulesToNative in useSmsTransactions). See resolveRuleItem.ts.
-        const now = new Date();
-        const curBudget = budgets.find(
-          (b) => b.month === now.getMonth() + 1 && b.year === now.getFullYear(),
-        );
-        const curCatIds = new Set(
-          cats.filter((c) => c.budget_id === curBudget?.id).map((c) => c.id),
-        );
-        const durableMap = new Map<string, (typeof items)[number]>();
-        for (const it of items) {
-          if (
-            it.template_id &&
-            it.template_item_id &&
-            curCatIds.has(it.category_id)
-          ) {
-            durableMap.set(`${it.template_id}::${it.template_item_id}`, it);
-          }
-        }
-
-        const payload = rules.map((r) => {
-          const it =
-            (r.template_id && r.template_item_id
-              ? durableMap.get(`${r.template_id}::${r.template_item_id}`)
-              : undefined) ??
-            (r.budget_item_id ? itemsById.get(r.budget_item_id) : undefined);
-          const catId = it?.category_id ?? r.category_id ?? "";
-          return {
-            match_type: r.match_type,
-            pattern: r.pattern,
-            category: name.get(catId) ?? "",
-            allocated: alloc.get(catId) ?? 0,
-            spent: spent.get(catId) ?? 0,
-            itemName: it?.name ?? "",
-            itemPlanned: it ? Number(it.planned_amount) : 0,
-            itemActual: it ? Number(it.actual_amount) : 0,
-            itemOverspendCount: it ? Number(it.overspend_count ?? 0) : 0,
-          };
-        });
-        // Top budget items (most-used) for the notification quick-allocate buttons.
-        const targets = [...items]
-          .sort((a, b) => Number(b.actual_amount) - Number(a.actual_amount))
-          .slice(0, 3)
-          .map((it) => ({ id: it.id, name: it.name }));
-        const rulesStr = JSON.stringify(payload);
-        const targetsStr = JSON.stringify(targets);
-        const config = {
-          confirmAutoAllocate: confirmAutoAllocate(),
-          sound: nativeSoundKey(notifSound()),
-        };
-
-        // Skip the native IPC when nothing the receiver cares about changed —
-        // avoids re-serializing + re-crossing the bridge on every foreground.
-        const sig = `${rulesStr}|${targetsStr}|${JSON.stringify(config)}`;
-        if (sig === lastRulesSig) return;
-        lastRulesSig = sig;
-
-        await SmsReader.setRules({ rules: rulesStr });
-        await SmsReader.setQuickTargets({ targets: targetsStr });
-        await SmsReader.setConfig(config);
-      } catch {
-        /* ignore */
       }
     };
 
@@ -300,7 +213,11 @@ export function SmsBridge() {
       // setup/tour modals) stay responsive instead of starving on IDB reads.
       lastForegroundRun = Date.now();
       runIdle(() => {
-        void pushRules();
+        // Mirror merchant rules + quick-allocate targets + config into native
+        // so closed-app notifications can label the matched category. Shared
+        // with useSmsTransactions.ts / BudgetSetupSheet — see
+        // lib/sms/nativeMirror.ts for the builder + its own signature guard.
+        void pushSmsMirrorToNative();
         void pushBlocklist();
         void scheduleWeeklyRecap();
         void scheduleDebtReminders();
@@ -320,7 +237,11 @@ export function SmsBridge() {
       if (nowTs - lastForegroundRun < 2000) return;
       lastForegroundRun = nowTs;
       runIdle(() => {
-        void pushRules();
+        // Mirror merchant rules + quick-allocate targets + config into native
+        // so closed-app notifications can label the matched category. Shared
+        // with useSmsTransactions.ts / BudgetSetupSheet — see
+        // lib/sms/nativeMirror.ts for the builder + its own signature guard.
+        void pushSmsMirrorToNative();
         void pushBlocklist();
         void scheduleWeeklyRecap();
         void scheduleDebtReminders();

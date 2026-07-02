@@ -14,6 +14,10 @@ import {
   quickLogSpend,
   setupBudgetFromTemplate,
 } from "@/lib/actions/budget";
+import {
+  stampBudgetTemplateIdentity,
+  type StampTemplateInput,
+} from "@/lib/actions/budget-templates";
 
 type BulkSetupCategoryInput = {
   tempId: string;
@@ -133,6 +137,8 @@ export class SyncEngine {
           p.categories as BulkSetupCategoryInput[],
           (p.templateId as string | null) ?? null
         ),
+      STAMP_TEMPLATE: (p) =>
+        stampBudgetTemplateIdentity(p as unknown as StampTemplateInput),
     },
     categories: {
       INSERT: (p) =>
@@ -140,7 +146,8 @@ export class SyncEngine {
           p.budgetId as string,
           p.name as string,
           (p.type as "needs" | "wants" | "investments" | "misc") ?? "misc",
-          (p.allocated_amount as number) ?? 0
+          (p.allocated_amount as number) ?? 0,
+          (p.icon as string | null) ?? null
         ),
       UPDATE: (p) => {
         const u = p.updates as Record<string, unknown>;
@@ -166,7 +173,8 @@ export class SyncEngine {
           p.name as string,
           (p.planned as number) ?? 0,
           (p.link as { link_type: "asset" | "debt"; link_id: string } | null) ?? null,
-          (p.emoji as string | null) ?? null
+          (p.emoji as string | null) ?? null,
+          (p.template as { template_id: string | null; template_item_id: string | null } | null) ?? null
         ),
       UPDATE: (p) =>
         updateBudgetItem(
@@ -575,6 +583,46 @@ export class SyncEngine {
     await tbl.put(
       reconcileInsertReplacement(table, local, serverRecord, realId)
     );
+    // A parent INSERT just swapped temp→real. Any sibling IDB rows still holding
+    // the temp id as a foreign key (child rows inserted before the parent synced)
+    // would orphan — reads query by the real id and the child vanishes until its
+    // own INSERT drains. Rewrite those FKs now. Outgoing payloads are handled
+    // separately by resolvePayload; this fixes rows already sitting in IDB.
+    await this.rewriteChildForeignKeys(table, tempId, realId);
+  }
+
+  /** Repoint child IDB foreign keys after a parent temp→real id swap. */
+  private async rewriteChildForeignKeys(
+    table: SyncTable,
+    tempId: string,
+    realId: string
+  ): Promise<void> {
+    const db = getDB();
+    if (table === "categories") {
+      // category_id is indexed on budget_items — use it.
+      const kids = await db.budget_items
+        .where("category_id")
+        .equals(tempId)
+        .toArray();
+      for (const k of kids) {
+        await db.budget_items.update(k.id, { category_id: realId });
+      }
+    } else if (table === "asset_categories") {
+      const kids = await db.assets
+        .filter((a) => a.category_id === tempId)
+        .toArray();
+      for (const k of kids) {
+        await db.assets.update(k.id, { category_id: realId });
+      }
+    } else if (table === "assets" || table === "debts") {
+      // budget_items can link to either an asset or a debt via link_id.
+      const kids = await db.budget_items
+        .filter((i) => i.link_id === tempId)
+        .toArray();
+      for (const k of kids) {
+        await db.budget_items.update(k.id, { link_id: realId });
+      }
+    }
   }
 
   private async rollback(item: SyncQueueItem): Promise<void> {

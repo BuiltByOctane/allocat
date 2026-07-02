@@ -69,6 +69,101 @@ function filterProtected<T extends { id: string }>(
 }
 
 /**
+ * Union two protected-id maps (see buildProtectedIds). We snapshot the in-flight
+ * set BOTH before and after the server fetch and union them: an item that was
+ * pending when the fetch was issued but drained to `done` before the write would
+ * otherwise lose protection and get clobbered by the (now-stale) server row.
+ */
+function unionSet(
+  a: Set<string> | undefined,
+  b: Set<string> | undefined,
+): Set<string> | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  const out = new Set(a);
+  b.forEach((x) => out.add(x));
+  return out;
+}
+
+export function unionProtected(
+  a: Map<string, Set<string>>,
+  b: Map<string, Set<string>>,
+): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>();
+  for (const src of [a, b]) {
+    for (const [table, ids] of src) {
+      const set = out.get(table) ?? new Set<string>();
+      ids.forEach((id) => set.add(id));
+      out.set(table, set);
+    }
+  }
+  return out;
+}
+
+/**
+ * Tables we pull in FULL from the server (no `.limit()`), so their payload is
+ * authoritative and a local row absent from it was deleted server-side / on
+ * another device. Delete-reconciliation is safe ONLY for these — truncated
+ * tables (asset_value_history, net_worth_snapshots, activity_logs,
+ * sms_transactions, feedback) would wrongly delete rows past the limit.
+ */
+const RECONCILE_DELETE_TABLES = new Set([
+  "profiles",
+  "budgets",
+  "categories",
+  "budget_items",
+  "assets",
+  "asset_categories",
+  "debts",
+  "reports",
+  "merchant_rules",
+  "sms_blocklist",
+]);
+
+/**
+ * Propagate server-side deletions into IDB: remove local rows whose id is NOT in
+ * the (full) server payload, skipping rows that are protected (an in-flight local
+ * mutation targets them) or `temp_` (an un-synced local INSERT not yet on the
+ * server). A `null`/`undefined` payload means the fetch failed — leave locals
+ * untouched. An empty array is a valid "all rows deleted" signal.
+ */
+/**
+ * Pure delete-selection: local ids to remove given the authoritative server id
+ * set. Never touches `temp_` ids (un-synced local INSERTs) or protected ids
+ * (in-flight local mutations). Exported for unit testing.
+ */
+export function selectRowsToDelete(
+  localIds: string[],
+  serverIds: Set<string>,
+  protectedIds: Set<string> | undefined,
+): string[] {
+  return localIds.filter(
+    (id) =>
+      typeof id === "string" &&
+      !id.startsWith("temp_") &&
+      !protectedIds?.has(id) &&
+      !serverIds.has(id),
+  );
+}
+
+async function reconcileDeletes(
+  table: string,
+  serverRows: Array<{ id: string }> | null | undefined,
+  protectedIds: Set<string> | undefined,
+): Promise<void> {
+  if (!serverRows) return;
+  const db = getDB();
+  const serverIds = new Set(serverRows.map((r) => r.id));
+  const locals = (await db.table(table).toArray()) as Array<{ id: string }>;
+  const toDelete = selectRowsToDelete(
+    locals.map((r) => r.id),
+    serverIds,
+    protectedIds,
+  );
+  if (toDelete.length) await db.table(table).bulkDelete(toDelete);
+}
+
+/**
  * Fetches ALL tables from Supabase for the current user and bulk-writes into IDB.
  * Called once at app startup (SyncProvider mount). Uses bulkPut for upsert semantics.
  *
@@ -94,6 +189,10 @@ export async function hydrateAllTables(): Promise<void> {
 
   // Store the current user's ID so we can detect account changes on next open
   await db.sync_meta.put({ table: USER_META_KEY, lastSynced: Date.now(), userId });
+
+  // Snapshot in-flight protected ids BEFORE the fetch (union'd with the post-fetch
+  // snapshot below to cover items that drain during the fetch window).
+  const protectedPre = await buildProtectedIds();
 
   // Parallel fetch every table
   const [
@@ -161,7 +260,7 @@ export async function hydrateAllTables(): Promise<void> {
   // blanket server pull (see buildProtectedIds). Rows whose id has an in-flight
   // mutation are filtered OUT of the bulkPut below; the pending sync reconciles
   // them. (temp_ rows aren't in the server payload, so they survive regardless.)
-  const protectedIds = await buildProtectedIds();
+  const protectedIds = unionProtected(protectedPre, await buildProtectedIds());
   const keep = <T extends { id: string }>(
     table: string,
     rows: T[] | null | undefined,
@@ -209,6 +308,37 @@ export async function hydrateAllTables(): Promise<void> {
       ? db.sms_blocklist.bulkPut(keep("sms_blocklist", smsBlocklist))
       : Promise.resolve(),
     feedback?.length ? db.feedback.bulkPut(feedback) : Promise.resolve(),
+  ]);
+
+  // Propagate server-side deletions: for full-pull tables only, drop local rows
+  // no longer present on the server (bulkPut alone can never remove a row).
+  await Promise.all([
+    reconcileDeletes("profiles", profiles, protectedIds.get("profiles")),
+    reconcileDeletes("budgets", budgets, protectedIds.get("budgets")),
+    reconcileDeletes("categories", categories, protectedIds.get("categories")),
+    reconcileDeletes(
+      "budget_items",
+      budgetItems,
+      protectedIds.get("budget_items"),
+    ),
+    reconcileDeletes("assets", assets, protectedIds.get("assets")),
+    reconcileDeletes(
+      "asset_categories",
+      assetCategories,
+      protectedIds.get("asset_categories"),
+    ),
+    reconcileDeletes("debts", debts, protectedIds.get("debts")),
+    reconcileDeletes("reports", reports, protectedIds.get("reports")),
+    reconcileDeletes(
+      "merchant_rules",
+      merchantRules,
+      protectedIds.get("merchant_rules"),
+    ),
+    reconcileDeletes(
+      "sms_blocklist",
+      smsBlocklist,
+      protectedIds.get("sms_blocklist"),
+    ),
   ]);
 
   // Stamp sync_meta for all tables
@@ -262,14 +392,18 @@ export async function refreshTableIfStale(
 
   const db = getDB();
 
+  const protectedPre = (await buildProtectedIds()).get(table);
   const query = supabase.from(table).select("*").eq("user_id", user.id);
 
   const { data } = await query;
+  // Same protection as hydrateAllTables — never overwrite a row with an
+  // in-flight local mutation queued against it (union pre+post fetch snapshots).
+  const protectedIds = unionSet(protectedPre, (await buildProtectedIds()).get(table));
   if (data?.length) {
-    // Same protection as hydrateAllTables — never overwrite a row with an
-    // in-flight local mutation queued against it.
-    const protectedIds = (await buildProtectedIds()).get(table);
     await db.table(table).bulkPut(filterProtected(data, protectedIds));
+  }
+  if (RECONCILE_DELETE_TABLES.has(table)) {
+    await reconcileDeletes(table, data, protectedIds);
   }
   await db.sync_meta.put({ table, lastSynced: Date.now() });
 }
@@ -298,12 +432,16 @@ export async function forceRefreshTable(
   if (!user) return;
 
   const db = getDB();
+  const protectedPre = (await buildProtectedIds()).get(table);
   const { data } = await supabase.from(table).select("*").eq("user_id", user.id);
+  // Same protection as hydrateAllTables — never overwrite a row with an
+  // in-flight local mutation queued against it (union pre+post fetch snapshots).
+  const protectedIds = unionSet(protectedPre, (await buildProtectedIds()).get(table));
   if (data?.length) {
-    // Same protection as hydrateAllTables — never overwrite a row with an
-    // in-flight local mutation queued against it.
-    const protectedIds = (await buildProtectedIds()).get(table);
     await db.table(table).bulkPut(filterProtected(data, protectedIds));
+  }
+  if (RECONCILE_DELETE_TABLES.has(table)) {
+    await reconcileDeletes(table, data, protectedIds);
   }
   await db.sync_meta.put({ table, lastSynced: Date.now() });
 }

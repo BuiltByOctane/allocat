@@ -230,8 +230,16 @@ export function useUpdateGoal() {
       };
     }) => {
       const db = getDB();
-      const idbPatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      const nowIso = new Date().toISOString();
+      const idbPatch: Record<string, unknown> = { updated_at: nowIso };
       const serverUpdates: Record<string, unknown> = {};
+      // A goal "current amount" edit is applied via an asset_value_history
+      // "update_value" entry (like addAssetEntry) — NOT via the assets UPDATE —
+      // so the net-worth trend line actually gets a running_total row. The server
+      // addAssetEntry("update_value") both inserts the row and syncs assets.value.
+      let historyEnqueue:
+        | Parameters<typeof enqueue>[0]
+        | undefined;
 
       if (updates.name !== undefined) {
         idbPatch.name = updates.name;
@@ -242,15 +250,37 @@ export function useUpdateGoal() {
         serverUpdates.target_amount = updates.target_amount;
       }
       if (updates.current_amount !== undefined) {
-        // Goal "current amount" maps to asset value. Bump via add_funds entry
-        // so history stays correct; clamp deltas at zero.
         const asset = await db.assets.get(id);
         if (asset) {
-          const delta = Number(updates.current_amount) - Number(asset.value);
-          idbPatch.value = Number(updates.current_amount);
-          idbPatch.invested_amount =
-            Number(asset.invested_amount ?? asset.value) + delta;
-          serverUpdates.value = Number(updates.current_amount);
+          const newValue = Number(updates.current_amount);
+          idbPatch.value = newValue;
+          const histId = `temp_${crypto.randomUUID()}`;
+          const entryDate = nowIso.split("T")[0];
+          // Optimistic history row so the trend reflects the change immediately.
+          await db.asset_value_history.add({
+            id: histId,
+            asset_id: id,
+            user_id: asset.user_id,
+            entry_type: "update_value",
+            amount: newValue,
+            running_total: newValue,
+            note: null,
+            entry_date: entryDate,
+            created_at: nowIso,
+          });
+          historyEnqueue = {
+            table: "asset_value_history",
+            operation: "INSERT",
+            recordId: histId,
+            tempId: histId,
+            payload: {
+              assetId: id,
+              entryType: "update_value",
+              amount: newValue,
+              note: null,
+              entryDate,
+            },
+          };
         }
       }
 
@@ -261,12 +291,17 @@ export function useUpdateGoal() {
 
       await db.assets.update(id, idbPatch);
 
-      await enqueue({
-        table: "assets",
-        operation: "UPDATE",
-        recordId: id,
-        payload: { id, updates: serverUpdates },
-      });
+      // Only enqueue an assets UPDATE if a non-value field changed — the value
+      // change rides on the history INSERT above (avoids a redundant/no-op op).
+      if (Object.keys(serverUpdates).length > 0) {
+        await enqueue({
+          table: "assets",
+          operation: "UPDATE",
+          recordId: id,
+          payload: { id, updates: serverUpdates },
+        });
+      }
+      if (historyEnqueue) await enqueue(historyEnqueue);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: GOALS_KEY });
@@ -323,6 +358,8 @@ export function useUpdateGoalIcon() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: GOALS_KEY });
       qc.invalidateQueries({ queryKey: NET_WORTH_KEY });
+      // Goal icon renders on the Dashboard too — keep it in sync with siblings.
+      qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
     },
   });
 }

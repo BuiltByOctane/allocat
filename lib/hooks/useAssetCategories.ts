@@ -7,6 +7,7 @@ import {
 } from "@/lib/actions/asset-categories";
 import { getDB } from "@/lib/db";
 import { useEnqueue } from "@/lib/hooks/useSync";
+import { NET_WORTH_KEY } from "@/lib/hooks/useNetWorth";
 
 export const ASSET_CATEGORIES_KEY = ["asset-categories"] as const;
 
@@ -80,6 +81,8 @@ export function useUpdateAssetCategory() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ASSET_CATEGORIES_KEY });
+      // Net Worth groups/labels/icons read asset_categories — refresh them too.
+      qc.invalidateQueries({ queryKey: NET_WORTH_KEY });
     },
   });
 }
@@ -101,6 +104,8 @@ export function useDeleteAssetCategory() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ASSET_CATEGORIES_KEY });
+      // Net Worth groups/labels/icons read asset_categories — refresh them too.
+      qc.invalidateQueries({ queryKey: NET_WORTH_KEY });
     },
   });
 }

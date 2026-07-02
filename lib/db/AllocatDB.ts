@@ -48,7 +48,8 @@ export type SyncOperation =
   | "CATEGORIZE"
   | "IGNORE"
   | "UNALLOCATE"
-  | "RECATEGORIZE";
+  | "RECATEGORIZE"
+  | "STAMP_TEMPLATE";
 
 export type SyncStatus = "pending" | "processing" | "done" | "failed";
 

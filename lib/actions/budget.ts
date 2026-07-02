@@ -231,6 +231,7 @@ async function formatBudget(
     month: budget.month,
     year: budget.year,
     totalBudget: Number(budget.total_budget || 0),
+    templateId: budget.template_id ?? null,
     categories: formattedCategories,
   };
 }
@@ -294,7 +295,8 @@ export async function addBudgetCategory(
   budgetId: string,
   name: string,
   type: Database["public"]["Tables"]["categories"]["Insert"]["type"] = "misc",
-  allocated_amount: number = 0
+  allocated_amount: number = 0,
+  icon: string | null = null
 ) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -311,7 +313,7 @@ export async function addBudgetCategory(
       name: trimmedName,
       type,
       allocated_amount,
-      icon: null,
+      icon: icon ?? null,
     })
     .select()
     .single();
@@ -507,7 +509,8 @@ export async function addBudgetItem(
   name: string,
   planned: number = 0,
   link?: { link_type: LinkType; link_id: string } | null,
-  emoji: string | null = null
+  emoji: string | null = null,
+  template?: { template_id: string | null; template_item_id: string | null } | null
 ) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -537,6 +540,8 @@ export async function addBudgetItem(
       notes: null,
       link_type: link?.link_type ?? null,
       link_id: link?.link_id ?? null,
+      template_id: template?.template_id ?? null,
+      template_item_id: template?.template_item_id ?? null,
     })
     .select()
     .single();
@@ -573,6 +578,10 @@ export async function updateBudgetItem(
     notes?: string | null;
     link_type?: LinkType | null;
     link_id?: string | null;
+    // Nulled when "Edit template" removes a still-spent item — the row stays but
+    // is unlinked from the template so it no longer resolves SMS rules for it.
+    template_id?: string | null;
+    template_item_id?: string | null;
   }
 ) {
   const supabase = await createClient();

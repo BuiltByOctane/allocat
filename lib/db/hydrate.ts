@@ -85,7 +85,7 @@ function unionSet(
   return out;
 }
 
-function unionProtected(
+export function unionProtected(
   a: Map<string, Set<string>>,
   b: Map<string, Set<string>>,
 ): Map<string, Set<string>> {
@@ -127,6 +127,25 @@ const RECONCILE_DELETE_TABLES = new Set([
  * server). A `null`/`undefined` payload means the fetch failed — leave locals
  * untouched. An empty array is a valid "all rows deleted" signal.
  */
+/**
+ * Pure delete-selection: local ids to remove given the authoritative server id
+ * set. Never touches `temp_` ids (un-synced local INSERTs) or protected ids
+ * (in-flight local mutations). Exported for unit testing.
+ */
+export function selectRowsToDelete(
+  localIds: string[],
+  serverIds: Set<string>,
+  protectedIds: Set<string> | undefined,
+): string[] {
+  return localIds.filter(
+    (id) =>
+      typeof id === "string" &&
+      !id.startsWith("temp_") &&
+      !protectedIds?.has(id) &&
+      !serverIds.has(id),
+  );
+}
+
 async function reconcileDeletes(
   table: string,
   serverRows: Array<{ id: string }> | null | undefined,
@@ -136,15 +155,11 @@ async function reconcileDeletes(
   const db = getDB();
   const serverIds = new Set(serverRows.map((r) => r.id));
   const locals = (await db.table(table).toArray()) as Array<{ id: string }>;
-  const toDelete = locals
-    .filter((r) => {
-      const id = r.id;
-      if (typeof id !== "string") return false;
-      if (id.startsWith("temp_")) return false;
-      if (protectedIds?.has(id)) return false;
-      return !serverIds.has(id);
-    })
-    .map((r) => r.id);
+  const toDelete = selectRowsToDelete(
+    locals.map((r) => r.id),
+    serverIds,
+    protectedIds,
+  );
   if (toDelete.length) await db.table(table).bulkDelete(toDelete);
 }
 

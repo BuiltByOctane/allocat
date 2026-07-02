@@ -480,18 +480,19 @@ export function BudgetSetupSheet({
             }
           );
 
-          if (stampItems.length > 0) {
-            await enqueue({
-              table: "budgets",
-              operation: "STAMP_TEMPLATE",
-              recordId: budgetId,
-              payload: {
-                budgetId,
-                templateId,
-                items: stampItems,
-              },
-            });
-          }
+          // Always enqueue, even with zero items — the budget's own
+          // template_id stamp (written unconditionally above) must sync
+          // regardless of whether there's an item breakdown to carry along.
+          await enqueue({
+            table: "budgets",
+            operation: "STAMP_TEMPLATE",
+            recordId: budgetId,
+            payload: {
+              budgetId,
+              templateId,
+              items: stampItems,
+            },
+          });
 
           // Re-apply any SMS that landed pending before the rules carried
           // durable identity — best-effort, same pattern as the create path.

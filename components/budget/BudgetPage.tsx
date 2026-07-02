@@ -612,6 +612,18 @@ function TemplateControl({
                     Update &ldquo;{template.name}&rdquo;
                   </button>
                 )}
+                {isCustom && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDriftedOpen(false);
+                      onEditTemplate(template);
+                    }}
+                    className="w-full h-[48px] rounded-pill bg-tile text-foreground text-sm font-semibold active:scale-[0.98] transition-all"
+                  >
+                    Edit template
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {

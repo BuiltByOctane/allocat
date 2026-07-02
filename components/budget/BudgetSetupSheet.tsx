@@ -1247,6 +1247,11 @@ export function BudgetSetupSheet({
                   </div>
                 </div>
 
+              </div>
+
+              {/* Pinned action footer — save section reachable without
+                  scrolling to the bottom of the category list. */}
+              <div className="shrink-0 border-t border-border bg-card px-5 pt-4 pb-8 space-y-3">
                 {/* Template name / Save-as-template */}
                 {isTemplateMode ? (
                   <div className="space-y-3">

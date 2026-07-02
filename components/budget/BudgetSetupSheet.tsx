@@ -19,6 +19,7 @@ import {
   type SaveTemplateInput,
   type StampTemplateInput,
 } from "@/lib/actions/budget-templates";
+import { saveTemplateDurableId } from "@/lib/budget/saveTemplateDurableId";
 
 type LinkType = "asset" | "debt";
 
@@ -49,16 +50,6 @@ interface SetupItem {
 /** Stable durable id for an item — its template id, or its row id as a fallback. */
 function itemTemplateItemId(i: SetupItem): string {
   return i.templateItemId ?? i.id;
-}
-
-/**
- * Durable id used when capturing an EXISTING budget as a template
- * ("Save as template"). Must resolve to the same id that gets stamped onto the
- * underlying `budget_items` row (`sourceItemId`), not the ephemeral form-item
- * id, so the saved template's `templateItemId`s line up with what's stamped.
- */
-function saveTemplateDurableId(i: SetupItem): string {
-  return i.templateItemId ?? i.sourceItemId ?? i.id;
 }
 
 interface SetupCategory {

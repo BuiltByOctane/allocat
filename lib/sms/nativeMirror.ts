@@ -168,7 +168,9 @@ export async function pushSmsMirrorToNative(): Promise<void> {
 
     // Skip the native IPC when nothing the receiver cares about changed —
     // avoids re-serializing + re-crossing the bridge on every foreground.
-    const sig = `${rulesStr}|${targetsStr}|${JSON.stringify(config)}`;
+    // `period` is included so a month rollover with an otherwise
+    // byte-identical payload still pushes (native's period stamp must move).
+    const sig = `${rulesStr}|${targetsStr}|${JSON.stringify(config)}|${period}`;
     if (sig === lastSig) return;
     lastSig = sig;
 

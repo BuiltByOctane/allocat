@@ -15,6 +15,7 @@ import {
   setupBudgetFromTemplate,
   carryBudgetForward,
   undoCarriedBudget,
+  ensureBudgetRow,
 } from "@/lib/actions/budget";
 import { carryMarkerKey, type CarryPayload } from "@/lib/budget/carry";
 import {
@@ -159,6 +160,8 @@ export class SyncEngine {
   // Maps each (table, operation) to the corresponding server action call
   private dispatch: Dispatcher = {
     budgets: {
+      // Offline-created month row: create-or-get resolves the temp id.
+      INSERT: (p) => ensureBudgetRow(p.month as number, p.year as number),
       UPDATE: (p) =>
         updateBudgetTotal(p.budgetId as string, p.totalAmount as number),
       BULK_SETUP: (p) =>

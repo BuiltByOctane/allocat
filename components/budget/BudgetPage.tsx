@@ -13,6 +13,7 @@ import {
   useAddBudgetCategory,
   useUpdateBudgetTotal,
   useBudgetTemplateHeader,
+  useEnsureBudgetRow,
   budgetKey,
   TEMPLATES_KEY,
 } from "@/lib/hooks/useBudget";
@@ -20,8 +21,6 @@ import type { BudgetTemplate } from "@/lib/budget-templates";
 import { DASHBOARD_KEY } from "@/lib/hooks/useDashboard";
 import { useCarryBudget, useCarrySource } from "@/lib/hooks/useBudgetCarry";
 import { stepPeriod } from "@/lib/budget/carry";
-import { ensureBudgetRow } from "@/lib/actions/budget";
-import { getDB } from "@/lib/db";
 import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { InlineEditableNumber } from "@/components/ui/InlineEditableNumber";
@@ -30,6 +29,7 @@ import { Card } from "@/components/ui/Card";
 import { resolveColor } from "@/lib/theme/dataViz";
 import BudgetEmptyState from "@/components/budget/BudgetEmptyState";
 import { BudgetSetupSheet } from "@/components/budget/BudgetSetupSheet";
+import { BudgetQuickSetup } from "@/components/budget/BudgetQuickSetup";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -106,9 +106,10 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [isSetupOpen, setIsSetupOpen] = useState(false);
+  const [isQuickSetupOpen, setIsQuickSetupOpen] = useState(false);
   const [setupMode, setSetupMode] = useState<
-    "create" | "saveTemplate" | "editLinkedTemplate" | "updateTemplate"
-  >("create");
+    "saveTemplate" | "editTemplate" | "editLinkedTemplate" | "updateTemplate"
+  >("saveTemplate");
   const [setupTemplate, setSetupTemplate] = useState<BudgetTemplate | null>(null);
   const [spendOpen, setSpendOpen] = useState(false);
   // When no budget row exists yet, data.id is "" (a virtual empty budget). The
@@ -117,23 +118,36 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
   const [resolvedId, setResolvedId] = useState("");
   const effectiveBudgetId = data.id || resolvedId;
 
+  const ensureRow = useEnsureBudgetRow();
   const ensureBudgetId = useCallback(async (): Promise<string> => {
     if (data.id) return data.id;
     if (resolvedId) return resolvedId;
-    const row = await ensureBudgetRow(defaultMonth, defaultYear);
-    await getDB().budgets.put(row);
-    setResolvedId(row.id);
+    // Online: real row from the server. Offline: temp_ row + queued INSERT.
+    const id = await ensureRow(defaultMonth, defaultYear);
+    setResolvedId(id);
     qc.invalidateQueries({ queryKey: budgetKey(defaultMonth, defaultYear) });
     qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
-    return row.id;
-  }, [data.id, resolvedId, defaultMonth, defaultYear, qc]);
+    return id;
+  }, [data.id, resolvedId, ensureRow, defaultMonth, defaultYear, qc]);
 
-  const openSetup = useCallback(async () => {
+  // Categories-first quick setup — no server round trip to open, works offline
+  // (the row is ensured lazily on save).
+  const openSetup = useCallback(() => {
     haptic.light();
-    await ensureBudgetId();
-    setSetupMode("create");
-    setIsSetupOpen(true);
-  }, [haptic, ensureBudgetId]);
+    setIsQuickSetupOpen(true);
+  }, [haptic]);
+
+  // Edit a custom template from the quick-setup picker.
+  const openEditTemplateFromPicker = useCallback(
+    (template: BudgetTemplate) => {
+      haptic.light();
+      setIsQuickSetupOpen(false);
+      setSetupTemplate(template);
+      setSetupMode("editTemplate");
+      setIsSetupOpen(true);
+    },
+    [haptic]
+  );
 
   // Capture the current month's budget as a new reusable template.
   const openSaveTemplate = useCallback(() => {
@@ -442,6 +456,19 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
         )}
       </div>
       
+      <BudgetQuickSetup
+        isOpen={isQuickSetupOpen}
+        onClose={() => setIsQuickSetupOpen(false)}
+        budgetId={effectiveBudgetId}
+        month={defaultMonth}
+        year={defaultYear}
+        onEditTemplate={openEditTemplateFromPicker}
+        onDone={() => {
+          qc.invalidateQueries({ queryKey: budgetKey(defaultMonth, defaultYear) });
+          qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
+        }}
+      />
+
       <BudgetSetupSheet
         isOpen={isSetupOpen}
         onClose={() => setIsSetupOpen(false)}

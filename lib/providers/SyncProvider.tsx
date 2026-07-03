@@ -21,6 +21,8 @@ import type { SyncQueueItem } from "@/lib/db";
 // before any mutation hook runs.
 installRandomUUIDPolyfill();
 
+type RefreshTable = Parameters<typeof forceRefreshTable>[0];
+
 interface SyncContextValue {
   pendingCount: number;
   isOnline: boolean;
@@ -64,8 +66,52 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     }
   }, [qc]);
 
+  // Coalesce the heavy post-sync refresh. Under the concurrent drain many items
+  // finish near-together; firing forceRefreshTable + refetch per item would pull
+  // the same tables dozens of times. Accumulate the union of tables/keys and flush
+  // once per ~150ms burst instead. The cheap per-item invalidateQueries stay inline.
+  const forcedTablesRef = useRef<Set<RefreshTable>>(new Set());
+  const refetchKeysRef = useRef<Set<string>>(new Set());
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushForcedRefresh = useCallback(async () => {
+    const tables = [...forcedTablesRef.current];
+    forcedTablesRef.current.clear();
+    const keys = [...refetchKeysRef.current];
+    refetchKeysRef.current.clear();
+    if (tables.length > 0) {
+      try {
+        await Promise.all(tables.map((t) => forceRefreshTable(t)));
+      } catch (err) {
+        console.warn("[SyncEngine] Coalesced post-sync refresh failed:", err);
+      }
+    }
+    for (const k of keys) qc.refetchQueries({ queryKey: [k], type: "all" });
+  }, [qc]);
+
+  const scheduleForcedRefresh = useCallback(
+    (tables: RefreshTable[], keys: string[]) => {
+      tables.forEach((t) => forcedTablesRef.current.add(t));
+      keys.forEach((k) => refetchKeysRef.current.add(k));
+      if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = setTimeout(() => {
+        flushTimerRef.current = null;
+        void flushForcedRefresh();
+      }, 150);
+    },
+    [flushForcedRefresh]
+  );
+
+  // Clear a pending flush on unmount.
+  useEffect(
+    () => () => {
+      if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+    },
+    []
+  );
+
   const handleSynced = useCallback(
-    async (item: SyncQueueItem) => {
+    (item: SyncQueueItem) => {
       // After a successful sync, real IDs replace temp ones in IDB. Invalidate
       // the queries that read affected tables so UI links pick up real IDs.
       if (
@@ -102,57 +148,30 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       ) {
         // UPDATE and PAYMENT (quick-spend) can both cascade server-side into a
         // linked asset/debt — pull fresh state so IDB matches.
-        try {
-          await Promise.all([
-            forceRefreshTable("assets"),
-            forceRefreshTable("asset_value_history"),
-            forceRefreshTable("debts"),
-          ]);
-          qc.refetchQueries({ queryKey: ["net-worth"], type: "all" });
-          qc.refetchQueries({ queryKey: ["goals"], type: "all" });
-          qc.refetchQueries({ queryKey: ["debt"], type: "all" });
-          qc.refetchQueries({ queryKey: ["asset-history"], type: "all" });
-          qc.refetchQueries({ queryKey: ["dashboard"], type: "all" });
-        } catch (err) {
-          console.warn("[SyncEngine] Post-sync refresh failed:", err);
-        }
+        scheduleForcedRefresh(
+          ["assets", "asset_value_history", "debts"],
+          ["net-worth", "goals", "debt", "asset-history", "dashboard"]
+        );
       }
       // SMS ingest / categorize logs a spend server-side (quickLogSpend cascade)
       // → pull fresh budget state so IDB matches the server.
       if (item.table === "sms_transactions") {
         qc.invalidateQueries({ queryKey: ["sms-transactions"] });
         if (item.operation === "INSERT" || item.operation === "CATEGORIZE") {
-          try {
-            await Promise.all([
-              forceRefreshTable("budget_items"),
-              forceRefreshTable("assets"),
-              forceRefreshTable("debts"),
-            ]);
-            qc.refetchQueries({ queryKey: ["budget"], type: "all" });
-            qc.refetchQueries({ queryKey: ["dashboard"], type: "all" });
-            qc.refetchQueries({ queryKey: ["sms-transactions"], type: "all" });
-          } catch (err) {
-            console.warn("[SyncEngine] Post-SMS refresh failed:", err);
-          }
+          scheduleForcedRefresh(
+            ["budget_items", "assets", "debts"],
+            ["budget", "dashboard", "sms-transactions"]
+          );
         }
       }
       if (item.table === "assets" && item.operation === "ACHIEVE") {
-        try {
-          await Promise.all([
-            forceRefreshTable("assets"),
-            forceRefreshTable("budget_items"),
-            forceRefreshTable("net_worth_snapshots"),
-          ]);
-          qc.refetchQueries({ queryKey: ["net-worth"], type: "all" });
-          qc.refetchQueries({ queryKey: ["goals"], type: "all" });
-          qc.refetchQueries({ queryKey: ["budget"], type: "all" });
-          qc.refetchQueries({ queryKey: ["dashboard"], type: "all" });
-        } catch (err) {
-          console.warn("[SyncEngine] Post-achieve refresh failed:", err);
-        }
+        scheduleForcedRefresh(
+          ["assets", "budget_items", "net_worth_snapshots"],
+          ["net-worth", "goals", "budget", "dashboard"]
+        );
       }
     },
-    [qc]
+    [qc, scheduleForcedRefresh]
   );
 
   const handleRollback = useCallback(

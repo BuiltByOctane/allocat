@@ -812,12 +812,16 @@ export async function quickLogSpend(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
-  const { data: item } = await supabase
-    .from("budget_items")
-    .select("*")
-    .eq("id", itemId)
-    .eq("user_id", user.id)
-    .single();
+  // Item fetch and the user's currency are independent reads — run together.
+  const [{ data: item }, cur] = await Promise.all([
+    supabase
+      .from("budget_items")
+      .select("*")
+      .eq("id", itemId)
+      .eq("user_id", user.id)
+      .single(),
+    getUserCurrency(supabase, user.id),
+  ]);
 
   if (!item) throw new Error("Item not found");
 
@@ -879,7 +883,6 @@ export async function quickLogSpend(
     }
   }
 
-  const cur = await getUserCurrency(supabase, user.id);
   // SMS-sourced spends mark the existing log entry as auto-tracked from SMS so
   // they're distinguishable from manual spends (no separate/duplicate entry).
   const fromSms = source?.kind === "sms";
@@ -1107,6 +1110,10 @@ export async function setupBudgetFromTemplate(
     );
   }
 
+  // Currency is only needed for the closing activity log — read it now so it
+  // overlaps every write below instead of adding a round trip at the end.
+  const curPromise = getUserCurrency(supabase, user.id);
+
   // 1. Update budget total (only if non-zero) + stamp the originating template
   //    so cross-month SMS rules can tell which budget identity this month has.
   const budgetUpdate: Database["public"]["Tables"]["budgets"]["Update"] = {
@@ -1235,7 +1242,7 @@ export async function setupBudgetFromTemplate(
   }));
 
   // 4. One summary activity log
-  const cur = await getUserCurrency(supabase, user.id);
+  const cur = await curPromise;
   await logActivity(supabase, user.id, {
     action_type: "budget_template_applied",
     category: "budget",

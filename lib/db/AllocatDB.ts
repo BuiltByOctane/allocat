@@ -67,6 +67,12 @@ export interface SyncQueueItem {
   status: SyncStatus;
   createdAt: number; // Date.now()
   lastError?: string;
+  /**
+   * Earliest time (ms epoch) this item may be retried after a failure. Non-indexed
+   * — set on a retryable failure so the drain skips it until backoff elapses,
+   * instead of a blocking inline sleep. Absent = eligible immediately.
+   */
+  nextAttemptAt?: number;
 }
 
 export interface IdMapEntry {

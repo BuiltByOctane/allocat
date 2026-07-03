@@ -200,7 +200,9 @@ export async function ingestSmsTransaction(input: IngestSmsInput) {
     );
   }
 
-  // 3. Insert the transaction record.
+  // 3. Insert the transaction record. Kick off the currency read now so it
+  // overlaps the insert round trip instead of blocking after it.
+  const curPromise = getUserCurrency(supabase, user.id);
   const initialStatus = !isDebit ? "ignored" : "pending";
   const { data: txn, error: insErr } = await supabase
     .from("sms_transactions")
@@ -223,7 +225,7 @@ export async function ingestSmsTransaction(input: IngestSmsInput) {
     .single();
   if (insErr) throw new Error(insErr.message);
 
-  const cur = await getUserCurrency(supabase, user.id);
+  const cur = await curPromise;
   const merchantLabel = input.merchantRaw || merchantNormalized || "Unknown";
 
   // 4a. Auto-apply a known merchant rule — but only against THIS period's item.
@@ -315,26 +317,28 @@ export interface CategorizeSmsInput {
 export async function categorizeSmsTransaction(input: CategorizeSmsInput) {
   const { supabase, user } = await getAuthed();
 
-  const { data: txn } = await supabase
-    .from("sms_transactions")
-    .select("*")
-    .eq("id", input.txnId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  // The transaction, the item's durable template identity (needed for the rule +
+  // near-limit math; see lib/sms/resolveRuleItem.ts), and the user's currency are
+  // three independent reads — fetch them together.
+  const [{ data: txn }, { data: item }, cur] = await Promise.all([
+    supabase
+      .from("sms_transactions")
+      .select("*")
+      .eq("id", input.txnId)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("budget_items")
+      .select("id, category_id, template_id, template_item_id")
+      .eq("id", input.budgetItemId)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    getUserCurrency(supabase, user.id),
+  ]);
   if (!txn) throw new Error("Transaction not found");
   if (txn.status === "categorized") return { ok: true, already: true as const };
   if (typeof txn.amount !== "number" || txn.amount <= 0)
     throw new Error("Transaction has no spendable amount");
-
-  // Resolve the item's category + durable template identity (needed for the
-  // rule + near-limit math). The template keys re-key the rule so it follows the
-  // item across months. See lib/sms/resolveRuleItem.ts.
-  const { data: item } = await supabase
-    .from("budget_items")
-    .select("id, category_id, template_id, template_item_id")
-    .eq("id", input.budgetItemId)
-    .eq("user_id", user.id)
-    .maybeSingle();
   if (!item) throw new Error("Budget item not found");
 
   // An edited amount logs the EDITED value (not the parsed one) and stashes the
@@ -410,7 +414,6 @@ export async function categorizeSmsTransaction(input: CategorizeSmsInput) {
     .eq("id", input.txnId)
     .eq("user_id", user.id);
 
-  const cur = await getUserCurrency(supabase, user.id);
   await notifyIfNearLimit(supabase, user.id, input.budgetItemId, cur);
 
   return { ok: true, ruleCreated: Boolean(ruleId) };

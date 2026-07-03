@@ -120,19 +120,20 @@ export async function addAsset(
 
   if (error) throw new Error(error.message);
 
-  // Record initial history entry
-  await supabase.from("asset_value_history").insert({
-    asset_id: data.id,
-    user_id: user.id,
-    entry_type: "initial",
-    amount: value,
-    running_total: value,
-    entry_date: new Date().toISOString().split("T")[0],
-  });
-
-  await upsertTodaySnapshot();
-
-  const cur = await getUserCurrency(supabase, user.id);
+  // Record initial history, refresh today's snapshot, and read currency — three
+  // independent follow-ups to the asset insert, so run them together.
+  const [, , cur] = await Promise.all([
+    supabase.from("asset_value_history").insert({
+      asset_id: data.id,
+      user_id: user.id,
+      entry_type: "initial",
+      amount: value,
+      running_total: value,
+      entry_date: new Date().toISOString().split("T")[0],
+    }),
+    upsertTodaySnapshot(),
+    getUserCurrency(supabase, user.id),
+  ]);
   await logActivity(supabase, user.id, {
     action_type: isGoal ? "goal_asset_added" : "asset_added",
     category: "net_worth",

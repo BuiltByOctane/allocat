@@ -69,9 +69,10 @@ import {
 
 const MAX_RETRIES = 3;
 
-function sleep(ms: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms));
-}
+// Independent queue items (distinct records, no unresolved temp-id deps) drain
+// concurrently up to this many at once. Kept modest to avoid hammering Supabase
+// / server-action limits.
+const MAX_CONCURRENCY = 4;
 
 function extractTempIds(obj: unknown): string[] {
   const ids: string[] = [];
@@ -122,6 +123,7 @@ interface SyncCallbacks {
 
 export class SyncEngine {
   private isProcessing = false;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private handleOnline = () => this.processQueue();
   private callbacks: SyncCallbacks = {};
 
@@ -297,6 +299,10 @@ export class SyncEngine {
 
   stop(): void {
     window.removeEventListener("online", this.handleOnline);
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
     this.callbacks = {};
   }
 
@@ -338,115 +344,189 @@ export class SyncEngine {
         .equals("processing")
         .modify({ status: "pending" });
 
+      // Drain in bounded-concurrency batches: each pass selects up to
+      // MAX_CONCURRENCY *independent* ready items (deps resolved, one per record,
+      // backoff elapsed) and runs them together. Dependents simply wait for a
+      // later pass once their producer's INSERT has written id_map.
       while (true) {
-        const items = await db.sync_queue
-          .where("status")
-          .equals("pending")
-          .sortBy("createdAt");
+        const batch = await this.selectBatch();
+        if (batch.length === 0) break;
 
-        // Pick the oldest item whose dependencies are resolved. Skipping (rather
-        // than halting on) a blocked item keeps one stuck op — e.g. a CATEGORIZE
-        // whose INSERT failed — from freezing the entire queue behind it.
-        // BULK_SETUP creates its own tempIds (not in id_map yet), so never block it.
-        let item: SyncQueueItem | undefined;
-        for (const candidate of items) {
-          if (candidate.id === undefined) continue;
-          if (
-            candidate.operation !== "BULK_SETUP" &&
-            (await this.hasUnresolvedDependencies(candidate))
-          ) {
-            // If the dependency can never resolve (its INSERT failed and is gone),
-            // this item is doomed — fail it so it stops clogging the queue count.
-            if (await this.isDependencyDoomed(candidate)) {
-              await db.sync_queue.update(candidate.id, {
-                status: "failed",
-                lastError: "dependency never synced",
-              });
-              await this.rollback(candidate);
-              this.callbacks.onRollback?.(candidate, "dependency never synced");
-              await this.notifyPendingChange();
-            }
-            continue;
-          }
-          item = candidate;
-          break;
-        }
-        if (!item || item.id === undefined) break;
-
-        await db.sync_queue.update(item.id, { status: "processing" });
+        await Promise.all(
+          batch.map((item) =>
+            db.sync_queue.update(item.id as number, { status: "processing" })
+          )
+        );
         await this.notifyPendingChange();
 
-        const resolvedPayload = await this.resolvePayload(item.payload);
-
-        try {
-          const result = await this.executeItem(item, resolvedPayload);
-
-          if (item.operation === "INSERT" && item.tempId) {
-            const realId = (result as Record<string, unknown>)?.id as
-              | string
-              | undefined;
-            if (realId && realId !== item.tempId) {
-              await db.id_map.put({
-                tempId: item.tempId,
-                realId,
-                table: item.table,
-              });
-              await this.replaceIDBRecord(
-                item.table,
-                item.tempId,
-                realId,
-                result as Record<string, unknown>
-              );
-            }
-          } else if (item.operation === "BULK_SETUP") {
-            await this.applyBulkSetupResult(
-              result as {
-                categoryIdMap: Array<{
-                  tempId: string;
-                  realId: string;
-                  record: Record<string, unknown>;
-                }>;
-                itemIdMap: Array<{
-                  tempId: string;
-                  realId: string;
-                  record: Record<string, unknown>;
-                }>;
-              }
-            );
-          }
-
-          await db.sync_queue.update(item.id, { status: "done" });
-          this.callbacks.onSynced?.(item);
-          await this.notifyPendingChange();
-        } catch (err) {
-          const errMsg = err instanceof Error ? err.message : "Sync failed";
-          const nextRetries = item.retries + 1;
-
-          if (nextRetries >= MAX_RETRIES) {
-            await db.sync_queue.update(item.id, {
-              status: "failed",
-              lastError: errMsg,
-            });
-            await this.rollback(item);
-            this.callbacks.onRollback?.(item, errMsg);
-            await this.notifyPendingChange();
-          } else {
-            await db.sync_queue.update(item.id, {
-              status: "pending",
-              retries: nextRetries,
-              lastError: errMsg,
-            });
-            const backoffMs = Math.pow(2, nextRetries) * 1000;
-            await sleep(backoffMs);
-          }
-        }
+        // processItem swallows its own errors, so allSettled never rejects.
+        await Promise.allSettled(batch.map((item) => this.processItem(item)));
       }
     } finally {
       this.isProcessing = false;
     }
+
+    // Anything left pending is backoff-deferred — wake once when the soonest is due.
+    await this.scheduleRetryWake();
   }
 
   // ─── Private helpers ───────────────────────────────────────────────────────
+
+  /**
+   * Choose the next batch of ready items to run concurrently. Preserves ordering:
+   * at most one item per (table, recordId) key per batch (oldest first), so two
+   * ops on the same record never overlap or reorder. Dependency-blocked items are
+   * skipped (and failed if doomed); backoff-deferred items are skipped until due.
+   */
+  private async selectBatch(): Promise<SyncQueueItem[]> {
+    const db = getDB();
+    const items = await db.sync_queue
+      .where("status")
+      .equals("pending")
+      .sortBy("createdAt");
+
+    const now = Date.now();
+    const batch: SyncQueueItem[] = [];
+    const claimedKeys = new Set<string>();
+
+    for (const candidate of items) {
+      if (candidate.id === undefined) continue;
+
+      // Retry backoff not yet elapsed → leave for a later wake.
+      if (candidate.nextAttemptAt && candidate.nextAttemptAt > now) continue;
+
+      // BULK_SETUP creates its own tempIds (not in id_map yet), so never block it.
+      if (
+        candidate.operation !== "BULK_SETUP" &&
+        (await this.hasUnresolvedDependencies(candidate))
+      ) {
+        // If the dependency can never resolve (its INSERT failed and is gone),
+        // this item is doomed — fail it so it stops clogging the queue count.
+        if (await this.isDependencyDoomed(candidate)) {
+          await db.sync_queue.update(candidate.id, {
+            status: "failed",
+            lastError: "dependency never synced",
+          });
+          await this.rollback(candidate);
+          this.callbacks.onRollback?.(candidate, "dependency never synced");
+          await this.notifyPendingChange();
+        }
+        continue;
+      }
+
+      // Serialize ops on the same record: admit only the oldest per key per batch.
+      const key = `${candidate.table}:${candidate.recordId}`;
+      if (claimedKeys.has(key)) continue;
+      claimedKeys.add(key);
+
+      batch.push(candidate);
+      if (batch.length >= MAX_CONCURRENCY) break;
+    }
+
+    return batch;
+  }
+
+  /** Execute one queue item: resolve payload, dispatch, then map ids / retry. */
+  private async processItem(item: SyncQueueItem): Promise<void> {
+    if (item.id === undefined) return;
+    const db = getDB();
+    const resolvedPayload = await this.resolvePayload(item.payload);
+
+    try {
+      const result = await this.executeItem(item, resolvedPayload);
+
+      if (item.operation === "INSERT" && item.tempId) {
+        const realId = (result as Record<string, unknown>)?.id as
+          | string
+          | undefined;
+        if (realId && realId !== item.tempId) {
+          await db.id_map.put({
+            tempId: item.tempId,
+            realId,
+            table: item.table,
+          });
+          await this.replaceIDBRecord(
+            item.table,
+            item.tempId,
+            realId,
+            result as Record<string, unknown>
+          );
+        }
+      } else if (item.operation === "BULK_SETUP") {
+        await this.applyBulkSetupResult(
+          result as {
+            categoryIdMap: Array<{
+              tempId: string;
+              realId: string;
+              record: Record<string, unknown>;
+            }>;
+            itemIdMap: Array<{
+              tempId: string;
+              realId: string;
+              record: Record<string, unknown>;
+            }>;
+          }
+        );
+      }
+
+      await db.sync_queue.update(item.id, { status: "done" });
+      this.callbacks.onSynced?.(item);
+      await this.notifyPendingChange();
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "Sync failed";
+      const nextRetries = item.retries + 1;
+
+      if (nextRetries >= MAX_RETRIES) {
+        await db.sync_queue.update(item.id, {
+          status: "failed",
+          lastError: errMsg,
+        });
+        await this.rollback(item);
+        this.callbacks.onRollback?.(item, errMsg);
+        await this.notifyPendingChange();
+      } else {
+        // Re-queue with a backoff deadline instead of a blocking sleep, so a
+        // failing item never freezes the rest of the queue behind it.
+        await db.sync_queue.update(item.id, {
+          status: "pending",
+          retries: nextRetries,
+          lastError: errMsg,
+          nextAttemptAt: Date.now() + this.retryDelayMs(nextRetries),
+        });
+        await this.notifyPendingChange();
+      }
+    }
+  }
+
+  /** Backoff before a retry. Overridable in tests. */
+  protected retryDelayMs(retries: number): number {
+    return Math.pow(2, retries) * 1000;
+  }
+
+  /**
+   * After a drain settles, schedule a single wake for the soonest backoff-deferred
+   * item so its retry actually fires (nothing else re-kicks the queue otherwise).
+   */
+  private async scheduleRetryWake(): Promise<void> {
+    const db = getDB();
+    const pending = await db.sync_queue
+      .where("status")
+      .equals("pending")
+      .toArray();
+
+    const now = Date.now();
+    const dueTimes = pending
+      .map((p) => p.nextAttemptAt ?? 0)
+      .filter((t) => t > now);
+    if (dueTimes.length === 0) return;
+
+    const wait = Math.max(0, Math.min(...dueTimes) - now);
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      void this.processQueue();
+    }, wait);
+  }
 
   private async hasUnresolvedDependencies(
     item: SyncQueueItem
@@ -505,7 +585,8 @@ export class SyncEngine {
     return resolve(payload) as Promise<Payload>;
   }
 
-  private async executeItem(
+  /** Overridable in tests to instrument the single server-action round trip. */
+  protected async executeItem(
     item: SyncQueueItem,
     resolvedPayload: Payload
   ): Promise<unknown> {

@@ -670,16 +670,18 @@ function TemplateControl({
           haptic.light();
           setDriftedOpen(true);
         }}
-        className="flex items-center gap-1 text-[13px] font-bold text-amber-600 dark:text-amber-500 max-w-[160px]"
-        aria-label={`Template ${template.name} modified`}
+        className="flex items-center gap-1 text-[13px] font-bold text-foreground max-w-[160px]"
+        aria-label={`Template ${template.name} modified — tap for options`}
       >
-        <span className="material-symbols-outlined text-base leading-none">
+        <span className="material-symbols-outlined text-base leading-none text-accent-strong">
           bookmark
         </span>
         <span className="truncate">{template.name}</span>
-        <span className="text-[10px] font-bold uppercase tracking-wide shrink-0">
-          · Edited
-        </span>
+        {/* Quiet drift indicator — details live in the tap-through drawer. */}
+        <span
+          className="size-1.5 rounded-full bg-amber-500 shrink-0"
+          aria-hidden
+        />
       </button>
 
       <Drawer.Root open={driftedOpen} onOpenChange={setDriftedOpen}>
@@ -700,11 +702,11 @@ function TemplateControl({
                 id="template-drift-description"
                 className="mt-1 text-[13px] text-muted-foreground"
               >
-                This budget no longer matches{" "}
+                You&apos;ve tweaked this month since applying{" "}
                 <span className="font-semibold text-foreground">
                   {template.name}
                 </span>
-                . Save the changes to the template or create a new one.
+                . Keep your changes here, or sync them to the template.
               </p>
 
               <div className="mt-5 flex flex-col gap-3 pb-8">

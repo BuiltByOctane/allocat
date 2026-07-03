@@ -148,6 +148,14 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         scheduleForcedRefresh(["budgets", "budget_items"], ["budget"]);
       }
 
+      // UNDO_CARRY deletes the carried rows server-side. A full reload between
+      // the local undo and this sync re-hydrates the still-live server rows
+      // into IDB — force-refresh with delete reconciliation so they're removed
+      // again once the server confirms the undo.
+      if (item.table === "budgets" && item.operation === "UNDO_CARRY") {
+        scheduleForcedRefresh(["budgets", "categories", "budget_items"], ["budget"]);
+      }
+
       // Server-side cascade can mutate other tables. Pull fresh state for
       // those so IDB matches the server before any subsequent read.
       if (

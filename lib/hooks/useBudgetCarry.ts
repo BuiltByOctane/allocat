@@ -89,6 +89,7 @@ export function useCarryBudget() {
     mutationFn: async ({
       month,
       year,
+      auto,
     }: {
       month: number;
       year: number;
@@ -106,7 +107,11 @@ export function useCarryBudget() {
           async (): Promise<{ payload: CarryPayload; label: string } | null> => {
             // Re-check inside the transaction — another tab may have carried,
             // set up, or dismissed while we were queued behind its lock.
-            if (await db.sync_meta.get(markerKey)) return null;
+            // "carried" always blocks (already done); "undone"/"dismissed"
+            // only suppress the AUTO fire — an explicit tap starts over.
+            const marker = (await db.sync_meta.get(markerKey))?.carry;
+            if (marker?.state === "carried") return null;
+            if (marker && auto) return null;
 
             const target = await db.budgets
               .where("[month+year]")
@@ -230,7 +235,13 @@ export function useCarryBudget() {
             await db.sync_meta.put({
               table: markerKey,
               lastSynced: Date.now(),
-              carry: { state: "carried", sourceLabel: label, budgetId },
+              // Auto-carry announces itself with the confirm/undo banner; a
+              // manual tap was the user's own choice — no banner needed.
+              carry: {
+                state: auto ? "carried" : "dismissed",
+                sourceLabel: label,
+                budgetId,
+              },
             });
             return { payload, label };
           }

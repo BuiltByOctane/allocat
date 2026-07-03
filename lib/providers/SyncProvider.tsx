@@ -140,6 +140,14 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         qc.invalidateQueries({ queryKey: ["dashboard"] });
       }
 
+      // CARRY_SETUP back-stamps durable identity onto the SOURCE month's budget
+      // and items server-side (minted template ids for manual budgets) — pull
+      // both tables so SMS rule resolution sees the stamped identity without
+      // waiting for the next full hydrate.
+      if (item.table === "budgets" && item.operation === "CARRY_SETUP") {
+        scheduleForcedRefresh(["budgets", "budget_items"], ["budget"]);
+      }
+
       // Server-side cascade can mutate other tables. Pull fresh state for
       // those so IDB matches the server before any subsequent read.
       if (

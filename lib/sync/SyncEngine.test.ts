@@ -108,6 +108,7 @@ function resetDB() {
   const names = [
     "sync_queue",
     "id_map",
+    "budgets",
     "categories",
     "budget_items",
     "assets",
@@ -115,8 +116,12 @@ function resetDB() {
     "asset_categories",
     "reports",
     "sms_transactions",
+    "sync_meta",
   ];
-  for (const n of names) tables[n] = makeTable(n === "sync_queue" ? "id" : n === "id_map" ? "tempId" : "id");
+  for (const n of names)
+    tables[n] = makeTable(
+      n === "sync_queue" ? "id" : n === "id_map" ? "tempId" : n === "sync_meta" ? "table" : "id"
+    );
 }
 
 // SyncEngine statically imports server actions that pull the Next-only
@@ -151,6 +156,8 @@ interface ExecOptions {
   realIds?: Record<string, string>;
   /** recordIds whose executeItem should always throw */
   failRecordIds?: Set<string>;
+  /** recordId → canned result (e.g. a CARRY_SETUP server response) */
+  results?: Record<string, unknown>;
 }
 
 class TestEngine extends (SyncEngine as unknown as {
@@ -191,6 +198,9 @@ class TestEngine extends (SyncEngine as unknown as {
       await delay(this.opts.latency ?? 20);
       if (this.opts.failRecordIds?.has(item.recordId)) {
         throw new Error("simulated failure");
+      }
+      if (this.opts.results && item.recordId in this.opts.results) {
+        return this.opts.results[item.recordId];
       }
       if (item.operation === "INSERT" && item.tempId) {
         const realId = this.opts.realIds?.[item.tempId];
@@ -354,5 +364,222 @@ describe("SyncEngine concurrent drain", () => {
     await engine.processQueue();
 
     expect(counts.at(-1)).toBe(0);
+  });
+});
+
+// ── CARRY_SETUP reconciliation ─────────────────────────────────────────────
+
+function carryPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    month: 7,
+    year: 2026,
+    budgetTempId: "temp_b",
+    budgetId: null,
+    sourceBudgetId: "b-jun",
+    totalBudget: 50000,
+    templateId: "carry:x",
+    mintedTemplateId: true,
+    categories: [
+      {
+        tempId: "temp_c1",
+        name: "Needs",
+        icon: null,
+        color: null,
+        type: "misc",
+        allocated_amount: 25000,
+        items: [
+          {
+            tempId: "temp_i1",
+            name: "Rent",
+            emoji: null,
+            planned: 18000,
+            linkType: null,
+            linkId: null,
+            templateItemId: "tid-1",
+            stampSourceItemId: null,
+          },
+        ],
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function seedCarryOptimisticRows() {
+  tables.budgets.rows.push({ id: "temp_b", month: 7, year: 2026, total_budget: 50000 });
+  tables.categories.rows.push({ id: "temp_c1", budget_id: "temp_b", name: "Needs" });
+  tables.budget_items.rows.push({ id: "temp_i1", category_id: "temp_c1", name: "Rent" });
+  tables.sync_meta.rows.push({ table: "__carry__2026-7", lastSynced: 1, state: "carried" });
+}
+
+describe("SyncEngine CARRY_SETUP", () => {
+  beforeEach(() => {
+    resetDB();
+    vi.stubGlobal("navigator", { onLine: true });
+  });
+
+  it("reconciles a successful carry: budget temp swap, FK rewrites, nested maps", async () => {
+    seedCarryOptimisticRows();
+    seed([
+      {
+        table: "budgets",
+        operation: "CARRY_SETUP",
+        recordId: "temp_b",
+        payload: carryPayload(),
+        createdAt: 0,
+      },
+    ]);
+    const engine = new TestEngine({
+      latency: 5,
+      results: {
+        temp_b: {
+          conflict: false,
+          budgetIdMap: {
+            tempId: "temp_b",
+            realId: "real_b",
+            record: { id: "real_b", month: 7, year: 2026, total_budget: 50000, template_id: "carry:x" },
+          },
+          categoryIdMap: [
+            { tempId: "temp_c1", realId: "real_c1", record: { id: "real_c1", budget_id: "real_b", name: "Needs" } },
+          ],
+          itemIdMap: [
+            { tempId: "temp_i1", realId: "real_i1", record: { id: "real_i1", category_id: "real_c1", name: "Rent" } },
+          ],
+        },
+      },
+    });
+
+    await engine.processQueue();
+
+    const q = tables.sync_queue.rows[0];
+    expect(q.status).toBe("done");
+    // Budget temp row swapped for the real one.
+    expect(tables.budgets.rows.map((r) => r.id)).toEqual(["real_b"]);
+    // id_map entries written for all three levels.
+    const mapped = Object.fromEntries(tables.id_map.rows.map((r) => [r.tempId, r.realId]));
+    expect(mapped).toMatchObject({ temp_b: "real_b", temp_c1: "real_c1", temp_i1: "real_i1" });
+    // Category/item rows replaced; FKs point at real ids.
+    expect(tables.categories.rows).toHaveLength(1);
+    expect(tables.categories.rows[0]).toMatchObject({ id: "real_c1", budget_id: "real_b" });
+    expect(tables.budget_items.rows[0]).toMatchObject({ id: "real_i1", category_id: "real_c1" });
+    // Carry marker untouched on success.
+    expect(tables.sync_meta.rows.find((r) => r.table === "__carry__2026-7")).toBeTruthy();
+  });
+
+  it("conflict: cleans up optimistic rows, hydrates the winner, clears the marker", async () => {
+    seedCarryOptimisticRows();
+    seed([
+      {
+        table: "budgets",
+        operation: "CARRY_SETUP",
+        recordId: "temp_b",
+        payload: carryPayload(),
+        createdAt: 0,
+      },
+    ]);
+    const engine = new TestEngine({
+      latency: 5,
+      results: {
+        temp_b: {
+          conflict: true,
+          budgetIdMap: {
+            tempId: "temp_b",
+            realId: "real_b",
+            record: { id: "real_b", month: 7, year: 2026, total_budget: 60000, template_id: "50-30-20" },
+          },
+          categoryIdMap: [],
+          itemIdMap: [],
+        },
+      },
+    });
+
+    await engine.processQueue();
+
+    expect(tables.sync_queue.rows[0].status).toBe("done");
+    // Our optimistic rows gone; winner's budget row hydrated in.
+    expect(tables.categories.rows).toHaveLength(0);
+    expect(tables.budget_items.rows).toHaveLength(0);
+    expect(tables.budgets.rows.map((r) => r.id)).toEqual(["real_b"]);
+    expect(tables.budgets.rows[0].total_budget).toBe(60000);
+    // Marker cleared so the banner doesn't advertise a carry that didn't happen.
+    expect(tables.sync_meta.rows.find((r) => r.table === "__carry__2026-7")).toBeUndefined();
+  });
+
+  it("rollback on permanent failure deletes nested temp rows, the temp budget and the marker", async () => {
+    seedCarryOptimisticRows();
+    seed([
+      {
+        table: "budgets",
+        operation: "CARRY_SETUP",
+        recordId: "temp_b",
+        payload: carryPayload(),
+        createdAt: 0,
+      },
+    ]);
+    const engine = new TestEngine({ latency: 5, failRecordIds: new Set(["temp_b"]) });
+
+    await engine.processQueue();
+    await waitFor(
+      () => tables.sync_queue.rows.find((r) => r.recordId === "temp_b")?.status === "failed"
+    );
+
+    expect(tables.categories.rows).toHaveLength(0);
+    expect(tables.budget_items.rows).toHaveLength(0);
+    expect(tables.budgets.rows).toHaveLength(0);
+    expect(tables.sync_meta.rows.find((r) => r.table === "__carry__2026-7")).toBeUndefined();
+  });
+
+  it("runs immediately despite self-declared temp ids, but waits on external ones", async () => {
+    // Payload contains temp ids it declares itself (budget/cat/item) plus an
+    // EXTERNAL linkId owned by a pending assets INSERT.
+    tables.assets.rows.push({ id: "temp_asset" });
+    seedCarryOptimisticRows();
+    const payload = carryPayload();
+    (payload.categories as Array<{ items: Array<Record<string, unknown>> }>)[0].items[0].linkId =
+      "temp_asset";
+    seed([
+      {
+        table: "budgets",
+        operation: "CARRY_SETUP",
+        recordId: "temp_b",
+        payload,
+        createdAt: 0,
+      },
+      {
+        table: "assets",
+        operation: "INSERT",
+        recordId: "temp_asset",
+        tempId: "temp_asset",
+        payload: {},
+        createdAt: 1,
+      },
+    ]);
+    const engine = new TestEngine({
+      latency: 10,
+      realIds: { temp_asset: "real_asset" },
+      results: {
+        temp_b: {
+          conflict: false,
+          budgetIdMap: { tempId: "temp_b", realId: "real_b", record: { id: "real_b" } },
+          categoryIdMap: [],
+          itemIdMap: [],
+        },
+      },
+    });
+
+    await engine.processQueue();
+
+    // The asset INSERT (producer) must run before the carry that references it.
+    expect(engine.order[0]).toBe("INSERT:temp_asset#2");
+    expect(engine.order[1]).toBe("CARRY_SETUP:temp_b#1");
+    // Carried linkId resolved to the real asset id before dispatch.
+    const resolved = engine.resolvedPayloads["temp_b"] as {
+      categories: Array<{ items: Array<{ linkId: string }> }>;
+    };
+    expect(resolved.categories[0].items[0].linkId).toBe("real_asset");
+    // Self-declared temp ids stayed unresolved (server maps them itself).
+    expect(
+      (engine.resolvedPayloads["temp_b"] as { budgetTempId: string }).budgetTempId
+    ).toBe("temp_b");
   });
 });

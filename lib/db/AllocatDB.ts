@@ -44,6 +44,8 @@ export type SyncOperation =
   | "DELETE"
   | "PAYMENT"
   | "BULK_SETUP"
+  | "CARRY_SETUP"
+  | "UNDO_CARRY"
   | "ACHIEVE"
   | "CATEGORIZE"
   | "IGNORE"

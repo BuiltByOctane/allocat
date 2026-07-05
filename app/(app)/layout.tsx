@@ -16,6 +16,7 @@ import { CurrencyProvider } from "@/lib/providers/CurrencyProvider";
 import { EntitlementProvider } from "@/lib/providers/EntitlementProvider";
 import { PaywallProvider } from "@/lib/providers/PaywallProvider";
 import { TrialWelcomeModal } from "@/components/subscription/TrialWelcomeModal";
+import { CarryController } from "@/components/budget/CarryController";
 import { PullToRefresh } from "@/components/PullToRefresh";
 import { PagerGate } from "@/components/pager/PagerGate";
 
@@ -59,6 +60,7 @@ export default async function AppLayout({
         <NativeSetup />
         <BadgeUpdater />
         <TrialWelcomeModal />
+        <CarryController />
         <BottomDock />
       </div>
     </QuickActionProvider>

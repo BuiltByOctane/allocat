@@ -1,8 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getBudgetView } from "@/lib/actions/budget";
-import { getBudgetTemplates } from "@/lib/actions/budget-templates";
+import { getBudgetView, ensureBudgetRow } from "@/lib/actions/budget";
+import {
+  getBudgetTemplates,
+  saveBudgetTemplate,
+  type SaveTemplateInput,
+} from "@/lib/actions/budget-templates";
 import { PREDEFINED_TEMPLATES, type BudgetTemplate } from "@/lib/budget-templates";
 import { computeTemplateDrift, type DriftCategory } from "@/lib/budget/templateDrift";
+import { fitItemsToAllocation, type SetupCategory } from "@/lib/budget/setupMath";
+import { reapplyRulesToPending } from "@/lib/sms/ingestClient";
+import { pushSmsMirrorToNative } from "@/lib/sms/nativeMirror";
 import { getDB } from "@/lib/db";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import {
@@ -187,6 +194,228 @@ export function useBudgetTemplateHeader({
 }
 
 // ─── Mutations ────────────────────────────────────────────────────────────────
+
+/**
+ * Resolve a real-or-temp budget row id for a period before the first write.
+ * Online: create-or-get on the server (fast path, real id immediately).
+ * Offline: mint a temp_ IDB row + enqueue a plain budgets INSERT — the standard
+ * id_map dependency chain resolves every later payload referencing the temp id.
+ */
+export function useEnsureBudgetRow() {
+  const enqueue = useEnqueue();
+
+  return async function ensureRow(month: number, year: number): Promise<string> {
+    const db = getDB();
+    const existing = await db.budgets
+      .where("[month+year]")
+      .equals([month, year])
+      .first();
+    if (existing) return existing.id;
+
+    try {
+      const row = await ensureBudgetRow(month, year);
+      await db.budgets.put(row);
+      return row.id;
+    } catch {
+      // Offline (or the action failed): create locally and queue the INSERT.
+      const tempId = `temp_${crypto.randomUUID()}`;
+      const now = new Date().toISOString();
+      await db.budgets.add({
+        id: tempId,
+        user_id: "__pending__",
+        month,
+        year,
+        total_budget: 0,
+        is_locked: false,
+        template_id: null,
+        created_at: now,
+        updated_at: now,
+      });
+      await enqueue({
+        table: "budgets",
+        operation: "INSERT",
+        recordId: tempId,
+        tempId,
+        payload: { month, year },
+      });
+      return tempId;
+    }
+  };
+}
+
+export interface SetupBudgetInput {
+  budgetId: string;
+  month: number;
+  year: number;
+  totalBudget: number;
+  /** Template the budget anchors to (durable SMS identity). Null = manual. */
+  templateId: string | null;
+  categories: SetupCategory[];
+  /** When set, also persist the categories as a custom template under this id. */
+  saveAsTemplate: { id: string; payload: SaveTemplateInput } | null;
+}
+
+/**
+ * Create a month's budget in one shot: optimistic IDB rows + a single
+ * BULK_SETUP enqueue (extracted from the legacy BudgetSetupSheet create mode so
+ * BudgetQuickSetup and any future setup surface share one pipeline). Item
+ * planned amounts are fitted inside each category allocation so the server's
+ * allocation invariants can never reject the batch.
+ */
+export function useSetupBudget() {
+  const qc = useQueryClient();
+  const enqueue = useEnqueue();
+
+  return useMutation({
+    mutationFn: async (input: SetupBudgetInput) => {
+      const db = getDB();
+      const now = new Date().toISOString();
+      const { budgetId, totalBudget, templateId } = input;
+
+      if (totalBudget > 0) {
+        await db.budgets.update(budgetId, {
+          total_budget: totalBudget,
+          template_id: templateId,
+          updated_at: now,
+        });
+      } else {
+        await db.budgets.update(budgetId, { template_id: templateId });
+      }
+
+      const bulkCategories: Array<{
+        tempId: string;
+        name: string;
+        icon: string | null;
+        type: "misc";
+        allocated_amount: number;
+        items: Array<{
+          tempId: string;
+          name: string;
+          planned: number;
+          linkType: LinkType | null;
+          linkId: string | null;
+          templateItemId: string | null;
+        }>;
+      }> = [];
+
+      for (const cat of input.categories) {
+        const catName = cat.name.trim();
+        if (!catName) continue;
+
+        const catTempId = `temp_${crypto.randomUUID()}`;
+        await db.categories.add({
+          id: catTempId,
+          budget_id: budgetId,
+          user_id: "__pending__",
+          name: catName,
+          color: null,
+          icon: cat.icon,
+          type: "misc",
+          allocated_amount: cat.allocation,
+          created_at: now,
+          updated_at: now,
+        });
+
+        const namedItems = cat.items.filter((i) => i.name.trim());
+        const fitted = fitItemsToAllocation(
+          namedItems.map((i) => ({ planned: Math.max(0, i.allocation) })),
+          cat.allocation
+        );
+
+        const itemPayloads: (typeof bulkCategories)[number]["items"] = [];
+        for (let idx = 0; idx < namedItems.length; idx++) {
+          const item = namedItems[idx];
+          const itemTempId = `temp_${crypto.randomUUID()}`;
+          const planned = fitted[idx];
+          const linkType = item.linkType ?? null;
+          const linkId = item.linkId ?? null;
+          const templateItemId = templateId
+            ? item.templateItemId ?? item.id
+            : null;
+          await db.budget_items.add({
+            id: itemTempId,
+            category_id: catTempId,
+            user_id: "__pending__",
+            name: item.name.trim(),
+            emoji: null,
+            planned_amount: planned,
+            actual_amount: 0,
+            is_completed: false,
+            notes: null,
+            link_type: linkType,
+            link_id: linkId,
+            template_id: templateItemId ? templateId : null,
+            template_item_id: templateItemId,
+            overspend_count: 0,
+            created_at: now,
+            updated_at: now,
+          });
+          itemPayloads.push({
+            tempId: itemTempId,
+            name: item.name.trim(),
+            planned,
+            linkType,
+            linkId,
+            templateItemId,
+          });
+        }
+
+        bulkCategories.push({
+          tempId: catTempId,
+          name: catName,
+          icon: cat.icon,
+          type: "misc",
+          allocated_amount: cat.allocation,
+          items: itemPayloads,
+        });
+      }
+
+      if (bulkCategories.length > 0 || totalBudget > 0) {
+        await enqueue({
+          table: "budgets",
+          operation: "BULK_SETUP",
+          recordId: budgetId,
+          payload: {
+            budgetId,
+            totalBudget,
+            templateId,
+            categories: bulkCategories,
+          },
+        });
+      }
+
+      // Persist the custom template under the SAME id the budget anchors to, so
+      // reusing it next month re-stamps the same durable identity.
+      if (input.saveAsTemplate) {
+        await saveBudgetTemplate(
+          input.saveAsTemplate.payload,
+          input.saveAsTemplate.id
+        );
+      }
+
+      // This month's items now exist with durable ids — SMS that landed pending
+      // before the budget existed can auto-allocate. Best-effort.
+      if (templateId) {
+        try {
+          await reapplyRulesToPending({ enqueue });
+        } catch {
+          /* best-effort */
+        }
+      }
+      try {
+        await pushSmsMirrorToNative();
+      } catch {
+        /* best-effort */
+      }
+    },
+    onSuccess: (_data, { month, year, budgetId }) => {
+      qc.invalidateQueries({ queryKey: budgetKey(month, year) });
+      qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
+      qc.invalidateQueries({ queryKey: TEMPLATES_KEY });
+      qc.invalidateQueries({ queryKey: ["budgetDriftItems", budgetId] });
+    },
+  });
+}
 
 export function useUpdateBudgetTotal() {
   const qc = useQueryClient();

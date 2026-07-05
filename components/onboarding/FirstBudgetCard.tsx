@@ -12,27 +12,27 @@ import { getBudgetForPeriod, setupBudgetFromTemplate } from "@/lib/actions/budge
 import { markUserAsOnboarded } from "@/lib/actions/profile";
 import { useFormatCurrency } from "@/lib/hooks/useFormatCurrency";
 import { useCurrency } from "@/lib/providers/CurrencyProvider";
+import { templateToSetupCategories } from "@/lib/budget/setupMath";
 
 // Templates worth offering as a starting point (skip the empty "blank" one —
 // "Skip for now" already covers starting empty).
 const STARTER_TEMPLATES = PREDEFINED_TEMPLATES.filter((t) => t.id !== "blank");
 
-/** Map a predefined template + total into the setupBudgetFromTemplate payload. */
-function templateToSetupCategories(template: BudgetTemplate, total: number) {
-  return template.categories.map((c) => ({
-    tempId: crypto.randomUUID(),
+/** Shape the shared setup categories into the setupBudgetFromTemplate payload. */
+function templateToServerCategories(template: BudgetTemplate, total: number) {
+  return templateToSetupCategories(template, total, () =>
+    crypto.randomUUID()
+  ).map((c) => ({
+    tempId: c.id,
     name: c.name,
     icon: c.icon,
-    type: "misc" as const, // mirrors BudgetSetupSheet's category type
-    allocated_amount:
-      c.allocationPct != null && total > 0
-        ? Math.round((c.allocationPct / 100) * total)
-        : 0,
+    type: "misc" as const, // mirrors the in-app setup's category type
+    allocated_amount: c.allocation,
     items: c.items.map((i) => ({
-      tempId: crypto.randomUUID(),
+      tempId: i.id,
       name: i.name,
-      planned: i.plannedAmount ?? 0,
-      templateItemId: i.templateItemId,
+      planned: i.allocation,
+      templateItemId: i.templateItemId ?? undefined,
     })),
   }));
 }
@@ -75,7 +75,7 @@ export function FirstBudgetCard() {
           now.getFullYear()
         );
         const cats = selected
-          ? templateToSetupCategories(selected, totalNum)
+          ? templateToServerCategories(selected, totalNum)
           : [];
         await setupBudgetFromTemplate(
           budget.id,

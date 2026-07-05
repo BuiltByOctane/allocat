@@ -4,7 +4,7 @@ import { getBudgetFromIDB, budgetKey } from "@/lib/hooks/useBudget";
 import { getNetWorthFromIDB } from "@/lib/hooks/useNetWorth";
 import { getDebtFromIDB } from "@/lib/hooks/useDebt";
 import { getDashboardData } from "@/lib/actions/dashboard";
-import { getBudgetForPeriod } from "@/lib/actions/budget";
+import { getBudgetView } from "@/lib/actions/budget";
 import { getNetWorthData } from "@/lib/actions/net-worth";
 import { getDebtData } from "@/lib/actions/debt";
 import { DASHBOARD_KEY } from "@/lib/hooks/useDashboard";
@@ -33,13 +33,16 @@ export async function prefetchAllQueries(qc: QueryClient): Promise<void> {
       },
     }),
 
-    // Budget (current month)
+    // Budget (current month) — read-only: a passive prefetch must never create
+    // a phantom zero-value budget row (mirrors useBudgetData's virtual-empty).
     qc.fetchQuery({
       queryKey: budgetKey(month, year),
       queryFn: async () => {
         const local = await getBudgetFromIDB(month, year);
         if (local) return local;
-        return getBudgetForPeriod(month, year);
+        const view = await getBudgetView(month, year);
+        if (view) return view;
+        return { id: "", month, year, totalBudget: 0, templateId: null, categories: [] };
       },
     }),
 

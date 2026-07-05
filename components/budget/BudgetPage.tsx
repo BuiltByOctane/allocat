@@ -13,13 +13,14 @@ import {
   useAddBudgetCategory,
   useUpdateBudgetTotal,
   useBudgetTemplateHeader,
+  useEnsureBudgetRow,
   budgetKey,
   TEMPLATES_KEY,
 } from "@/lib/hooks/useBudget";
 import type { BudgetTemplate } from "@/lib/budget-templates";
 import { DASHBOARD_KEY } from "@/lib/hooks/useDashboard";
-import { ensureBudgetRow } from "@/lib/actions/budget";
-import { getDB } from "@/lib/db";
+import { useCarryBudget, useCarrySource } from "@/lib/hooks/useBudgetCarry";
+import { stepPeriod } from "@/lib/budget/carry";
 import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { InlineEditableNumber } from "@/components/ui/InlineEditableNumber";
@@ -28,11 +29,46 @@ import { Card } from "@/components/ui/Card";
 import { resolveColor } from "@/lib/theme/dataViz";
 import BudgetEmptyState from "@/components/budget/BudgetEmptyState";
 import { BudgetSetupSheet } from "@/components/budget/BudgetSetupSheet";
+import { BudgetQuickSetup } from "@/components/budget/BudgetQuickSetup";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
+
+/**
+ * Rolling cross-year window for the month picker: 12 months back through 3
+ * forward from TODAY, always including the currently-viewed period. Values are
+ * "<year>-<month>" so navigation is never year-locked.
+ */
+function monthOptions(viewMonth: number, viewYear: number) {
+  const now = new Date();
+  const options: Array<{ value: string; label: string }> = [];
+  const seen = new Set<string>();
+  const push = (p: { month: number; year: number }) => {
+    const value = `${p.year}-${p.month}`;
+    if (seen.has(value)) return;
+    seen.add(value);
+    options.push({ value, label: `${MONTHS[p.month - 1]} ${p.year}` });
+  };
+  let cursor = stepPeriod(
+    { month: now.getMonth() + 1, year: now.getFullYear() },
+    -1
+  );
+  // Walk back to the window start (12 months back), then forward through +3.
+  for (let i = 0; i < 11; i++) cursor = stepPeriod(cursor, -1);
+  for (let i = 0; i < 16; i++) {
+    push(cursor);
+    cursor = stepPeriod(cursor, 1);
+  }
+  push({ month: viewMonth, year: viewYear });
+  options.sort((a, b) => {
+    const [ay, am] = a.value.split("-").map(Number);
+    const [by, bm] = b.value.split("-").map(Number);
+    return ay * 12 + am - (by * 12 + bm);
+  });
+  return options;
+}
 
 interface CategoryData {
   id: string;
@@ -70,9 +106,10 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [isSetupOpen, setIsSetupOpen] = useState(false);
+  const [isQuickSetupOpen, setIsQuickSetupOpen] = useState(false);
   const [setupMode, setSetupMode] = useState<
-    "create" | "saveTemplate" | "editLinkedTemplate" | "updateTemplate"
-  >("create");
+    "saveTemplate" | "editTemplate" | "editLinkedTemplate" | "updateTemplate"
+  >("saveTemplate");
   const [setupTemplate, setSetupTemplate] = useState<BudgetTemplate | null>(null);
   const [spendOpen, setSpendOpen] = useState(false);
   // When no budget row exists yet, data.id is "" (a virtual empty budget). The
@@ -81,23 +118,36 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
   const [resolvedId, setResolvedId] = useState("");
   const effectiveBudgetId = data.id || resolvedId;
 
+  const ensureRow = useEnsureBudgetRow();
   const ensureBudgetId = useCallback(async (): Promise<string> => {
     if (data.id) return data.id;
     if (resolvedId) return resolvedId;
-    const row = await ensureBudgetRow(defaultMonth, defaultYear);
-    await getDB().budgets.put(row);
-    setResolvedId(row.id);
+    // Online: real row from the server. Offline: temp_ row + queued INSERT.
+    const id = await ensureRow(defaultMonth, defaultYear);
+    setResolvedId(id);
     qc.invalidateQueries({ queryKey: budgetKey(defaultMonth, defaultYear) });
     qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
-    return row.id;
-  }, [data.id, resolvedId, defaultMonth, defaultYear, qc]);
+    return id;
+  }, [data.id, resolvedId, ensureRow, defaultMonth, defaultYear, qc]);
 
-  const openSetup = useCallback(async () => {
+  // Categories-first quick setup — no server round trip to open, works offline
+  // (the row is ensured lazily on save).
+  const openSetup = useCallback(() => {
     haptic.light();
-    await ensureBudgetId();
-    setSetupMode("create");
-    setIsSetupOpen(true);
-  }, [haptic, ensureBudgetId]);
+    setIsQuickSetupOpen(true);
+  }, [haptic]);
+
+  // Edit a custom template from the quick-setup picker.
+  const openEditTemplateFromPicker = useCallback(
+    (template: BudgetTemplate) => {
+      haptic.light();
+      setIsQuickSetupOpen(false);
+      setSetupTemplate(template);
+      setSetupMode("editTemplate");
+      setIsSetupOpen(true);
+    },
+    [haptic]
+  );
 
   // Capture the current month's budget as a new reusable template.
   const openSaveTemplate = useCallback(() => {
@@ -137,6 +187,19 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
       : null,
   );
 
+  // One-tap carry for an empty month being viewed (auto-carry only ever runs
+  // for the CURRENT month, in CarryController — peeked months need this tap).
+  const carryMutation = useCarryBudget();
+  const carrySource = useCarrySource(defaultMonth, defaultYear);
+  const isEmpty = data.categories.length === 0 && data.totalBudget === 0;
+  const handleCarry = useCallback(() => {
+    haptic.light();
+    carryMutation.mutate(
+      { month: defaultMonth, year: defaultYear, auto: false },
+      { onSuccess: (r) => (r.carried ? haptic.success() : haptic.error()) }
+    );
+  }, [haptic, carryMutation, defaultMonth, defaultYear]);
+
   const totalAllocated = data.categories.reduce((s, c) => s + c.allocated, 0);
   const totalSpent = data.categories.reduce((s, c) => s + c.spent, 0);
   const leftOfBudget = data.totalBudget - totalSpent;
@@ -144,8 +207,14 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
   const unallocatedBudget = data.totalBudget - totalAllocated;
   const spentPct = data.totalBudget > 0 ? Math.round((totalSpent / data.totalBudget) * 100) : 0;
 
-  function handleMonthChange(newMonthIndex: number) {
-    router.push(`?month=${newMonthIndex + 1}&year=${defaultYear}`);
+  function pushPeriod(month: number, year: number) {
+    router.push(`?month=${month}&year=${year}`);
+  }
+
+  function stepMonth(delta: 1 | -1) {
+    haptic.selection();
+    const next = stepPeriod({ month: defaultMonth, year: defaultYear }, delta);
+    pushPeriod(next.month, next.year);
   }
 
   useEffect(() => {
@@ -218,13 +287,38 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
               {data.categories.length} {data.categories.length === 1 ? "category" : "categories"}
             </p>
           </div>
-          <BottomSheetSelect
-            title="Select Month"
-            options={MONTHS.map((m, i) => ({ value: String(i), label: `${m} ${defaultYear}` }))}
-            value={String(defaultMonth - 1)}
-            onChange={(val) => handleMonthChange(Number(val))}
-            className="flex items-center gap-1 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-bold text-foreground"
-          />
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              aria-label="Previous month"
+              onClick={() => stepMonth(-1)}
+              className="flex h-[38px] w-[34px] items-center justify-center rounded-xl border border-border bg-card text-muted-foreground active:scale-95 transition-transform"
+            >
+              <span className="material-symbols-outlined text-[18px] leading-none">
+                chevron_left
+              </span>
+            </button>
+            <BottomSheetSelect
+              title="Select Month"
+              options={monthOptions(defaultMonth, defaultYear)}
+              value={`${defaultYear}-${defaultMonth}`}
+              onChange={(val) => {
+                const [y, m] = val.split("-").map(Number);
+                pushPeriod(m, y);
+              }}
+              className="flex items-center gap-1 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-bold text-foreground"
+            />
+            <button
+              type="button"
+              aria-label="Next month"
+              onClick={() => stepMonth(1)}
+              className="flex h-[38px] w-[34px] items-center justify-center rounded-xl border border-border bg-card text-muted-foreground active:scale-95 transition-transform"
+            >
+              <span className="material-symbols-outlined text-[18px] leading-none">
+                chevron_right
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* Summary card */}
@@ -309,7 +403,8 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
         {data.categories.length === 0 ? (
           <BudgetEmptyState
             onSetup={openSetup}
-            onAddCategory={openAddCategory}
+            carrySourceLabel={isEmpty ? carrySource.data?.label ?? null : null}
+            onCarry={handleCarry}
           />
         ) : (
           <div className="flex flex-col gap-2.5">
@@ -361,6 +456,19 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
         )}
       </div>
       
+      <BudgetQuickSetup
+        isOpen={isQuickSetupOpen}
+        onClose={() => setIsQuickSetupOpen(false)}
+        budgetId={effectiveBudgetId}
+        month={defaultMonth}
+        year={defaultYear}
+        onEditTemplate={openEditTemplateFromPicker}
+        onDone={() => {
+          qc.invalidateQueries({ queryKey: budgetKey(defaultMonth, defaultYear) });
+          qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
+        }}
+      />
+
       <BudgetSetupSheet
         isOpen={isSetupOpen}
         onClose={() => setIsSetupOpen(false)}
@@ -562,16 +670,18 @@ function TemplateControl({
           haptic.light();
           setDriftedOpen(true);
         }}
-        className="flex items-center gap-1 text-[13px] font-bold text-amber-600 dark:text-amber-500 max-w-[160px]"
-        aria-label={`Template ${template.name} modified`}
+        className="flex items-center gap-1 text-[13px] font-bold text-foreground max-w-[160px]"
+        aria-label={`Template ${template.name} modified — tap for options`}
       >
-        <span className="material-symbols-outlined text-base leading-none">
+        <span className="material-symbols-outlined text-base leading-none text-accent-strong">
           bookmark
         </span>
         <span className="truncate">{template.name}</span>
-        <span className="text-[10px] font-bold uppercase tracking-wide shrink-0">
-          · Edited
-        </span>
+        {/* Quiet drift indicator — details live in the tap-through drawer. */}
+        <span
+          className="size-1.5 rounded-full bg-amber-500 shrink-0"
+          aria-hidden
+        />
       </button>
 
       <Drawer.Root open={driftedOpen} onOpenChange={setDriftedOpen}>
@@ -592,11 +702,11 @@ function TemplateControl({
                 id="template-drift-description"
                 className="mt-1 text-[13px] text-muted-foreground"
               >
-                This budget no longer matches{" "}
+                You&apos;ve tweaked this month since applying{" "}
                 <span className="font-semibold text-foreground">
                   {template.name}
                 </span>
-                . Save the changes to the template or create a new one.
+                . Keep your changes here, or sync them to the template.
               </p>
 
               <div className="mt-5 flex flex-col gap-3 pb-8">

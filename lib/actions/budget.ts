@@ -12,6 +12,7 @@ import { addAssetEntry } from "@/lib/actions/asset-history";
 import { makePayment, reverseDebtPayment } from "@/lib/actions/debt";
 import { resolveOverspendMessage } from "@/lib/actions/notify-messages";
 import { tierForCount } from "@/lib/notify/messages";
+import type { CarryPayload } from "@/lib/budget/carry";
 
 type LinkType = "asset" | "debt";
 
@@ -1271,6 +1272,332 @@ export async function setupBudgetFromTemplate(
       record,
     })),
   };
+}
+
+// ─── Carry-forward (auto month continuity) ───────────────────────────────────
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/**
+ * Copy a previous month's budget structure into a new month (CARRY_SETUP sync
+ * op). Idempotent and race-safe: if the target month already has categories
+ * (another device/tab carried or set up first), returns `conflict: true` with
+ * the winning budget row and inserts nothing.
+ *
+ * Also owns durable-identity upkeep: when the client minted a template id
+ * (manual source budget) or per-item identities, they are stamped back onto the
+ * SOURCE budget/items/merchant_rules so SMS auto-allocation follows items into
+ * the new month (resolveRuleItemId requires budget.template_id to match the
+ * rule in BOTH months). See lib/budget/carry.ts and lib/sms/resolveRuleItem.ts.
+ */
+export async function carryBudgetForward(input: CarryPayload): Promise<{
+  conflict: boolean;
+  budgetIdMap: {
+    tempId: string | null;
+    realId: string;
+    record: BudgetRow;
+  } | null;
+  categoryIdMap: Array<{ tempId: string; realId: string; record: CategoryRow }>;
+  itemIdMap: Array<{ tempId: string; realId: string; record: BudgetItemRow }>;
+}> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  // 1. Ensure the target budget row exists (insert-or-reselect on unique race).
+  let budget: BudgetRow;
+  {
+    const { data: existing } = await supabase
+      .from("budgets")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("month", input.month)
+      .eq("year", input.year)
+      .maybeSingle();
+    if (existing) {
+      budget = existing;
+    } else {
+      const { data: created, error } = await supabase
+        .from("budgets")
+        .insert({ user_id: user.id, month: input.month, year: input.year, total_budget: 0 })
+        .select()
+        .maybeSingle();
+      if (created) {
+        budget = created;
+      } else {
+        // Unique violation — another writer inserted concurrently; reselect.
+        const { data: raced, error: reselectErr } = await supabase
+          .from("budgets")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("month", input.month)
+          .eq("year", input.year)
+          .single();
+        if (reselectErr || !raced) throw new Error(error?.message ?? "Budget row not found");
+        budget = raced;
+      }
+    }
+  }
+
+  const budgetIdMap = {
+    tempId: input.budgetTempId,
+    realId: budget.id,
+    record: budget,
+  };
+
+  // 2. Guard: never double-insert into a month that already has categories.
+  const { data: existingCats, error: catCheckErr } = await supabase
+    .from("categories")
+    .select("id")
+    .eq("budget_id", budget.id)
+    .eq("user_id", user.id)
+    .limit(1);
+  if (catCheckErr) throw new Error(catCheckErr.message);
+  if ((existingCats ?? []).length > 0) {
+    return { conflict: true, budgetIdMap, categoryIdMap: [], itemIdMap: [] };
+  }
+
+  const curPromise = getUserCurrency(supabase, user.id);
+
+  // 3. Stamp the target budget's total + template identity.
+  {
+    const update: Database["public"]["Tables"]["budgets"]["Update"] = {
+      template_id: input.templateId,
+    };
+    if (input.totalBudget > 0) update.total_budget = input.totalBudget;
+    const { error } = await supabase
+      .from("budgets")
+      .update(update)
+      .eq("id", budget.id)
+      .eq("user_id", user.id);
+    if (error) throw new Error(error.message);
+    budgetIdMap.record = { ...budget, ...update } as BudgetRow;
+  }
+
+  // 4. Minted identity → the SOURCE budget must carry it too, or the rule
+  //    resolver can't match rules learned last month.
+  if (input.mintedTemplateId) {
+    const { error } = await supabase
+      .from("budgets")
+      .update({ template_id: input.templateId })
+      .eq("id", input.sourceBudgetId)
+      .eq("user_id", user.id);
+    if (error) throw new Error(error.message);
+  }
+
+  // 5. Bulk-insert categories (order-preserving index mapping, as BULK_SETUP).
+  const filteredCats = input.categories.filter((c) => c.name.trim());
+  const categoryRows = filteredCats.map((c) => ({
+    budget_id: budget.id,
+    user_id: user.id,
+    name: c.name.trim(),
+    icon: c.icon,
+    color: c.color,
+    type: c.type,
+    allocated_amount: Number(c.allocated_amount || 0),
+  }));
+
+  let insertedCategories: CategoryRow[] = [];
+  if (categoryRows.length > 0) {
+    const { data, error } = await supabase
+      .from("categories")
+      .insert(categoryRows)
+      .select();
+    if (error) throw new Error(error.message);
+    insertedCategories = (data ?? []) as CategoryRow[];
+  }
+  const categoryIdMap = filteredCats.map((c, i) => ({
+    tempId: c.tempId,
+    realId: insertedCategories[i]!.id,
+    record: insertedCategories[i]!,
+  }));
+  const tempToRealCat = new Map(categoryIdMap.map((m) => [m.tempId, m.realId]));
+
+  // 6. Validate carried links once; drop stale ones (BULK_SETUP parity).
+  const hasLinks = filteredCats.some((c) => c.items.some((i) => i.linkType && i.linkId));
+  let validAssetIds = new Set<string>();
+  let validDebtIds = new Set<string>();
+  if (hasLinks) {
+    const [assetsRes, debtsRes] = await Promise.all([
+      supabase.from("assets").select("id").eq("user_id", user.id),
+      supabase.from("debts").select("id").eq("user_id", user.id),
+    ]);
+    validAssetIds = new Set((assetsRes.data ?? []).map((r) => r.id));
+    validDebtIds = new Set((debtsRes.data ?? []).map((r) => r.id));
+  }
+  const linkIsValid = (type: LinkType, id: string) =>
+    type === "asset" ? validAssetIds.has(id) : validDebtIds.has(id);
+
+  // 7. Bulk-insert items with durable identity + fresh spend state.
+  const itemInputs: Array<{
+    tempId: string;
+    row: Database["public"]["Tables"]["budget_items"]["Insert"];
+  }> = [];
+  for (const c of filteredCats) {
+    const realCatId = tempToRealCat.get(c.tempId)!;
+    for (const item of c.items) {
+      const trimmed = item.name.trim();
+      if (!trimmed) continue;
+      const keepLink = !!(
+        item.linkType && item.linkId && linkIsValid(item.linkType, item.linkId)
+      );
+      itemInputs.push({
+        tempId: item.tempId,
+        row: {
+          category_id: realCatId,
+          user_id: user.id,
+          name: trimmed,
+          emoji: item.emoji ?? null,
+          planned_amount: Number(item.planned || 0),
+          actual_amount: 0,
+          is_completed: false,
+          notes: null,
+          link_type: keepLink ? item.linkType : null,
+          link_id: keepLink ? item.linkId : null,
+          template_id: item.templateItemId ? input.templateId : null,
+          template_item_id: item.templateItemId,
+        },
+      });
+    }
+  }
+
+  let insertedItems: BudgetItemRow[] = [];
+  if (itemInputs.length > 0) {
+    const { data, error } = await supabase
+      .from("budget_items")
+      .insert(itemInputs.map((i) => i.row))
+      .select();
+    if (error) throw new Error(error.message);
+    insertedItems = (data ?? []) as BudgetItemRow[];
+  }
+  const itemIdMap = itemInputs.map((i, idx) => ({
+    tempId: i.tempId,
+    realId: insertedItems[idx]!.id,
+    record: insertedItems[idx]!,
+  }));
+
+  // 8. Back-stamp minted identity onto source items + their merchant rules
+  //    (per-item stampBudgetTemplateIdentity logic) so legacy rules go durable.
+  const toStamp = filteredCats.flatMap((c) =>
+    c.items.filter((i) => i.stampSourceItemId && i.templateItemId)
+  );
+  for (const item of toStamp) {
+    const { error: itemErr } = await supabase
+      .from("budget_items")
+      .update({ template_id: input.templateId, template_item_id: item.templateItemId })
+      .eq("id", item.stampSourceItemId!)
+      .eq("user_id", user.id);
+    if (itemErr) throw new Error(itemErr.message);
+    const { error: ruleErr } = await supabase
+      .from("merchant_rules")
+      .update({ template_id: input.templateId, template_item_id: item.templateItemId })
+      .eq("budget_item_id", item.stampSourceItemId!)
+      .eq("user_id", user.id);
+    if (ruleErr) throw new Error(ruleErr.message);
+  }
+
+  // 9. One summary activity log.
+  const cur = await curPromise;
+  const sourceName = MONTH_NAMES[(await sourceMonthName(supabase, user.id, input.sourceBudgetId)) - 1];
+  await logActivity(supabase, user.id, {
+    action_type: "budget_carried_forward",
+    category: "budget",
+    title: `Copied ${sourceName ?? "last month"}'s budget into ${MONTH_NAMES[input.month - 1]}`,
+    description: `Carried ${categoryIdMap.length} categories and ${itemIdMap.length} items forward${input.totalBudget > 0 ? ` with total budget ${fmt(input.totalBudget, cur)}` : ""}`,
+    metadata: {
+      budgetId: budget.id,
+      sourceBudgetId: input.sourceBudgetId,
+      month: input.month,
+      year: input.year,
+      totalBudget: input.totalBudget,
+      currency: cur,
+      categoryCount: categoryIdMap.length,
+      itemCount: itemIdMap.length,
+    },
+  });
+
+  return { conflict: false, budgetIdMap, categoryIdMap, itemIdMap };
+}
+
+/** Month number of a budget row, for the carry activity title. */
+async function sourceMonthName(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  budgetId: string
+): Promise<number> {
+  const { data } = await supabase
+    .from("budgets")
+    .select("month")
+    .eq("id", budgetId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data?.month ?? 0;
+}
+
+/**
+ * Undo a carried budget: wipe its categories/items and reset the row. Refuses
+ * when any item already has spend logged (SMS auto-allocation can land seconds
+ * after a carry) — undo must never destroy spend history.
+ */
+export async function undoCarriedBudget(
+  budgetId: string
+): Promise<{ blocked: boolean }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const { data: categories, error: catErr } = await supabase
+    .from("categories")
+    .select("id, budget_items(id, actual_amount)")
+    .eq("budget_id", budgetId)
+    .eq("user_id", user.id);
+  if (catErr) throw new Error(catErr.message);
+
+  const cats = (categories ?? []) as Array<{
+    id: string;
+    budget_items: Array<{ id: string; actual_amount: number }> | null;
+  }>;
+  const hasSpend = cats.some((c) =>
+    (c.budget_items ?? []).some((i) => Number(i.actual_amount || 0) > 0)
+  );
+  if (hasSpend) return { blocked: true };
+
+  const catIds = cats.map((c) => c.id);
+  if (catIds.length > 0) {
+    // Items first: don't rely on a DB-level cascade being configured.
+    const { error: itemErr } = await supabase
+      .from("budget_items")
+      .delete()
+      .in("category_id", catIds)
+      .eq("user_id", user.id);
+    if (itemErr) throw new Error(itemErr.message);
+    const { error: delErr } = await supabase
+      .from("categories")
+      .delete()
+      .in("id", catIds)
+      .eq("user_id", user.id);
+    if (delErr) throw new Error(delErr.message);
+  }
+
+  const { error: resetErr } = await supabase
+    .from("budgets")
+    .update({ total_budget: 0, template_id: null })
+    .eq("id", budgetId)
+    .eq("user_id", user.id);
+  if (resetErr) throw new Error(resetErr.message);
+
+  await logActivity(supabase, user.id, {
+    action_type: "budget_carry_undone",
+    category: "budget",
+    title: "Undid the copied budget",
+    description: "Removed the auto-copied budget for this month",
+    metadata: { budgetId, categoryCount: catIds.length },
+  });
+
+  return { blocked: false };
 }
 
 export async function getCategoryData(categoryId: string) {

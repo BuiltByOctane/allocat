@@ -13,7 +13,11 @@ import {
   deleteBudgetItem,
   quickLogSpend,
   setupBudgetFromTemplate,
+  carryBudgetForward,
+  undoCarriedBudget,
+  ensureBudgetRow,
 } from "@/lib/actions/budget";
+import { carryMarkerKey, type CarryPayload } from "@/lib/budget/carry";
 import {
   stampBudgetTemplateIdentity,
   type StampTemplateInput,
@@ -32,6 +36,25 @@ type BulkSetupCategoryInput = {
     linkType?: "asset" | "debt" | null;
     linkId?: string | null;
     templateItemId?: string | null;
+  }>;
+};
+
+type CarrySetupResult = {
+  conflict: boolean;
+  budgetIdMap: {
+    tempId: string | null;
+    realId: string;
+    record: Record<string, unknown>;
+  } | null;
+  categoryIdMap: Array<{
+    tempId: string;
+    realId: string;
+    record: Record<string, unknown>;
+  }>;
+  itemIdMap: Array<{
+    tempId: string;
+    realId: string;
+    record: Record<string, unknown>;
   }>;
 };
 import {
@@ -85,22 +108,29 @@ function extractTempIds(obj: unknown): string[] {
   return ids;
 }
 
+/** Ops whose payload nests its own tempIds under categories[]/items[]. */
+function isNestedBulkOp(op: SyncQueueItem["operation"]): boolean {
+  return op === "BULK_SETUP" || op === "CARRY_SETUP";
+}
+
 /**
- * BULK_SETUP enqueues with `recordId: budgetId` and NO top-level `tempId` — the
- * category/item temp ids it creates live inside `payload.categories[].tempId`
- * and `…items[].tempId`. So a plain `q.tempId === id` producer lookup never
- * matches them. This recognises a BULK_SETUP item as the producer for any temp
- * id it declares, so dependents (SMS categorize, quick-spend, auto-allocate on a
- * freshly-created budget item) aren't wrongly judged doomed if the queue is ever
- * evaluated out of insertion order.
+ * BULK_SETUP / CARRY_SETUP enqueue with `recordId: budgetId` and NO top-level
+ * `tempId` — the temp ids they create live inside `payload.categories[].tempId`
+ * and `…items[].tempId` (CARRY_SETUP may also declare `payload.budgetTempId`).
+ * So a plain `q.tempId === id` producer lookup never matches them. This
+ * recognises a nested-bulk item as the producer for any temp id it declares, so
+ * dependents (SMS categorize, quick-spend, auto-allocate on a freshly-created
+ * budget item) aren't wrongly judged doomed if the queue is ever evaluated out
+ * of insertion order.
  */
 function bulkSetupDeclares(item: SyncQueueItem, tempId: string): boolean {
-  if (item.operation !== "BULK_SETUP") return false;
-  const cats =
-    (item.payload as {
-      categories?: Array<{ tempId?: string; items?: Array<{ tempId?: string }> }>;
-    }).categories ?? [];
-  for (const c of cats) {
+  if (!isNestedBulkOp(item.operation)) return false;
+  const payload = item.payload as {
+    budgetTempId?: string | null;
+    categories?: Array<{ tempId?: string; items?: Array<{ tempId?: string }> }>;
+  };
+  if (payload.budgetTempId === tempId) return true;
+  for (const c of payload.categories ?? []) {
     if (c.tempId === tempId) return true;
     for (const i of c.items ?? []) {
       if (i.tempId === tempId) return true;
@@ -130,6 +160,8 @@ export class SyncEngine {
   // Maps each (table, operation) to the corresponding server action call
   private dispatch: Dispatcher = {
     budgets: {
+      // Offline-created month row: create-or-get resolves the temp id.
+      INSERT: (p) => ensureBudgetRow(p.month as number, p.year as number),
       UPDATE: (p) =>
         updateBudgetTotal(p.budgetId as string, p.totalAmount as number),
       BULK_SETUP: (p) =>
@@ -141,6 +173,8 @@ export class SyncEngine {
         ),
       STAMP_TEMPLATE: (p) =>
         stampBudgetTemplateIdentity(p as unknown as StampTemplateInput),
+      CARRY_SETUP: (p) => carryBudgetForward(p as unknown as CarryPayload),
+      UNDO_CARRY: (p) => undoCarriedBudget(p.budgetId as string),
     },
     categories: {
       INSERT: (p) =>
@@ -395,11 +429,10 @@ export class SyncEngine {
       // Retry backoff not yet elapsed → leave for a later wake.
       if (candidate.nextAttemptAt && candidate.nextAttemptAt > now) continue;
 
-      // BULK_SETUP creates its own tempIds (not in id_map yet), so never block it.
-      if (
-        candidate.operation !== "BULK_SETUP" &&
-        (await this.hasUnresolvedDependencies(candidate))
-      ) {
+      // Nested bulk ops create their own tempIds (not in id_map yet) — only
+      // EXTERNAL temp refs (e.g. a carried linkId / stampSourceItemId pointing
+      // at a still-unsynced row) should gate them on their producer.
+      if (await this.hasUnresolvedDependencies(candidate)) {
         // If the dependency can never resolve (its INSERT failed and is gone),
         // this item is doomed — fail it so it stops clogging the queue count.
         if (await this.isDependencyDoomed(candidate)) {
@@ -467,6 +500,8 @@ export class SyncEngine {
             }>;
           }
         );
+      } else if (item.operation === "CARRY_SETUP") {
+        await this.applyCarrySetupResult(item, result as CarrySetupResult);
       }
 
       await db.sync_queue.update(item.id, { status: "done" });
@@ -528,10 +563,21 @@ export class SyncEngine {
     }, wait);
   }
 
+  /**
+   * Temp ids in the payload the item depends on someone ELSE to produce.
+   * Nested bulk ops (BULK_SETUP/CARRY_SETUP) declare their own temp ids —
+   * those are excluded, leaving only external refs (linkId, stampSourceItemId).
+   */
+  private dependencyTempIds(item: SyncQueueItem): string[] {
+    const tempIds = extractTempIds(item.payload);
+    if (!isNestedBulkOp(item.operation)) return tempIds;
+    return tempIds.filter((id) => !bulkSetupDeclares(item, id));
+  }
+
   private async hasUnresolvedDependencies(
     item: SyncQueueItem
   ): Promise<boolean> {
-    const tempIds = extractTempIds(item.payload);
+    const tempIds = this.dependencyTempIds(item);
     if (tempIds.length === 0) return false;
     const db = getDB();
     for (const tempId of tempIds) {
@@ -548,7 +594,7 @@ export class SyncEngine {
    * item can never sync, so it should be failed rather than blocked forever.
    */
   private async isDependencyDoomed(item: SyncQueueItem): Promise<boolean> {
-    const tempIds = extractTempIds(item.payload);
+    const tempIds = this.dependencyTempIds(item);
     if (tempIds.length === 0) return false;
     const db = getDB();
     for (const tempId of tempIds) {
@@ -646,6 +692,69 @@ export class SyncEngine {
     }
   }
 
+  /**
+   * Reconcile a CARRY_SETUP round trip.
+   * Success: swap the optimistic budget row (when carried offline against no
+   * local row) then reuse the BULK_SETUP category/item reconciliation.
+   * Conflict (another device/tab populated the month first): drop our
+   * optimistic rows, hydrate the winner's budget row, clear the carry marker
+   * so the banner doesn't advertise a carry that didn't happen.
+   */
+  private async applyCarrySetupResult(
+    item: SyncQueueItem,
+    result: CarrySetupResult
+  ): Promise<void> {
+    const db = getDB();
+    const payload = item.payload as unknown as CarryPayload;
+
+    if (result.conflict) {
+      // Delete our optimistic nested rows (same shape as rollback).
+      for (const c of payload.categories ?? []) {
+        for (const i of c.items ?? []) {
+          await db.budget_items.delete(i.tempId);
+        }
+        await db.categories.delete(c.tempId);
+      }
+      if (result.budgetIdMap) {
+        if (payload.budgetTempId) {
+          await db.budgets.delete(payload.budgetTempId);
+          await db.id_map.put({
+            tempId: payload.budgetTempId,
+            realId: result.budgetIdMap.realId,
+            table: "budgets",
+          });
+        }
+        await db.budgets.put(result.budgetIdMap.record as never);
+      }
+      await db.sync_meta.delete(carryMarkerKey(payload.month, payload.year));
+      return;
+    }
+
+    if (result.budgetIdMap) {
+      if (
+        result.budgetIdMap.tempId &&
+        result.budgetIdMap.tempId !== result.budgetIdMap.realId
+      ) {
+        await db.id_map.put({
+          tempId: result.budgetIdMap.tempId,
+          realId: result.budgetIdMap.realId,
+          table: "budgets",
+        });
+        await this.replaceIDBRecord(
+          "budgets",
+          result.budgetIdMap.tempId,
+          result.budgetIdMap.realId,
+          result.budgetIdMap.record
+        );
+      } else {
+        // Row id was already real — refresh it with the server's stamped state.
+        await db.budgets.put(result.budgetIdMap.record as never);
+      }
+    }
+
+    await this.applyBulkSetupResult(result);
+  }
+
   private async replaceIDBRecord(
     table: SyncTable,
     tempId: string,
@@ -679,7 +788,16 @@ export class SyncEngine {
     realId: string
   ): Promise<void> {
     const db = getDB();
-    if (table === "categories") {
+    if (table === "budgets") {
+      // budget_id is indexed on categories — use it.
+      const kids = await db.categories
+        .where("budget_id")
+        .equals(tempId)
+        .toArray();
+      for (const k of kids) {
+        await db.categories.update(k.id, { budget_id: realId });
+      }
+    } else if (table === "categories") {
       // category_id is indexed on budget_items — use it.
       const kids = await db.budget_items
         .where("category_id")
@@ -712,15 +830,26 @@ export class SyncEngine {
       await db.table(item.table).delete(item.recordId);
       return;
     }
-    if (item.operation === "BULK_SETUP") {
-      const cats =
-        (item.payload as { categories?: Array<{ tempId: string; items?: Array<{ tempId: string }> }> })
-          .categories ?? [];
-      for (const c of cats) {
+    if (isNestedBulkOp(item.operation)) {
+      const payload = item.payload as {
+        categories?: Array<{ tempId: string; items?: Array<{ tempId: string }> }>;
+        budgetTempId?: string | null;
+        month?: number;
+        year?: number;
+      };
+      for (const c of payload.categories ?? []) {
         for (const i of c.items ?? []) {
           await db.budget_items.delete(i.tempId);
         }
         await db.categories.delete(c.tempId);
+      }
+      if (item.operation === "CARRY_SETUP") {
+        if (payload.budgetTempId) {
+          await db.budgets.delete(payload.budgetTempId);
+        }
+        if (payload.month && payload.year) {
+          await db.sync_meta.delete(carryMarkerKey(payload.month, payload.year));
+        }
       }
     }
   }

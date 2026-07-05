@@ -140,6 +140,22 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         qc.invalidateQueries({ queryKey: ["dashboard"] });
       }
 
+      // CARRY_SETUP back-stamps durable identity onto the SOURCE month's budget
+      // and items server-side (minted template ids for manual budgets) — pull
+      // both tables so SMS rule resolution sees the stamped identity without
+      // waiting for the next full hydrate.
+      if (item.table === "budgets" && item.operation === "CARRY_SETUP") {
+        scheduleForcedRefresh(["budgets", "budget_items"], ["budget"]);
+      }
+
+      // UNDO_CARRY deletes the carried rows server-side. A full reload between
+      // the local undo and this sync re-hydrates the still-live server rows
+      // into IDB — force-refresh with delete reconciliation so they're removed
+      // again once the server confirms the undo.
+      if (item.table === "budgets" && item.operation === "UNDO_CARRY") {
+        scheduleForcedRefresh(["budgets", "categories", "budget_items"], ["budget"]);
+      }
+
       // Server-side cascade can mutate other tables. Pull fresh state for
       // those so IDB matches the server before any subsequent read.
       if (

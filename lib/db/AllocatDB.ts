@@ -44,6 +44,8 @@ export type SyncOperation =
   | "DELETE"
   | "PAYMENT"
   | "BULK_SETUP"
+  | "CARRY_SETUP"
+  | "UNDO_CARRY"
   | "ACHIEVE"
   | "CATEGORIZE"
   | "IGNORE"
@@ -86,6 +88,12 @@ export interface SyncMetaEntry {
   lastSynced: number;
   /** Only populated on the __userId__ entry to detect account changes. */
   userId?: string;
+  /** Only populated on `__carry__<year>-<month>` entries (see lib/budget/carry.ts). */
+  carry?: {
+    state: "carried" | "undone" | "dismissed";
+    sourceLabel: string;
+    budgetId: string;
+  };
 }
 
 // ─── Dexie class ─────────────────────────────────────────────────────────────

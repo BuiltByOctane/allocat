@@ -86,10 +86,12 @@ interface BudgetSetupSheetProps {
   onDone: () => void;
   /** "create" (default) = pick/build a budget. "saveTemplate" = capture the
    *  current budget as a template only. "updateTemplate" / "editLinkedTemplate"
-   *  operate on the already-linked template (see SetupMode). */
+   *  operate on the already-linked template; "editTemplate" edits any custom
+   *  template passed via linkedTemplate (no budget sync). See SetupMode. */
   mode?:
     | "create"
     | "saveTemplate"
+    | "editTemplate"
     | "editLinkedTemplate"
     | "updateTemplate";
   /** The budget's resolved linked template — required for edit/update modes. */
@@ -199,6 +201,13 @@ export function BudgetSetupSheet({
     // Edit the linked template from its own body; save syncs template → budget.
     if (mode === "editLinkedTemplate" && linkedTemplate) {
       enterEditTemplate(linkedTemplate, "editLinkedTemplate");
+      return;
+    }
+
+    // Edit a custom template directly (opened from the quick-setup picker) —
+    // template writes only, no budget sync.
+    if (mode === "editTemplate" && linkedTemplate) {
+      enterEditTemplate(linkedTemplate, "editTemplate");
       return;
     }
 

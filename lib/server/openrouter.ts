@@ -6,7 +6,7 @@
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 /** Update the model here — used by both the chat route and weekly insights. */
-export const OPENROUTER_MODEL = "openai/gpt-oss-120b:free";
+export const OPENROUTER_MODEL = "openrouter/free";
 
 export type ORMessage = {
   role: "system" | "user" | "assistant";

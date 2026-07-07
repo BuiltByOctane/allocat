@@ -175,11 +175,11 @@ export function SmsBridge() {
     consumeDeepLinkRef.current = consumeDeepLink;
 
     (async () => {
-      try {
-        await SmsReader.requestPermission();
-      } catch {
-        /* user may decline */
-      }
+      // NOTE: the bridge deliberately does NOT request the SMS permission here.
+      // Google Play's prominent-disclosure policy requires the OS prompt to fire
+      // ONLY after the user reads the disclosure and taps Allow — that flow lives
+      // in NativeSetup.tsx (the sole requester). If permission isn't granted yet,
+      // the listeners below simply never fire and drain() returns nothing.
       // Capacitor local-notification taps (the in-app notifyLocal ones).
       try {
         const { LocalNotifications } = await import(

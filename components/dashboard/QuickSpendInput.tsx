@@ -211,8 +211,12 @@ export default function QuickSpendInput({ categories }: QuickSpendInputProps) {
 
   return (
     <section ref={sectionRef}>
-      <p className="text-[13px] font-bold text-foreground mb-4">
-        Quick log
+      <p className="text-[13px] font-bold text-foreground mb-1">
+        Log a cash spend
+      </p>
+      <p className="text-[10.5px] font-medium text-muted-foreground mb-4">
+        Bank &amp; UPI spends are tracked automatically from your SMS. Use this for
+        cash — or anything that didn&apos;t come through.
       </p>
 
       {sharedNote && (

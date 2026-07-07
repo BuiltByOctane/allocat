@@ -51,7 +51,7 @@ Capacitor loads the deployed Next.js app; only the native SMS plugin is bundled.
 # Point the shell at JDK 21 (Capacitor 8 requires it)
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 
-# Production: capacitor.config.ts defaults server.url to https://allocat.app
+# Production: capacitor.config.ts defaults server.url to https://allocat.xyz/dashboard
 npx cap sync android
 
 # LAN dev against a local Next server (enables cleartext http automatically):

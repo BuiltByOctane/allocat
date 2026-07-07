@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { Capacitor } from "@capacitor/core";
-import { ChevronRight, History, MessageSquareText, CheckCircle2, Lightbulb, RotateCcw, MessageSquareHeart, Receipt, FileBarChart, Sun, Moon } from "lucide-react";
+import { ChevronRight, History, MessageSquareText, CheckCircle2, Lightbulb, RotateCcw, MessageSquareHeart, Receipt, FileBarChart, Sun, Moon, ShieldCheck, Trash2 } from "lucide-react";
 import UserAvatar from "@/components/profile/UserAvatar";
 import AvatarPickerSheet from "@/components/profile/AvatarPickerSheet";
 import { Card } from "@/components/ui/Card";
@@ -337,6 +337,40 @@ export default function ProfilePage() {
       >
         Or email us directly
       </a>
+
+      {/* Legal group — Play requires the privacy policy and account-deletion
+          route to be reachable from inside the app, not just the store listing. */}
+      <p className="t-label text-muted-foreground mt-1 ml-1">Legal</p>
+
+      <Link href="/legal/privacy-policy" className="block active:scale-[0.99] transition-transform">
+        <Card compact className="flex items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-tile text-muted-foreground">
+            <ShieldCheck size={18} strokeWidth={1.7} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[13.5px] font-bold text-foreground">Privacy policy</div>
+            <div className="text-[10.5px] font-medium text-muted-foreground mt-0.5">
+              How your data — including SMS — is handled
+            </div>
+          </div>
+          <ChevronRight size={16} strokeWidth={2} className="text-muted-foreground" />
+        </Card>
+      </Link>
+
+      <Link href="/legal/delete-account" className="block active:scale-[0.99] transition-transform">
+        <Card compact className="flex items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-tile text-muted-foreground">
+            <Trash2 size={18} strokeWidth={1.7} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[13.5px] font-bold text-foreground">Delete account &amp; data</div>
+            <div className="text-[10.5px] font-medium text-muted-foreground mt-0.5">
+              What gets removed and how to request it
+            </div>
+          </div>
+          <ChevronRight size={16} strokeWidth={2} className="text-muted-foreground" />
+        </Card>
+      </Link>
 
       {/* Logout */}
       <button

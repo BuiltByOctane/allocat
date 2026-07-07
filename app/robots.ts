@@ -21,7 +21,7 @@ export default function robots(): MetadataRoute.Robots {
         ],
       },
     ],
-    sitemap: "https://allocat.app/sitemap.xml",
-    host: "https://allocat.app",
+    sitemap: "https://allocat.xyz/sitemap.xml",
+    host: "https://allocat.xyz",
   };
 }

@@ -4,19 +4,19 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
   return [
     {
-      url: "https://allocat.app",
+      url: "https://allocat.xyz",
       lastModified: now,
       changeFrequency: "weekly",
       priority: 1.0,
     },
     {
-      url: "https://allocat.app/auth/login",
+      url: "https://allocat.xyz/auth/login",
       lastModified: now,
       changeFrequency: "monthly",
       priority: 0.7,
     },
     {
-      url: "https://allocat.app/auth/signup",
+      url: "https://allocat.xyz/auth/signup",
       lastModified: now,
       changeFrequency: "monthly",
       priority: 0.7,

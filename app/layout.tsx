@@ -29,7 +29,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://allocat.app"),
+  metadataBase: new URL("https://allocat.xyz"),
   title: {
     default: "AlloCat — Personal Finance, Budgeting & Net Worth Tracker",
     template: "%s · AlloCat",
@@ -57,11 +57,11 @@ export const metadata: Metadata = {
   publisher: "AlloCat",
   category: "finance",
   alternates: {
-    canonical: "https://allocat.app",
+    canonical: "https://allocat.xyz",
   },
   openGraph: {
     type: "website",
-    url: "https://allocat.app",
+    url: "https://allocat.xyz",
     siteName: "AlloCat",
     title: "AlloCat — Personal Finance, Budgeting & Net Worth Tracker",
     description:
@@ -117,18 +117,18 @@ const jsonLd = {
   "@graph": [
     {
       "@type": "Organization",
-      "@id": "https://allocat.app/#organization",
+      "@id": "https://allocat.xyz/#organization",
       name: "AlloCat",
-      url: "https://allocat.app",
-      logo: "https://allocat.app/allocat-logo.png",
-      sameAs: ["https://grow.allocat.app"],
+      url: "https://allocat.xyz",
+      logo: "https://allocat.xyz/allocat-logo.png",
+      sameAs: ["https://grow.allocat.xyz"],
     },
     {
       "@type": "WebSite",
-      "@id": "https://allocat.app/#website",
+      "@id": "https://allocat.xyz/#website",
       name: "AlloCat",
-      url: "https://allocat.app",
-      publisher: { "@id": "https://allocat.app/#organization" },
+      url: "https://allocat.xyz",
+      publisher: { "@id": "https://allocat.xyz/#organization" },
     },
     {
       "@type": "SoftwareApplication",
@@ -137,7 +137,7 @@ const jsonLd = {
       applicationCategory: "FinanceApplication",
       applicationSubCategory: "Personal Finance, Budgeting, Net Worth Tracker",
       operatingSystem: "Web, Android, iOS, Windows, macOS",
-      url: "https://allocat.app",
+      url: "https://allocat.xyz",
       description:
         "Minimalist, offline-first personal finance PWA. Track budgets, debts, goals, and net worth with AI-powered insights.",
       offers: {

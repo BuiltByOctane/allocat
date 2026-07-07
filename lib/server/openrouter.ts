@@ -24,7 +24,7 @@ export function openRouterChat(opts: {
     method: "POST",
     headers: {
       Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-      "HTTP-Referer": "https://allocat.app",
+      "HTTP-Referer": "https://allocat.xyz",
       "X-Title": "AlloCat",
       "Content-Type": "application/json",
     },

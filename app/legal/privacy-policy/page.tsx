@@ -7,7 +7,7 @@ export const metadata = {
   alternates: { canonical: "https://allocat.xyz/legal/privacy-policy" },
 };
 
-const UPDATED = "5 June 2026";
+const UPDATED = "7 July 2026";
 
 export default function PrivacyPolicyPage() {
   return (
@@ -26,7 +26,8 @@ export default function PrivacyPolicyPage() {
 
       <Section title="Summary">
         <p>
-          AlloCat is a personal-finance app. Your financial data is yours. We
+          AlloCat is a personal-finance app operated by Octane Innovations. Your
+          financial data is yours. We
           collect the minimum needed to run the app, we never sell your data, and
           we never share it with third-party advertisers or data brokers. The raw
           content of your SMS messages never leaves your device.
@@ -98,6 +99,30 @@ export default function PrivacyPolicyPage() {
           budgets and spending, syncing across your devices, and sending you
           notifications you have enabled (for example, a budget-limit alert). We do
           not use it for advertising or marketing, and we do not sell it.
+        </p>
+      </Section>
+
+      <Section title="AI features">
+        <p>
+          Some AlloCat features use AI, including the in-app assistant, weekly
+          insights, and certain alert messages. To generate these, we send the
+          relevant derived financial context (such as budget totals, spending
+          amounts, and category names) to our AI provider,{" "}
+          <strong>OpenRouter</strong>, which processes the request and returns a
+          response. We do <strong>not</strong> send the raw content of your SMS
+          messages to any AI provider. This data is used only to produce the
+          feature you asked for; it is not used for advertising or marketing, and
+          we do not sell it.
+        </p>
+      </Section>
+
+      <Section title="Subscriptions and payments">
+        <p>
+          AlloCat offers an optional paid subscription. Purchases are processed by{" "}
+          <strong>Google Play Billing</strong>. We use{" "}
+          <strong>Adapty</strong> to manage your subscription status and
+          entitlements, which involves a device identifier. We do not receive or
+          store your full payment card details; those are handled by Google Play.
         </p>
       </Section>
 

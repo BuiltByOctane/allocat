@@ -201,18 +201,18 @@ export function pickFlavor(s: InsightStats): { title: string; body: string } {
     if (diff <= -5) {
       return {
         title: "🎉 Week over week",
-        body: `${money(s.weekTotal)} this week — ${Math.abs(diff)}% less than last. Nice restraint.`,
+        body: `${money(s.weekTotal)} this week, ${Math.abs(diff)}% less than last. Nice restraint.`,
       };
     }
     if (diff >= 5) {
       return {
         title: "👀 The cat's watching",
-        body: `${money(s.weekTotal)} this week — up ${diff}% on last. Worth a look.`,
+        body: `${money(s.weekTotal)} this week, up ${diff}% on last. Worth a look.`,
       };
     }
     return {
       title: "🐾 Week over week",
-      body: `${money(s.weekTotal)} this week — about the same as last. Steady.`,
+      body: `${money(s.weekTotal)} this week, about the same as last. Steady.`,
     };
   }
 

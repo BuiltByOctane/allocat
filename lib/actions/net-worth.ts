@@ -296,7 +296,7 @@ export async function achieveGoalAsset(assetId: string) {
 
   notifyUser(user.id, {
     title: "Goal achieved",
-    body: `${asset.name} — ${fmt(previousValue, cur)} unlocked.`,
+    body: `${asset.name}: ${fmt(previousValue, cur)} unlocked.`,
     tag: `goal-${assetId}`,
     url: "/goals",
   }).catch(() => {});

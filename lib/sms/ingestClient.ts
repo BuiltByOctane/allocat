@@ -303,7 +303,7 @@ export async function ingestSmsClient(
         } else {
           await notifyLocal({
             title: "😼 Budget's getting thin",
-            body: `${nl.name} at ${Math.round(nl.ratio * 100)}% — only ${money(nl.remaining)} left. Tread softly.`,
+            body: `${nl.name} at ${Math.round(nl.ratio * 100)}%, only ${money(nl.remaining)} left. Tread softly.`,
             url: "/budget",
           });
         }
@@ -312,7 +312,7 @@ export async function ingestSmsClient(
         if (pace) {
           await notifyLocal({
             title: "🐾 Spending fast",
-            body: `${pace.name} is on track to run out around the ${ordinal(pace.byDay)} — ease up to stay in budget.`,
+            body: `${pace.name} is on track to run out around the ${ordinal(pace.byDay)}. Ease up to stay in budget.`,
             url: "/budget",
           });
         } else if (confirmAutoAllocate()) {
@@ -331,7 +331,7 @@ export async function ingestSmsClient(
     } else if (isDebit) {
       await notifyLocal({
         title: "🐾 A wild spend appeared!",
-        body: `${money(amount)} at ${merchant ?? "someone"} — tap to give it a home.`,
+        body: `${money(amount)} at ${merchant ?? "someone"}. Tap to give it a home.`,
         url: `/sms?txn=${tempId}`,
       });
     }

@@ -370,7 +370,7 @@ export function useCategorizeSms() {
           });
           await notifyLocal({
             title: "😼 Budget's getting thin",
-            body: `${nl.name} at ${Math.round(nl.ratio * 100)}% — only ${left} left. Tread softly.`,
+            body: `${nl.name} at ${Math.round(nl.ratio * 100)}%, only ${left} left. Tread softly.`,
             url: "/budget",
           });
         }

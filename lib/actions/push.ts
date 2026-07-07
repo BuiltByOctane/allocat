@@ -91,7 +91,7 @@ export async function sendTestPush() {
   const { user } = await getAuthed();
   await notifyUser(user.id, {
     title: "AlloCat",
-    body: "Test notification — push is working.",
+    body: "Test notification: push is working.",
     tag: "test",
     url: "/dashboard",
   });

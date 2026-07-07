@@ -280,7 +280,7 @@ export async function ingestSmsTransaction(input: IngestSmsInput) {
   if (actionable) {
     await notifyUser(user.id, {
       title: "🐾 A wild spend appeared!",
-      body: `${fmt(input.amount as number, cur)} at ${merchantLabel} — tap to give it a home.`,
+      body: `${fmt(input.amount as number, cur)} at ${merchantLabel}. Tap to give it a home.`,
       tag: `sms-txn-${txn.id}`,
       url: `/sms?txn=${txn.id}`,
     });

@@ -90,7 +90,7 @@ export async function scheduleDebtReminders(): Promise<void> {
       toSchedule.push({
         id: debtNotifId(lent.id),
         title: "🐱 Payday whiskers",
-        body: `${lent.name} owes you ${amount} — due today. Time for a gentle nudge.`,
+        body: `${lent.name} owes you ${amount}, due today. Time for a gentle nudge.`,
         schedule: { at, allowWhileIdle: true },
         extra: { url: "/debt" },
       });

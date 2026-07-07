@@ -128,7 +128,7 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
                     } else {
                         notifTitle = "😼 Budget's getting thin";
                         notifBody = name + " at " + Math.round(used / total * 100)
-                            + "% — only ₹" + Math.round(total - used) + " left. Tread softly.";
+                            + "%, only ₹" + Math.round(total - used) + " left. Tread softly.";
                     }
                 } else {
                     // Predictive pace nudge: on track to overspend before the
@@ -142,7 +142,7 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
                     if (mr.itemPlanned > 0 && day >= 3 && byDay <= dim) {
                         notifTitle = "🐾 Spending fast";
                         notifBody = mr.itemName + " is on track to run out around the "
-                            + ordinal(byDay) + " — ease up to stay in budget.";
+                            + ordinal(byDay) + ". Ease up to stay in budget.";
                         url = "/budget";
                     } else if (SmsConfig.confirmEnabled(context)) {
                         // Subtle auto-allocate confirmation (user can disable in
@@ -163,7 +163,7 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
                 }
             } else {
                 notifTitle = "🐾 A wild spend appeared!";
-                notifBody = amt + " at " + merch + " — tap to give it a home.";
+                notifBody = amt + " at " + merch + ". Tap to give it a home.";
                 // Deep-link by dedupe key so tapping the notification opens the SMS page.
                 // (The web layer creates the matching txn when it drains the queue on open.)
                 String dedupe = SmsHash.dedupeKey(from, text);

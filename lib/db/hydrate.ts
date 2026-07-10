@@ -164,6 +164,38 @@ async function reconcileDeletes(
 }
 
 /**
+ * Fast, network-free check: can we render straight from the IDB cache?
+ *
+ * True only when the LOCAL session user matches the userId stamped in IDB AND
+ * the cache is actually populated. `getSession()` reads the persisted session
+ * from local storage (no network round-trip, unlike `getUser()`), so this
+ * resolves in milliseconds. The caller renders from cache immediately and
+ * kicks off `hydrateAllTables()` in the background to reconcile with the server.
+ *
+ * The userId match is what keeps this safe on a shared device: a different user
+ * (or no cached user) returns false → the caller takes the cold path, where
+ * `hydrateAllTables` does the authoritative `getUser()` + wipe-if-mismatch.
+ */
+export async function canHydrateFromCache(): Promise<boolean> {
+  try {
+    const supabase = createClient();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.user) return false;
+
+    const db = getDB();
+    const storedMeta = await db.sync_meta.get(USER_META_KEY);
+    if (!storedMeta?.userId || storedMeta.userId !== session.user.id) return false;
+
+    // A populated profiles row means this user has been fully hydrated before.
+    return (await db.profiles.count()) > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Fetches ALL tables from Supabase for the current user and bulk-writes into IDB.
  * Called once at app startup (SyncProvider mount). Uses bulkPut for upsert semantics.
  *

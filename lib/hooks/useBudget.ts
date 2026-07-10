@@ -57,26 +57,33 @@ export async function getBudgetFromIDB(month: number, year: number) {
     .equals(budget.id)
     .toArray();
 
-  const enrichedCategories = await Promise.all(
-    categories.map(async (cat) => {
-      const items = await db.budget_items
-        .where("category_id")
-        .equals(cat.id)
-        .toArray();
+  // Single bulk read of every item across all categories instead of one query
+  // per category (N+1), then group in memory — matches the useDashboard pattern.
+  const categoryIds = categories.map((c) => c.id);
+  const allItems = categoryIds.length
+    ? await db.budget_items.where("category_id").anyOf(categoryIds).toArray()
+    : [];
+  const itemsByCategory = new Map<string, typeof allItems>();
+  for (const item of allItems) {
+    const arr = itemsByCategory.get(item.category_id);
+    if (arr) arr.push(item);
+    else itemsByCategory.set(item.category_id, [item]);
+  }
 
-      const spent = items.reduce((s, i) => s + Number(i.actual_amount), 0);
+  const enrichedCategories = categories.map((cat) => {
+    const items = itemsByCategory.get(cat.id) ?? [];
+    const spent = items.reduce((s, i) => s + Number(i.actual_amount), 0);
 
-      return {
-        id: cat.id,
-        name: cat.name,
-        icon: cat.icon,
-        type: cat.type,
-        allocated: Number(cat.allocated_amount),
-        spent,
-        subtitle: `${items.length} items`,
-      };
-    })
-  );
+    return {
+      id: cat.id,
+      name: cat.name,
+      icon: cat.icon,
+      type: cat.type,
+      allocated: Number(cat.allocated_amount),
+      spent,
+      subtitle: `${items.length} items`,
+    };
+  });
 
   return {
     id: budget.id,
@@ -114,21 +121,24 @@ export function useBudgetData(month: number, year: number) {
 async function getBudgetDriftItems(budgetId: string): Promise<DriftCategory[]> {
   const db = getDB();
   const cats = await db.categories.where("budget_id").equals(budgetId).toArray();
-  return Promise.all(
-    cats.map(async (cat) => {
-      const items = await db.budget_items
-        .where("category_id")
-        .equals(cat.id)
-        .toArray();
-      return {
-        name: cat.name,
-        items: items.map((it) => ({
-          name: it.name,
-          template_item_id: it.template_item_id ?? null,
-        })),
-      };
-    })
-  );
+  // Bulk-read all items once (not per category), then group in memory.
+  const catIds = cats.map((c) => c.id);
+  const allItems = catIds.length
+    ? await db.budget_items.where("category_id").anyOf(catIds).toArray()
+    : [];
+  const itemsByCategory = new Map<string, typeof allItems>();
+  for (const item of allItems) {
+    const arr = itemsByCategory.get(item.category_id);
+    if (arr) arr.push(item);
+    else itemsByCategory.set(item.category_id, [item]);
+  }
+  return cats.map((cat) => ({
+    name: cat.name,
+    items: (itemsByCategory.get(cat.id) ?? []).map((it) => ({
+      name: it.name,
+      template_item_id: it.template_item_id ?? null,
+    })),
+  }));
 }
 
 export interface BudgetTemplateHeader {

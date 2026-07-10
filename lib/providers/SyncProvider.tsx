@@ -12,7 +12,12 @@ import { Capacitor } from "@capacitor/core";
 import type { PluginListenerHandle } from "@capacitor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { SyncEngine } from "@/lib/sync/SyncEngine";
-import { hydrateAllTables, forceRefreshTable } from "@/lib/db/hydrate";
+import {
+  hydrateAllTables,
+  forceRefreshTable,
+  canHydrateFromCache,
+  isTableStale,
+} from "@/lib/db/hydrate";
 import { prefetchAllQueries } from "@/lib/db/prefetch";
 import { installRandomUUIDPolyfill } from "@/lib/utils/uuid";
 import type { SyncQueueItem } from "@/lib/db";
@@ -57,6 +62,12 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
     const now = Date.now();
     if (now - lastRefreshRef.current < 20_000) return;
+    // Skip the full 15-table pull when local data is still fresh. Every
+    // foreground flip / resume used to re-hydrate everything; now a resume
+    // within the staleness window (isTableStale: 5 min) is a no-op. `budgets`
+    // is representative — hydrateAllTables stamps sync_meta for all tables
+    // together, so its staleness tracks the whole cache.
+    if (!(await isTableStale("budgets"))) return;
     lastRefreshRef.current = now;
     try {
       await hydrateAllTables();
@@ -234,27 +245,45 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    hydrateAllTables()
-      .then(async () => {
+    // Bring the engine + UI online. `prefetch` warms the React Query cache from
+    // IDB (a no-skeleton optimization, not a correctness gate) — it ran on the
+    // WebView main thread and once froze the first-run modals, so it's never
+    // awaited here.
+    const goLive = async () => {
+      setIsHydrated(true);
+      engine.start();
+      void prefetchAllQueries(qc).catch(() => {});
+      const count = await engine.getPendingCount();
+      if (mounted) setPendingCount(count);
+    };
+
+    (async () => {
+      // Fast path: this user's data is already in IDB. Render from it
+      // IMMEDIATELY (no network gate on first paint) and reconcile with the
+      // server in the background. hydrateAllTables does its own authoritative
+      // getUser() + wipe-if-different-user, so the background pull stays safe.
+      if (await canHydrateFromCache()) {
         if (!mounted) return;
-        // IDB is now populated → pages can read it. Mark hydrated + start the
-        // engine FIRST so the UI (and the first-run setup/tour modals) become
-        // interactive immediately. Warming the React Query cache is a no-skeleton
-        // optimization, not a correctness gate, so do it in the background —
-        // awaiting it here used to keep the WebView's main thread busy through a
-        // 4-query prefetch on launch, which froze the first-run modals.
-        setIsHydrated(true);
-        engine.start();
-        void prefetchAllQueries(qc).catch(() => {});
-        const count = await engine.getPendingCount();
-        if (mounted) setPendingCount(count);
-      })
-      .catch((err) => {
+        await goLive();
+        void hydrateAllTables().catch((err) =>
+          console.warn("[SyncProvider] Background hydration failed:", err)
+        );
+        return;
+      }
+
+      // Cold path (first-ever launch / fresh signup / different user / empty
+      // cache): there's nothing to show, so pull before marking hydrated.
+      try {
+        await hydrateAllTables();
+        if (!mounted) return;
+        await goLive();
+      } catch (err) {
         console.warn("[SyncProvider] Hydration failed (offline?):", err);
         if (!mounted) return;
         setIsHydrated(true);
         engine.start();
-      });
+      }
+    })();
 
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);

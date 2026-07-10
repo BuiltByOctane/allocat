@@ -772,7 +772,7 @@ async function sendNearLimitPush(
     title: over ? "🙀 Budget blown!" : "😼 Budget's getting thin",
     body: over
       ? `${name} is over by ${fmt(used - total, currency)}. The cat's out of the bag.`
-      : `${name} at ${Math.round((used / total) * 100)}% — only ${fmt(remaining, currency)} left. Tread softly.`,
+      : `${name} at ${Math.round((used / total) * 100)}% - only ${fmt(remaining, currency)} left. Tread softly.`,
     tag: `budget-warn-${name}`,
     url: "/budget",
   });

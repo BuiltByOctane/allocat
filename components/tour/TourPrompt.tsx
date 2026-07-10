@@ -28,7 +28,7 @@ export function TourPrompt() {
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
           We can walk you through the dashboard, budgets, goals and more. It only
-          takes a minute — or skip it and explore on your own.
+          takes a minute - or skip it and explore on your own.
         </p>
 
         <div className="mt-6 flex flex-col gap-2.5">

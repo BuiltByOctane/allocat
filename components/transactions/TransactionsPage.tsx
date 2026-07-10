@@ -273,7 +273,7 @@ export default function TransactionsPage() {
           </div>
           <p className="text-sm font-bold text-foreground">No transactions yet</p>
           <p className="max-w-[260px] text-xs text-muted-foreground">
-            Your spending shows up here — auto-captured from bank SMS or logged by
+            Your spending shows up here - auto-captured from bank SMS or logged by
             hand. Set up a budget, then log a spend to get started.
           </p>
           <Link
@@ -358,7 +358,7 @@ export default function TransactionsPage() {
                     {typeof selected.amount === "number" ? (
                       <CurrencyText value={selected.amount} maximumFractionDigits={0} />
                     ) : (
-                      "—"
+                      "-"
                     )}
                   </span>
                   <span className="shrink-0 rounded-full bg-tile px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
@@ -371,7 +371,7 @@ export default function TransactionsPage() {
 
                 <dl className="mt-3 space-y-2 text-sm">
                   <Row label="Item" value={selMeta?.itemName ?? "Unallocated"} />
-                  <Row label="Category" value={selMeta?.categoryName || "—"} />
+                  <Row label="Category" value={selMeta?.categoryName || "-"} />
                   <Row label="Date" value={fullDateLabel(whenOf(selected))} />
                   <Row label="Time" value={timeLabel(whenOf(selected))} />
                   {typeof selected.original_amount === "number" && (

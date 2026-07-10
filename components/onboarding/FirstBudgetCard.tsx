@@ -101,7 +101,7 @@ export function FirstBudgetCard() {
     <div className="flex h-full w-full flex-col gap-6 overflow-y-auto px-7 py-8 no-scrollbar">
       <div className="flex flex-col gap-3">
         <span className="text-[11px] font-bold uppercase tracking-wide text-accent-strong">
-          Last step — Your budget
+          Last step - Your budget
         </span>
         <h1 className="font-display text-[clamp(1.9rem,8vw,2.6rem)] font-bold leading-[0.98] tracking-tight text-white">
           Set your
@@ -109,7 +109,7 @@ export function FirstBudgetCard() {
           first budget.
         </h1>
         <p className="text-[15px] leading-relaxed text-white/55">
-          Pick a starting point and a monthly amount — you can tweak everything
+          Pick a starting point and a monthly amount - you can tweak everything
           later. Or skip and explore first.
         </p>
       </div>

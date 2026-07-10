@@ -94,7 +94,7 @@ function formatValue(
   value: unknown
 ): { content: ReactNode; isNumeric: boolean } {
   if (value === null || value === undefined) {
-    return { content: "—", isNumeric: false };
+    return { content: "-", isNumeric: false };
   }
   if (
     typeof value === "number" &&

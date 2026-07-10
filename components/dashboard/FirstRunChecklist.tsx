@@ -71,7 +71,7 @@ export function useFirstRun(
       id: "budget",
       icon: "account_balance_wallet",
       title: "Set up your budget",
-      description: "Pick a template or add categories — your spending plan.",
+      description: "Pick a template or add categories - your spending plan.",
       href: "/budget",
       done: budgetDone,
       primary: true,

@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import { useTheme } from 'next-themes';
 import { EmojiStyle, Theme, type EmojiClickData } from 'emoji-picker-react';
 import { useHaptic } from "@/lib/hooks/useHaptic";
+import { useSheetBackClose } from "@/lib/native/sheetRegistry";
 
 const EmojiPicker = dynamic(() => import('emoji-picker-react'), { ssr: false });
 
@@ -29,6 +30,10 @@ export default function EmojiPickerModal({ isOpen, onClose, onSelect, container 
 
   React.useEffect(() => { setMounted(true); }, []);
 
+  // Hardware back closes the picker instead of navigating (it's a custom portal,
+  // not a vaul/Radix dialog, so it isn't covered by the Escape path).
+  useSheetBackClose(isOpen, onClose);
+
   if (!isOpen || !mounted) return null;
 
   const handlePick = (data: EmojiClickData) => {
@@ -39,7 +44,7 @@ export default function EmojiPickerModal({ isOpen, onClose, onSelect, container 
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4 pb-20 animate-in fade-in duration-200"
+      className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm animate-in fade-in duration-200 sm:flex sm:items-center sm:justify-center"
       style={{ pointerEvents: 'auto' }}
       onPointerDown={(e) => e.stopPropagation()}
       onPointerDownCapture={(e) => e.stopPropagation()}
@@ -47,7 +52,11 @@ export default function EmojiPickerModal({ isOpen, onClose, onSelect, container 
       onTouchStart={(e) => e.stopPropagation()}
     >
       <div
-        className="bg-card w-full max-w-md rounded-t-sheet sm:rounded-card p-4 shadow-xl animate-in slide-in-from-bottom flex flex-col sheet-3q border border-border relative z-[101]"
+        // Positioned (fixed bottom) so `.sheet-3q`'s `bottom: var(--keyboard-inset)`
+        // lift actually applies — as a static flex child the `bottom` was ignored
+        // and the picker slid under the on-screen keyboard. Reverts to a centered
+        // card on desktop (sm:).
+        className="bg-card w-full max-w-md mx-auto rounded-t-sheet sm:rounded-card p-4 shadow-xl animate-in slide-in-from-bottom flex flex-col sheet-3q border border-border fixed inset-x-0 bottom-0 z-[101] sm:static sm:h-auto sm:max-h-[80vh]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-3 px-2">

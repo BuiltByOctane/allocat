@@ -31,7 +31,7 @@ export default function SignupPage() {
     <AuthShell
       eyebrow="Create account"
       title="Start tracking"
-      subtitle="Take control of your finances in minutes — no spreadsheets required."
+      subtitle="Take control of your finances in minutes - no spreadsheets required."
       switchPrompt="Already have an account?"
       switchHref="/auth/login"
       switchCta="Sign in"

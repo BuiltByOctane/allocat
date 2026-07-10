@@ -27,7 +27,7 @@ const KINDS: { id: FeedbackKind; label: string; icon: typeof Bug }[] = [
 const PLACEHOLDERS: Record<FeedbackKind, string> = {
   bug: "What went wrong? Steps to reproduce help a lot.",
   feature: "What would you love AlloCat to do?",
-  feedback: "Tell us what you think — the good and the bad.",
+  feedback: "Tell us what you think - the good and the bad.",
 };
 
 export function FeedbackSheet({ isOpen, onClose, initialKind = "feedback" }: FeedbackSheetProps) {

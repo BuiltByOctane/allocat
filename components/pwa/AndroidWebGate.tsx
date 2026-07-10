@@ -36,7 +36,7 @@ export function AndroidWebGate() {
           AlloCat works best in the app
         </h1>
         <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
-          On Android, AlloCat runs as a dedicated app — faster, offline-ready, with
+          On Android, AlloCat runs as a dedicated app - faster, offline-ready, with
           SMS auto-tracking and notifications. Install it from the Play Store to
           continue.
         </p>

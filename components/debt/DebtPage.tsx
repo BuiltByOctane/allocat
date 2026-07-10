@@ -172,7 +172,7 @@ export default function DebtPage({ data }: { data: Debt[] }) {
 
   const trendPct = trendData?.trendPct ?? 0;
   const trendLabel = trendPct === 0
-    ? "—"
+    ? "-"
     : `${trendPct >= 0 ? "↘" : "↗"} ${Math.abs(trendPct).toFixed(1)}%`;
 
   const hasDebts = data.filter((d) => d.type !== "lent").length > 0;
@@ -205,7 +205,7 @@ export default function DebtPage({ data }: { data: Debt[] }) {
               <span className="material-symbols-outlined text-[20px]">add</span>
             </button>
           </div>
-          <DebtEmptyState onAddDebt={openAddSheet} />
+          <DebtEmptyState onAddDebt={openAddSheet} onLent={() => setShowLentList(true)} />
         </div>
         <div className="h-28 md:h-12" />
         <DebtDetailSheet

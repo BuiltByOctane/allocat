@@ -32,7 +32,7 @@ export default function LoginPage() {
     <AuthShell
       eyebrow="Sign in"
       title="Welcome back"
-      subtitle="Pick up right where you left off — your money, your way."
+      subtitle="Pick up right where you left off - your money, your way."
       switchPrompt="Don't have an account?"
       switchHref="/auth/signup"
       switchCta="Create account"

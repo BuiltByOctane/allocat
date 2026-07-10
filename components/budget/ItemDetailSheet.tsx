@@ -446,7 +446,7 @@ export function ItemDetailSheet({
                           ? "border-neg focus:border-neg"
                           : "border-border focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40"
                       }`}
-                      placeholder={hasCategoryBudget ? "0" : "—"}
+                      placeholder={hasCategoryBudget ? "0" : "-"}
                       min="0"
                     />
                   </div>
@@ -536,7 +536,7 @@ export function ItemDetailSheet({
                     title={`Pick ${linkType}`}
                     placeholder={
                       targetOptions.length === 0
-                        ? `No ${linkType}s yet — create one first`
+                        ? `No ${linkType}s yet - create one first`
                         : `Select ${linkType}`
                     }
                     value={linkId}

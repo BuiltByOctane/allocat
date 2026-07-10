@@ -153,6 +153,7 @@ interface SyncCallbacks {
 
 export class SyncEngine {
   private isProcessing = false;
+  private activeDrain: Promise<void> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private handleOnline = () => this.processQueue();
   private callbacks: SyncCallbacks = {};
@@ -365,43 +366,74 @@ export class SyncEngine {
   }
 
   async processQueue(): Promise<void> {
-    if (this.isProcessing || !navigator.onLine) return;
+    if (!navigator.onLine) return;
+    // A drain is already running — await it rather than starting a second one,
+    // so external callers (e.g. flush() on logout) block until it finishes.
+    if (this.isProcessing) {
+      if (this.activeDrain) await this.activeDrain;
+      return;
+    }
     this.isProcessing = true;
 
-    try {
-      const db = getDB();
+    const drain = (async () => {
+      try {
+        const db = getDB();
 
-      // Recover items orphaned in "processing" by a previous session that was
-      // killed mid-flush. Without this they never retry and block dependents.
-      await db.sync_queue
-        .where("status")
-        .equals("processing")
-        .modify({ status: "pending" });
+        // Recover items orphaned in "processing" by a previous session that was
+        // killed mid-flush. Without this they never retry and block dependents.
+        await db.sync_queue
+          .where("status")
+          .equals("processing")
+          .modify({ status: "pending" });
 
-      // Drain in bounded-concurrency batches: each pass selects up to
-      // MAX_CONCURRENCY *independent* ready items (deps resolved, one per record,
-      // backoff elapsed) and runs them together. Dependents simply wait for a
-      // later pass once their producer's INSERT has written id_map.
-      while (true) {
-        const batch = await this.selectBatch();
-        if (batch.length === 0) break;
+        // Drain in bounded-concurrency batches: each pass selects up to
+        // MAX_CONCURRENCY *independent* ready items (deps resolved, one per record,
+        // backoff elapsed) and runs them together. Dependents simply wait for a
+        // later pass once their producer's INSERT has written id_map.
+        while (true) {
+          const batch = await this.selectBatch();
+          if (batch.length === 0) break;
 
-        await Promise.all(
-          batch.map((item) =>
-            db.sync_queue.update(item.id as number, { status: "processing" })
-          )
-        );
-        await this.notifyPendingChange();
+          await Promise.all(
+            batch.map((item) =>
+              db.sync_queue.update(item.id as number, { status: "processing" })
+            )
+          );
+          await this.notifyPendingChange();
 
-        // processItem swallows its own errors, so allSettled never rejects.
-        await Promise.allSettled(batch.map((item) => this.processItem(item)));
+          // processItem swallows its own errors, so allSettled never rejects.
+          await Promise.allSettled(batch.map((item) => this.processItem(item)));
+        }
+      } finally {
+        this.isProcessing = false;
       }
-    } finally {
-      this.isProcessing = false;
-    }
 
-    // Anything left pending is backoff-deferred — wake once when the soonest is due.
-    await this.scheduleRetryWake();
+      // Anything left pending is backoff-deferred — wake once when the soonest is due.
+      await this.scheduleRetryWake();
+    })();
+
+    this.activeDrain = drain;
+    try {
+      await drain;
+    } finally {
+      this.activeDrain = null;
+    }
+  }
+
+  /**
+   * Best-effort synchronous drain of the queue. Used BEFORE a logout wipe
+   * (`clearClientSession` → `clearDB`) so freshly-enqueued ops — notably an SMS
+   * `CATEGORIZE` the user just did — reach the server while the current session
+   * is still valid. Without this the wipe destroys the queue and the allocation
+   * is lost, reappearing as `pending` after re-hydration. Never throws; no-op
+   * when offline (the wipe still proceeds — allocation stays local-only).
+   */
+  async flush(): Promise<void> {
+    try {
+      await this.processQueue();
+    } catch {
+      /* best effort — never block logout on a sync failure */
+    }
   }
 
   // ─── Private helpers ───────────────────────────────────────────────────────

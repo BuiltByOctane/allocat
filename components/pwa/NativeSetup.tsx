@@ -97,7 +97,7 @@ export function NativeSetup() {
           done={sms === true}
           busy={busy === 2}
           title="Allow SMS access"
-          desc="Only financial transaction SMS are read — on-device, never sent."
+          desc="Only financial transaction SMS are read - on-device, never sent."
           action="Allow"
           onClick={async () => {
             setBusy(2);
@@ -116,7 +116,7 @@ export function NativeSetup() {
         <Step
           n={3}
           title="Enable Autostart"
-          desc="Lets AlloCat catch transactions when the app is closed. This opens your phone Settings — search for “Auto start” (or “Autostart” / “Background”), open it, find AlloCat and turn it ON."
+          desc="Lets AlloCat catch transactions when the app is closed. This opens your phone Settings - search for “Auto start” (or “Autostart” / “Background”), open it, find AlloCat and turn it ON."
           action="Open settings"
           onClick={() => void SmsReader.openAutostartSettings()}
         />
@@ -124,7 +124,7 @@ export function NativeSetup() {
         <Step
           n={4}
           title="Don't restrict battery"
-          desc="Stops the system from killing the SMS listener in the background. This opens Battery optimization — find AlloCat in the list and set it to “Don't optimize” (or “Unrestricted” / “No restrictions”)."
+          desc="Stops the system from killing the SMS listener in the background. This opens Battery optimization - find AlloCat in the list and set it to “Don't optimize” (or “Unrestricted” / “No restrictions”)."
           action="Open settings"
           onClick={() => void SmsReader.openBatterySettings()}
         />

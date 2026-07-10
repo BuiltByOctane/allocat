@@ -63,7 +63,7 @@ function AllocationStatus({ result }: { result: SpendResult }) {
       </div>
       <p className="text-[11px] font-medium text-muted-foreground truncate">
         <span className="text-foreground font-semibold">{itemName}</span>
-        {" "}— <CurrencyText value={result.actual} /> of{" "}
+        {" "}- <CurrencyText value={result.actual} /> of{" "}
         <CurrencyText value={planned} />
       </p>
       <div className="h-1.5 rounded-full bg-[var(--progress-empty)] overflow-hidden">
@@ -216,7 +216,7 @@ export default function QuickSpendInput({ categories }: QuickSpendInputProps) {
       </p>
       <p className="text-[10.5px] font-medium text-muted-foreground mb-4">
         Bank &amp; UPI spends are tracked automatically from your SMS. Use this for
-        cash — or anything that didn&apos;t come through.
+        cash - or anything that didn&apos;t come through.
       </p>
 
       {sharedNote && (

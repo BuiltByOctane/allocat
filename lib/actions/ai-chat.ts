@@ -47,7 +47,7 @@ async function getBudgetContextWith({ supabase, userId, fmt }: Ctx): Promise<str
     .eq("year", year)
     .maybeSingle();
 
-  if (!budget) return `=== BUDGET — ${monthName} ${year} ===\nNot set yet.`;
+  if (!budget) return `=== BUDGET - ${monthName} ${year} ===\nNot set yet.`;
 
   const total = Number(budget.total_budget || 0);
   let totalSpent = 0;
@@ -81,7 +81,7 @@ async function getBudgetContextWith({ supabase, userId, fmt }: Ctx): Promise<str
   const remaining = total - totalSpent;
 
   return [
-    `=== BUDGET — ${monthName} ${year} ===`,
+    `=== BUDGET - ${monthName} ${year} ===`,
     `Total Budget: ${fmt(total)}`,
     `Total Spent:  ${fmt(totalSpent)}`,
     `Remaining:    ${fmt(remaining)}${remaining < 0 ? " [OVERSPENT]" : ""}`,

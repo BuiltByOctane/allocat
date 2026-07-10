@@ -17,6 +17,7 @@ import NotificationSoundSelector from "@/components/profile/NotificationSoundSel
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { signOut, deleteAccount } from "@/lib/actions/auth";
 import { clearClientSession } from "@/lib/auth/clearSession";
+import { useSyncContext } from "@/lib/providers/SyncProvider";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { useTour } from "@/lib/tour/useTour";
 import {
@@ -33,6 +34,7 @@ import { FeedbackSheet } from "@/components/feedback/FeedbackSheet";
 
 export default function ProfilePage() {
   const { data: profile } = useProfile();
+  const { engine } = useSyncContext();
   const tour = useTour();
   const isPremium = useIsPremium();
   const { resolvedTheme, setTheme } = useTheme();
@@ -350,7 +352,7 @@ export default function ProfilePage() {
           <div className="flex-1 min-w-0">
             <div className="text-[13.5px] font-bold text-foreground">Privacy policy</div>
             <div className="text-[10.5px] font-medium text-muted-foreground mt-0.5">
-              How your data — including SMS — is handled
+              How your data - including SMS - is handled
             </div>
           </div>
           <ChevronRight size={16} strokeWidth={2} className="text-muted-foreground" />
@@ -399,6 +401,11 @@ export default function ProfilePage() {
         onConfirm={async () => {
           if (loggingOut) return;
           setLoggingOut(true);
+          // Drain the sync queue FIRST, while the session is still valid, so any
+          // just-made mutation (e.g. an SMS allocation) reaches the server before
+          // the wipe below destroys the queue. Otherwise re-hydration on return
+          // brings the txn back as pending. Best effort — no-op offline.
+          if (engine) await engine.flush();
           // Wipe IDB + account-scoped localStorage, drop the server session,
           // then hard-navigate so the in-memory React Query cache is gone too.
           await clearClientSession();
@@ -433,7 +440,7 @@ export default function ProfilePage() {
         description={
           deleteError
             ? `Couldn't delete: ${deleteError}`
-            : "This permanently deletes your account and all your data — budgets, goals, debts, assets and transactions. This cannot be undone."
+            : "This permanently deletes your account and all your data - budgets, goals, debts, assets and transactions. This cannot be undone."
         }
         confirmText={deleting ? "Deleting…" : "Delete forever"}
         cancelText="Cancel"

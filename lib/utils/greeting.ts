@@ -15,7 +15,7 @@ const WITTY_LINES = [
   "Small saves, big wins.",
   "Where's the money going? Let's see.",
   "Budget like a boss.",
-  "Money talks — you're listening.",
+  "Money talks - you're listening.",
   "Every rupee has a job today.",
 ] as const;
 

@@ -18,8 +18,8 @@ export default function BudgetEmptyState({
         title="No budget for this month yet"
         description={
           canCarry
-            ? `Pick up where you left off — copy ${carrySourceLabel}'s budget, or start fresh.`
-            : "Set a total and a few categories — you can fine-tune anytime."
+            ? `Pick up where you left off - copy ${carrySourceLabel}'s budget, or start fresh.`
+            : "Set a total and a few categories - you can fine-tune anytime."
         }
         action={
           canCarry

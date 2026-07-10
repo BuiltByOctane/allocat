@@ -145,7 +145,7 @@ export function PaywallSheet({
                 }}
                 className="w-full py-3.5 bg-accent text-accent-ink font-bold rounded-pill active:scale-[0.98] transition-all"
               >
-                Subscribe — {PRICING[plan].label}/{PRICING[plan].period}
+                Subscribe - {PRICING[plan].label}/{PRICING[plan].period}
               </button>
             ) : (
               <div className="w-full py-3.5 bg-muted text-center text-sm text-muted-foreground font-medium rounded-pill">

@@ -66,8 +66,8 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             <strong>What syncs to your account.</strong> Only the fields extracted
-            from a transaction SMS — the amount, currency, a normalized merchant
-            name, the direction (spend/credit), and a date — together with a
+            from a transaction SMS - the amount, currency, a normalized merchant
+            name, the direction (spend/credit), and a date - together with a
             one-way hashed de-duplication key, are synced to your account so your
             budgets stay consistent across devices.
           </li>
@@ -76,7 +76,7 @@ export default function PrivacyPolicyPage() {
 
       <Section title="Data we store for your account">
         <p>
-          When you sign in, we store the data you create in the app — budgets,
+          When you sign in, we store the data you create in the app - budgets,
           categories, goals, debts, assets, net-worth snapshots, and the extracted
           transaction fields described above. This is kept in our managed database
           (Supabase) and is associated with your account so it can sync across your
@@ -128,7 +128,7 @@ export default function PrivacyPolicyPage() {
 
       <Section title="Notifications">
         <p>
-          With your permission, AlloCat sends local and push notifications — for
+          With your permission, AlloCat sends local and push notifications - for
           example, when a new transaction needs categorizing or a budget nears its
           limit. You can disable these in your device settings at any time.
         </p>

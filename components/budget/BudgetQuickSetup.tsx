@@ -245,7 +245,7 @@ export function BudgetQuickSetup({
               Set up this month
             </Drawer.Title>
             <p id="quick-setup-description" className="mt-1 text-sm text-muted-foreground">
-              A total and a few categories — that&apos;s it.
+              A total and a few categories - that&apos;s it.
             </p>
           </div>
 
@@ -404,7 +404,7 @@ export function BudgetQuickSetup({
               </div>
               {categories.length > 0 && (
                 <p className="text-[11px] text-muted-foreground px-1">
-                  Add specific items inside each category later — tap a category
+                  Add specific items inside each category later - tap a category
                   on the budget page.
                 </p>
               )}
@@ -438,7 +438,7 @@ export function BudgetQuickSetup({
                     >
                       {isOverAllocated ? (
                         <>
-                          <CurrencyText value={Math.abs(leftToAllocate)} /> over —
+                          <CurrencyText value={Math.abs(leftToAllocate)} /> over -
                           total will adjust
                         </>
                       ) : (
@@ -502,7 +502,7 @@ export function BudgetQuickSetup({
               {isCreating
                 ? "Creating…"
                 : effective.bumped
-                  ? `Create — set total to ${fmt(effective.total)}`
+                  ? `Create - set total to ${fmt(effective.total)}`
                   : "Create budget"}
             </button>
           </div>

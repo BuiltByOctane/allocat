@@ -76,7 +76,7 @@ export function CarryController() {
         </span>
         <p className="flex-1 text-xs font-medium text-foreground leading-snug">
           {undoBlocked
-            ? "Spends already logged — edit instead"
+            ? "Spends already logged - edit instead"
             : `Budget copied from ${marker.data?.sourceLabel ?? "last month"}`}
         </p>
         <button

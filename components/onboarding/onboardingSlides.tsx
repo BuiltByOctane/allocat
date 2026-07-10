@@ -178,7 +178,7 @@ function AiVisual() {
         transition={{ delay: reduce ? 0 : 0.55, duration: 0.4 }}
       >
         <span>
-          You&apos;ve got ₹2,800 left in Wants — enjoy it.
+          You&apos;ve got ₹2,800 left in Wants - enjoy it.
         </span>
         <span className="text-sm">🐾</span>
       </motion.div>
@@ -205,7 +205,7 @@ export const TEACHING_SLIDES: TeachingSlide[] = [
   },
   {
     key: "budget",
-    eyebrow: "01 — Budget",
+    eyebrow: "01 - Budget",
     icon: "account_balance_wallet",
     title: (
       <>
@@ -219,7 +219,7 @@ export const TEACHING_SLIDES: TeachingSlide[] = [
   },
   {
     key: "grow",
-    eyebrow: "02 — Net worth · debt · goals",
+    eyebrow: "02 - Net worth · debt · goals",
     icon: "trending_up",
     title: (
       <>
@@ -233,7 +233,7 @@ export const TEACHING_SLIDES: TeachingSlide[] = [
   },
   {
     key: "sms",
-    eyebrow: "03 — Auto-tracking · Android",
+    eyebrow: "03 - Auto-tracking · Android",
     icon: "sms",
     title: (
       <>
@@ -247,7 +247,7 @@ export const TEACHING_SLIDES: TeachingSlide[] = [
   },
   {
     key: "ai",
-    eyebrow: "04 — Ask AlloCat",
+    eyebrow: "04 - Ask AlloCat",
     icon: "auto_awesome",
     title: (
       <>

@@ -14,6 +14,7 @@ import EmojiPickerModal from "@/components/ui/EmojiPickerModal";
 import { ColorPicker } from "@/components/ui/ColorPicker";
 import { resolveColor, type CatKey } from "@/lib/theme/dataViz";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ItemDetailSheet, NEW_ITEM_ID } from "@/components/budget/ItemDetailSheet";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { useCategoryData, categoryDataKey } from "@/lib/hooks/useCategoryData";
@@ -120,6 +121,21 @@ function CategoryDetailContent({
   }>({ assets: [], debts: [] });
   const [allAssets, setAllAssets] = useState<LinkTargetEntry[]>([]);
 
+  // Re-sync local state when the underlying query data changes (e.g. a server
+  // cascade or background hydrate refreshed IDB after an allocation). Local state
+  // was only seeded once at mount, so without this the detail screen kept showing
+  // its own optimistic snapshot and ignored fresh reconciled data. Reads are
+  // IDB-first and IDB already holds our optimistic writes, so this never reverts an
+  // in-flight edit; TanStack's structural sharing keeps `data` referentially stable
+  // when nothing actually changed, so this only fires on real updates.
+  useEffect(() => {
+    setItems(data.items);
+    setIcon(data.icon || null);
+    setColor((data.color as CatKey | null) ?? null);
+    setName(data.name);
+    setCategoryAllocation(data.categoryAllocation);
+  }, [data]);
+
   useEffect(() => {
     const db = getDB();
     let cancelled = false;
@@ -172,16 +188,31 @@ function CategoryDetailContent({
     return "";
   }
 
-  function invalidateBudgetCaches() {
-    getDB().categories.get(categoryId).then((cat) => {
-      if (!cat) return;
-      return getDB().budgets.get(cat.budget_id).then((budget) => {
-        if (!budget) return;
-        qc.invalidateQueries({ queryKey: budgetKey(budget.month, budget.year) });
-      });
-    }).catch(() => {});
-    qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
+  async function invalidateBudgetCaches() {
+    // Refetch (not just invalidate) the EXACT budget-list query the user navigates
+    // back to. `invalidateQueries` only marks an inactive query stale — the budget
+    // list is inactive while we're on the detail screen, so it wouldn't refetch and
+    // the user would see the old amount flash on return. Awaited (not fire-and-
+    // forget) so the refetch is in flight before router.back() unmounts us. Reads
+    // are IDB-first, which already holds the optimistic write, so this is cheap.
+    try {
+      const cat = await getDB().categories.get(categoryId);
+      const budget = cat ? await getDB().budgets.get(cat.budget_id) : null;
+      if (budget) {
+        await qc.refetchQueries({
+          queryKey: budgetKey(budget.month, budget.year),
+          type: "all",
+        });
+      } else {
+        await qc.refetchQueries({ queryKey: ["budget"], type: "all" });
+      }
+    } catch {
+      await qc.refetchQueries({ queryKey: ["budget"], type: "all" });
+    }
+    await qc.refetchQueries({ queryKey: DASHBOARD_KEY, type: "all" });
     qc.invalidateQueries({ queryKey: categoryDataKey(categoryId) });
+    // QuickSpend dropdown reads this key — keep it fresh too (Path-A hooks do).
+    qc.invalidateQueries({ queryKey: ["categoryItems"] });
   }
 
   async function handleAddItem(data: {
@@ -252,7 +283,7 @@ function CategoryDetailContent({
           link: linkType && linkId ? { link_type: linkType, link_id: linkId } : null,
         },
       });
-      invalidateBudgetCaches();
+      await invalidateBudgetCaches();
     } catch {
       haptic.error();
       setItems((prev) => prev.filter((item) => item.id !== tempId));
@@ -354,7 +385,7 @@ function CategoryDetailContent({
         recordId: id,
         payload: { itemId: id, updates: finalUpdates },
       });
-      invalidateBudgetCaches();
+      await invalidateBudgetCaches();
       // Force refetch on every actual_amount change. Even if the cascade
       // helper returned no flags (e.g. legacy 'goal' link_type that the IDB
       // upgrade hasn't rewritten yet), the server-side cascade may have run
@@ -395,7 +426,7 @@ function CategoryDetailContent({
         recordId: categoryId,
         payload: { categoryId, updates: { allocated_amount: newAmount } },
       });
-      invalidateBudgetCaches();
+      await invalidateBudgetCaches();
     } catch {
       haptic.error();
       setCategoryAllocation(data.categoryAllocation);
@@ -409,7 +440,7 @@ function CategoryDetailContent({
       const db = getDB();
       await db.categories.update(categoryId, { icon: newIcon, updated_at: new Date().toISOString() });
       await enqueue({ table: "categories", operation: "UPDATE", recordId: categoryId, payload: { categoryId, updates: { icon: newIcon } } });
-      invalidateBudgetCaches();
+      await invalidateBudgetCaches();
     } catch {
       setIcon(data.icon || null);
     }
@@ -422,7 +453,7 @@ function CategoryDetailContent({
       const db = getDB();
       await db.categories.update(categoryId, { color: next, updated_at: new Date().toISOString() });
       await enqueue({ table: "categories", operation: "UPDATE", recordId: categoryId, payload: { categoryId, updates: { color: next } } });
-      invalidateBudgetCaches();
+      await invalidateBudgetCaches();
     } catch {
       setColor(prev);
     }
@@ -436,7 +467,7 @@ function CategoryDetailContent({
       const db = getDB();
       await db.categories.update(categoryId, { name: trimmed, updated_at: new Date().toISOString() });
       await enqueue({ table: "categories", operation: "UPDATE", recordId: categoryId, payload: { categoryId, updates: { name: trimmed } } });
-      invalidateBudgetCaches();
+      await invalidateBudgetCaches();
     } catch {
       setName(data.name);
     }
@@ -450,7 +481,7 @@ function CategoryDetailContent({
       await db.budget_items.bulkDelete(itemIds);
       await db.categories.delete(categoryId);
       await enqueue({ table: "categories", operation: "DELETE", recordId: categoryId, payload: { categoryId } });
-      invalidateBudgetCaches();
+      await invalidateBudgetCaches();
       router.replace("/budget");
     } catch {
       setIsConfirmDeleteOpen(false);
@@ -466,7 +497,7 @@ function CategoryDetailContent({
       const db = getDB();
       await db.budget_items.delete(id);
       await enqueue({ table: "budget_items", operation: "DELETE", recordId: id, payload: { itemId: id } });
-      invalidateBudgetCaches();
+      await invalidateBudgetCaches();
     } catch {
       haptic.error();
       setItems(previousItems);
@@ -477,6 +508,18 @@ function CategoryDetailContent({
   function openItem(item: BudgetItem) {
     haptic.selection();
     setSelectedItem(item);
+  }
+
+  function openNewItem() {
+    haptic.light();
+    setSelectedItem({
+      id: NEW_ITEM_ID,
+      name: "",
+      planned: 0,
+      actual: 0,
+      is_completed: false,
+      notes: null,
+    });
   }
 
   const categoryColor = resolveColor({ id: categoryId, color });
@@ -606,24 +649,22 @@ function CategoryDetailContent({
         <button
           id="add-item-btn"
           type="button"
-          onClick={() => {
-            haptic.light();
-            setSelectedItem({
-              id: NEW_ITEM_ID,
-              name: "",
-              planned: 0,
-              actual: 0,
-              is_completed: false,
-              notes: null,
-            });
-          }}
+          onClick={openNewItem}
           className="flex items-center gap-1 text-[13px] font-bold text-foreground"
         >
           <span className="text-accent-strong text-base leading-none">＋</span>Add
         </button>
       </div>
 
-      {/* Item list */}
+      {/* Item list — or a prominent empty state so the add action isn't buried */}
+      {items.length === 0 ? (
+        <EmptyState
+          icon="list_alt"
+          title="No items yet"
+          description="Break this category into items (rent, groceries, a subscription) to plan and track what you spend."
+          action={{ label: "Add your first item", onClick: openNewItem }}
+        />
+      ) : (
       <div className="flex flex-col gap-2.5">
         {items.map((item) => {
           const itemPct = item.planned > 0 ? Math.min(1, item.actual / item.planned) : 0;
@@ -697,6 +738,7 @@ function CategoryDetailContent({
           );
         })}
       </div>
+      )}
 
       <EmojiPickerModal
         isOpen={isPickerOpen}

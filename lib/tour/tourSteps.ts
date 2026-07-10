@@ -28,7 +28,7 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       popover: {
         title: "Quick Logger",
         description:
-          "Log a spend instantly from here — pick a category, pick an item, enter the amount. No need to navigate to Budget.",
+          "Log a spend instantly from here - pick a category, pick an item, enter the amount. No need to navigate to Budget.",
         side: "bottom",
         align: "start",
       },
@@ -81,7 +81,7 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       popover: {
         title: "Spend Meter",
         description:
-          "Shows how much of your total budget you've spent. The tick ruler fills as you log expenses — taller ticks mark 25% milestones.",
+          "Shows how much of your total budget you've spent. The tick ruler fills as you log expenses - taller ticks mark 25% milestones.",
         side: "top",
         align: "start",
       },
@@ -91,7 +91,7 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       popover: {
         title: "Budget Categories",
         description:
-          "Divide your budget into categories — Needs, Wants, Investments. Each category holds line items (rent, groceries, Netflix, etc.). Tap a category to manage its items.",
+          "Divide your budget into categories - Needs, Wants, Investments. Each category holds line items (rent, groceries, Netflix, etc.). Tap a category to manage its items.",
         side: "bottom",
         align: "start",
       },
@@ -111,7 +111,7 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       popover: {
         title: "Add Category",
         description:
-          "Create a new budget category. Start with a name — you can set the icon, allocation amount, and individual items inside the category after.",
+          "Create a new budget category. Start with a name - you can set the icon, allocation amount, and individual items inside the category after.",
         side: "bottom",
         align: "end",
       },
@@ -124,7 +124,7 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       popover: {
         title: "Your Goals",
         description:
-          "All your savings targets in one place — emergency fund, travel, down payment, anything. Ordered by priority. Tap any goal to edit its details.",
+          "All your savings targets in one place - emergency fund, travel, down payment, anything. Ordered by priority. Tap any goal to edit its details.",
         side: "bottom",
         align: "start",
       },
@@ -177,7 +177,7 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       popover: {
         title: "Overall Payoff Progress",
         description:
-          "How much of all your debts combined have been paid off. The tick ruler fills left to right — aim for 100%.",
+          "How much of all your debts combined have been paid off. The tick ruler fills left to right - aim for 100%.",
         side: "top",
         align: "start",
       },
@@ -187,7 +187,7 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       popover: {
         title: "Debt Types",
         description:
-          "External — loans and credit cards from banks or lenders. Internal — debts to family or friends. Closed — fully paid off debts (archived for history).",
+          "External - loans and credit cards from banks or lenders. Internal - debts to family or friends. Closed - fully paid off debts (archived for history).",
         side: "bottom",
         align: "start",
       },
@@ -220,7 +220,7 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       popover: {
         title: "Your Net Worth",
         description:
-          "Total Assets minus Total Liabilities. This is the single most important financial number — a measure of everything you own minus everything you owe.",
+          "Total Assets minus Total Liabilities. This is the single most important financial number - a measure of everything you own minus everything you owe.",
         side: "bottom",
         align: "start",
       },
@@ -240,7 +240,7 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       popover: {
         title: "Asset Distribution",
         description:
-          "A pie chart showing how your wealth is split across asset categories — savings, investments, real estate, crypto. More diversification = less risk.",
+          "A pie chart showing how your wealth is split across asset categories - savings, investments, real estate, crypto. More diversification = less risk.",
         side: "top",
         align: "start",
       },
@@ -260,7 +260,7 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       popover: {
         title: "Add an Asset",
         description:
-          "Tap here to track a new asset — bank account, stock portfolio, property, vehicle, anything with value. Set an initial value and update it over time.",
+          "Tap here to track a new asset - bank account, stock portfolio, property, vehicle, anything with value. Set an initial value and update it over time.",
         side: "top",
         align: "end",
       },
@@ -283,7 +283,7 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       popover: {
         title: "Your Financial Timeline",
         description:
-          "Every action you take in the app is recorded here — adding a category, logging a payment, updating a goal. Grouped by date, newest first.",
+          "Every action you take in the app is recorded here - adding a category, logging a payment, updating a goal. Grouped by date, newest first.",
         side: "top",
         align: "start",
       },
@@ -316,7 +316,7 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       popover: {
         title: "Allocate a spend",
         description:
-          "Each pending transaction shows the amount and merchant. Pick a budget item to file it — the spend then counts against that category automatically.",
+          "Each pending transaction shows the amount and merchant. Pick a budget item to file it - the spend then counts against that category automatically.",
         side: "top",
         align: "start",
       },
@@ -329,7 +329,7 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       popover: {
         title: "Find any spend",
         description:
-          "Search by name, or narrow by month and budget item. Everything you've spent — from SMS or logged by hand — lives here in one searchable list.",
+          "Search by name, or narrow by month and budget item. Everything you've spent - from SMS or logged by hand - lives here in one searchable list.",
         side: "bottom",
         align: "start",
       },

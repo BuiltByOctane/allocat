@@ -31,7 +31,7 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL("https://allocat.xyz"),
   title: {
-    default: "AlloCat — Personal Finance, Budgeting & Net Worth Tracker",
+    default: "AlloCat - Personal Finance, Budgeting & Net Worth Tracker",
     template: "%s · AlloCat",
   },
   description:
@@ -63,24 +63,24 @@ export const metadata: Metadata = {
     type: "website",
     url: "https://allocat.xyz",
     siteName: "AlloCat",
-    title: "AlloCat — Personal Finance, Budgeting & Net Worth Tracker",
+    title: "AlloCat - Personal Finance, Budgeting & Net Worth Tracker",
     description:
-      "Offline-first personal finance PWA. Track budgets, debts, goals, and net worth — with AI insights.",
+      "Offline-first personal finance PWA. Track budgets, debts, goals, and net worth - with AI insights.",
     locale: "en_IN",
     images: [
       {
         url: "/allocat-logo.png",
         width: 1200,
         height: 630,
-        alt: "AlloCat — Personal Finance PWA",
+        alt: "AlloCat - Personal Finance PWA",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "AlloCat — Personal Finance & Budgeting",
+    title: "AlloCat - Personal Finance & Budgeting",
     description:
-      "Offline-first personal finance PWA. Budgets, debts, goals, net worth — with AI insights.",
+      "Offline-first personal finance PWA. Budgets, debts, goals, net worth - with AI insights.",
     images: ["/allocat-logo.png"],
   },
   robots: {

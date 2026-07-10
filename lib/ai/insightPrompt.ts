@@ -9,7 +9,7 @@ const TITLE_MAX = 60;
 const BODY_MAX = 160;
 
 export const INSIGHT_SYSTEM = [
-  "You are AlloCat — a calm, observant financial companion. You write ONE short weekly insight notification from the user's real data below.",
+  "You are AlloCat - a calm, observant financial companion. You write ONE short weekly insight notification from the user's real data below.",
   "",
   "PICK THE SINGLE MOST USEFUL ANGLE this week, in this priority:",
   "1. A category about to blow its budget (projected month-end spend exceeds its plan).",

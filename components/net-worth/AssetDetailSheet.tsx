@@ -286,7 +286,7 @@ export function AssetDetailSheet({ asset, onClose }: AssetDetailSheetProps) {
                             <span className="figure text-xs tabular-nums text-muted-foreground">
                               {asset.target_amount && asset.target_amount > 0
                                 ? `${Math.round(Math.min(100, (asset.value / Number(asset.target_amount)) * 100))}%`
-                                : "—"}
+                                : "-"}
                             </span>
                           </div>
                           <Progress

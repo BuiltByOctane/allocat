@@ -105,7 +105,7 @@ async function loadPickerData(): Promise<PickerData> {
 }
 
 function money(row: SmsTransactionRow): string {
-  if (typeof row.amount !== "number") return "—";
+  if (typeof row.amount !== "number") return "-";
   return formatCurrency(row.amount, {
     code: row.currency ?? "INR",
     minimumFractionDigits: 0,

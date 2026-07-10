@@ -1,13 +1,20 @@
 import { EmptyState } from "../ui/EmptyState";
 
-export default function DebtEmptyState({ onAddDebt }: { onAddDebt?: () => void }) {
+export default function DebtEmptyState({
+  onAddDebt,
+  onLent,
+}: {
+  onAddDebt?: () => void;
+  onLent?: () => void;
+}) {
   return (
     <div className="mt-4">
       <EmptyState
         icon="account_balance_wallet"
         title="No debts yet"
-        description="Track loans you owe (credit card, EMI, a friend) or money you've lent out — and watch the balance shrink as you pay it down."
+        description="Track loans you owe (credit card, EMI, a friend) or money you've lent out, and watch the balance shrink as you pay it down."
         action={{ label: "Add a debt or loan", onClick: onAddDebt }}
+        secondaryAction={onLent ? { label: "Out to friends", onClick: onLent } : undefined}
       />
     </div>
   );

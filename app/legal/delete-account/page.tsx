@@ -38,7 +38,7 @@ export default function DeleteAccountPage() {
           </li>
         </ol>
         <p>
-          This is immediate and permanent — there is no recovery period.
+          This is immediate and permanent - there is no recovery period.
         </p>
       </Section>
 
@@ -63,7 +63,7 @@ export default function DeleteAccountPage() {
         </p>
         <p>
           Any raw SMS text stays only on your device and is removed when you
-          uninstall the app — it is never stored on our servers.
+          uninstall the app - it is never stored on our servers.
         </p>
         <p>
           Deletion is permanent and cannot be undone. We retain no copy after

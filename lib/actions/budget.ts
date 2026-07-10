@@ -890,7 +890,7 @@ export async function quickLogSpend(
   const smsMerchant = fromSms ? (source?.merchant ?? null) : null;
   const smsTitleSuffix = fromSms ? " from SMS" : "";
   const smsDescSuffix = fromSms
-    ? ` — auto-tracked from SMS${smsMerchant ? ` (${smsMerchant})` : ""}`
+    ? ` - auto-tracked from SMS${smsMerchant ? ` (${smsMerchant})` : ""}`
     : "";
   const smsMeta = fromSms ? { source: "sms", merchant: smsMerchant } : {};
   if (cascadeSummary) {
@@ -1047,7 +1047,7 @@ export async function reverseSpend(
     action_type: "spend_reversed",
     category: "budget",
     title: `Reversed ${fmt(amount, cur)} on "${updatedItem.name}"${fromSms ? " from SMS" : ""}`,
-    description: `${fmt(amount, cur)} reversed on "${updatedItem.name}"${fromSms ? ` — SMS auto-track removed${smsMerchant ? ` (${smsMerchant})` : ""}` : ""}`,
+    description: `${fmt(amount, cur)} reversed on "${updatedItem.name}"${fromSms ? ` - SMS auto-track removed${smsMerchant ? ` (${smsMerchant})` : ""}` : ""}`,
     metadata: {
       itemId,
       itemName: updatedItem.name,

@@ -35,7 +35,7 @@ export default function OfflinePage() {
           <h1 className="font-display text-2xl font-semibold">You&apos;re offline</h1>
           <p className="text-sm text-foreground/60 leading-relaxed">
             AlloCat works offline once your data is loaded. This page wasn&apos;t cached
-            yet — try opening it again when you&apos;re back online, or head to a page
+            yet - try opening it again when you&apos;re back online, or head to a page
             you&apos;ve already visited.
           </p>
         </div>

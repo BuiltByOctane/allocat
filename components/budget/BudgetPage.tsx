@@ -671,7 +671,7 @@ function TemplateControl({
           setDriftedOpen(true);
         }}
         className="flex items-center gap-1 text-[13px] font-bold text-foreground max-w-[160px]"
-        aria-label={`Template ${template.name} modified — tap for options`}
+        aria-label={`Template ${template.name} modified - tap for options`}
       >
         <span className="material-symbols-outlined text-base leading-none text-accent-strong">
           bookmark

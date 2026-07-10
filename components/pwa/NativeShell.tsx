@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import type { PluginListenerHandle } from "@capacitor/core";
 import { createClient } from "@/lib/supabase/client";
+import { closeTopSheet } from "@/lib/native/sheetRegistry";
 import { FeedbackSheet } from "@/components/feedback/FeedbackSheet";
 
 // Ask-on-resume feedback prompt: rate-limited so we never nag. Stores the last
@@ -117,6 +118,21 @@ export function NativeShell() {
       });
 
       backHandle = await App.addListener("backButton", ({ canGoBack }) => {
+        // A bottom sheet / modal open? Let it consume the back press — close it
+        // instead of navigating (the old behaviour changed the page out from
+        // under an open sheet). Custom portals (e.g. the emoji picker) register
+        // on the sheet stack; vaul/Radix dialogs close on a synthetic Escape via
+        // Radix's DismissableLayer document listener.
+        if (closeTopSheet()) return;
+        const openDialog = document.querySelector(
+          '[vaul-drawer][data-state="open"], [role="dialog"][data-state="open"]'
+        );
+        if (openDialog) {
+          document.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
+          );
+          return;
+        }
         if (canGoBack || window.history.length > 1) {
           window.history.back();
         } else {

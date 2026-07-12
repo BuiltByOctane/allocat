@@ -4,10 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/types/database";
 import { logActivity, fmt, getUserCurrency } from "@/lib/server/activity-logger";
 import { notifyUser } from "@/lib/server/push-notify";
-import {
-  computeAutoCompletion,
-  actualOnManualComplete,
-} from "@/lib/utils/budget-completion";
+import { computeAutoCompletion } from "@/lib/utils/budget-completion";
 import { addAssetEntry } from "@/lib/actions/asset-history";
 import { makePayment, reverseDebtPayment } from "@/lib/actions/debt";
 import { resolveOverspendMessage } from "@/lib/actions/notify-messages";
@@ -637,28 +634,10 @@ export async function updateBudgetItem(
       updates.actual_amount !== undefined
         ? Number(updates.actual_amount)
         : Number(existingItem.actual_amount);
-    const auto = computeAutoCompletion(
-      planned,
-      actual,
-      Boolean(existingItem.is_completed)
-    );
+    const auto = computeAutoCompletion(planned, actual);
     if (auto !== Boolean(existingItem.is_completed)) {
       finalUpdates.is_completed = auto;
     }
-  }
-
-  // Marking an item complete treats the full planned allocation as used: bump
-  // actual up to planned (an existing overspend is kept). Only on false→true.
-  if (updates.is_completed === true && !existingItem.is_completed) {
-    const planned =
-      updates.planned_amount !== undefined
-        ? Number(updates.planned_amount)
-        : Number(existingItem.planned_amount);
-    const curActual =
-      updates.actual_amount !== undefined
-        ? Number(updates.actual_amount)
-        : Number(existingItem.actual_amount);
-    finalUpdates.actual_amount = actualOnManualComplete(planned, curActual);
   }
 
   const { data, error } = await supabase
@@ -833,7 +812,7 @@ export async function quickLogSpend(
   const previousOverspendCount = Number(item.overspend_count ?? 0);
   const isOver = planned > 0 && newActual > planned;
   const nextOverspendCount = isOver ? previousOverspendCount + 1 : previousOverspendCount;
-  const nextCompleted = computeAutoCompletion(planned, newActual, previousCompleted);
+  const nextCompleted = computeAutoCompletion(planned, newActual);
 
   const { data: updatedItem, error } = await supabase
     .from("budget_items")
@@ -990,7 +969,7 @@ export async function reverseSpend(
   const planned = Number(item.planned_amount);
   // overspend_count intentionally NOT decremented on reversal (counts the event, resets monthly).
   // Reopen when actual drops below planned ("this spend didn't happen").
-  const nextCompleted = planned > 0 ? newActual >= planned : previousCompleted;
+  const nextCompleted = computeAutoCompletion(planned, newActual);
 
   const { data: updatedItem, error } = await supabase
     .from("budget_items")

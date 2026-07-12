@@ -12,10 +12,7 @@ import { reapplyRulesToPending } from "@/lib/sms/ingestClient";
 import { pushSmsMirrorToNative } from "@/lib/sms/nativeMirror";
 import { getDB } from "@/lib/db";
 import { useEnqueue } from "@/lib/hooks/useSync";
-import {
-  computeAutoCompletion,
-  actualOnManualComplete,
-} from "@/lib/utils/budget-completion";
+import { computeAutoCompletion } from "@/lib/utils/budget-completion";
 import { applyLinkedSpendCascadeIDB } from "@/lib/utils/budget-cascade";
 import { DASHBOARD_KEY } from "./useDashboard";
 import { NET_WORTH_KEY } from "./useNetWorth";
@@ -707,8 +704,9 @@ export function useUpdateBudgetItem() {
       const db = getDB();
       const existing = await db.budget_items.get(itemId);
       const finalUpdates = { ...updates };
+      // Done is derived from spend: recompute whenever spend or allocation moves.
       if (
-        updates.actual_amount !== undefined &&
+        (updates.actual_amount !== undefined || updates.planned_amount !== undefined) &&
         updates.is_completed === undefined &&
         existing
       ) {
@@ -716,26 +714,11 @@ export function useUpdateBudgetItem() {
           updates.planned_amount !== undefined
             ? Number(updates.planned_amount)
             : Number(existing.planned_amount);
-        finalUpdates.is_completed = computeAutoCompletion(
-          planned,
-          Number(updates.actual_amount),
-          Boolean(existing.is_completed)
-        );
-      }
-
-      // Marking an item complete treats the full planned allocation as used:
-      // bump actual up to planned (overspends are kept). Only on the
-      // false→true transition, and respects an explicit actual in the same save.
-      if (updates.is_completed === true && existing && !existing.is_completed) {
-        const planned =
-          updates.planned_amount !== undefined
-            ? Number(updates.planned_amount)
-            : Number(existing.planned_amount);
-        const curActual =
+        const actual =
           updates.actual_amount !== undefined
             ? Number(updates.actual_amount)
             : Number(existing.actual_amount);
-        finalUpdates.actual_amount = actualOnManualComplete(planned, curActual);
+        finalUpdates.is_completed = computeAutoCompletion(planned, actual);
       }
 
       // Cascade off finalUpdates so a completion-driven actual bump still

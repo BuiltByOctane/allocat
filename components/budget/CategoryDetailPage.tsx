@@ -309,18 +309,18 @@ function CategoryDetailContent({
     const finalUpdates = { ...updates };
     if (
       targetItem &&
-      updates.actual_amount !== undefined &&
+      (updates.actual_amount !== undefined || updates.planned_amount !== undefined) &&
       updates.is_completed === undefined
     ) {
       const planned =
         updates.planned_amount !== undefined
           ? updates.planned_amount
           : targetItem.planned;
-      finalUpdates.is_completed = computeAutoCompletion(
-        planned,
-        updates.actual_amount,
-        targetItem.is_completed
-      );
+      const actual =
+        updates.actual_amount !== undefined
+          ? updates.actual_amount
+          : targetItem.actual;
+      finalUpdates.is_completed = computeAutoCompletion(planned, actual);
     }
 
     const nextItems = items.map((item) =>

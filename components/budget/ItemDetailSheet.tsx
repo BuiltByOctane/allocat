@@ -2,7 +2,7 @@
 
 import { Drawer } from "vaul";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check } from "lucide-react";
+import { computeAutoCompletion } from "@/lib/utils/budget-completion";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { CurrencySymbol } from "@/components/ui/CurrencySymbol";
 import { useFormatCurrency } from "@/lib/hooks/useFormatCurrency";
@@ -100,7 +100,6 @@ export function ItemDetailSheet({
   const [contentNode, setContentNode] = useState<HTMLDivElement | null>(null);
   const [planned, setPlanned] = useState("");
   const [actual, setActual] = useState("");
-  const [isCompleted, setIsCompleted] = useState(false);
   const [notes, setNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
@@ -116,7 +115,6 @@ export function ItemDetailSheet({
       setEmojiPickerOpen(false);
       setPlanned(item.planned > 0 ? String(item.planned) : "");
       setActual(item.actual > 0 ? String(item.actual) : "");
-      setIsCompleted(isNew ? false : item.is_completed);
       setNotes(isNew ? "" : (item.notes ?? ""));
       setLinkType(isNew ? "none" : ((item.link_type as LinkType) ?? "none"));
       setLinkId(isNew ? "" : (item.link_id ?? ""));
@@ -208,12 +206,14 @@ export function ItemDetailSheet({
       const finalLinkId: string | null = finalLinkType ? linkId : null;
 
       if (isNew) {
+        const createdActual = hideActual ? 0 : actualVal;
         await onCreate({
           name: name.trim(),
           emoji,
           planned_amount: plannedVal,
-          actual_amount: hideActual ? 0 : actualVal,
-          is_completed: isCompleted,
+          actual_amount: createdActual,
+          // Done is derived from spend, not a manual toggle.
+          is_completed: computeAutoCompletion(plannedVal, createdActual),
           notes: notesVal,
           link_type: finalLinkType,
           link_id: finalLinkId,
@@ -224,7 +224,8 @@ export function ItemDetailSheet({
         if (emoji !== (item.emoji ?? null)) updates.emoji = emoji;
         if (plannedVal !== item.planned) updates.planned_amount = plannedVal;
         if (actualVal !== item.actual) updates.actual_amount = actualVal;
-        if (isCompleted !== item.is_completed) updates.is_completed = isCompleted;
+        // is_completed is no longer sent explicitly — the update path derives it
+        // from actual_amount vs planned.
         if (notesVal !== item.notes) updates.notes = notesVal;
         const prevLinkType = (item.link_type as LinkType | null) ?? null;
         const prevLinkId = item.link_id ?? null;
@@ -481,35 +482,6 @@ export function ItemDetailSheet({
                   </div>
                 )}
               </div>
-
-              {/* Completion toggle */}
-              <button
-                type="button"
-                onClick={() => {
-                  haptic.selection();
-                  setIsCompleted((v) => !v);
-                }}
-                className={`flex items-center gap-3 w-full rounded-[13px] border px-3.5 py-3 transition-colors ${
-                  isCompleted
-                    ? "border-[var(--accent-strong)]/40 bg-accent/15"
-                    : "border-border bg-card"
-                }`}
-              >
-                <span
-                  className={`flex size-[22px] items-center justify-center rounded-full ${
-                    isCompleted ? "bg-accent-strong text-white" : "border border-border text-muted-foreground"
-                  }`}
-                >
-                  <Check size={13} strokeWidth={2.4} />
-                </span>
-                <span
-                  className={`text-sm font-bold ${
-                    isCompleted ? "text-foreground" : "text-foreground"
-                  }`}
-                >
-                  {isCompleted ? "Marked as done" : "Mark as done"}
-                </span>
-              </button>
 
               {/* Link to (cross-section) */}
               <div className="space-y-2">

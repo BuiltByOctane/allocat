@@ -210,11 +210,7 @@ export function useQuickLogSpend() {
       if (item) {
         const newActual = Number(item.actual_amount) + amount;
         const planned = Number(item.planned_amount);
-        const nextCompleted = computeAutoCompletion(
-          planned,
-          newActual,
-          Boolean(item.is_completed)
-        );
+        const nextCompleted = computeAutoCompletion(planned, newActual);
         await db.budget_items.update(itemId, {
           actual_amount: newActual,
           is_completed: nextCompleted,

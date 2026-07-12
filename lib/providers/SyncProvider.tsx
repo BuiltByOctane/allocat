@@ -69,11 +69,27 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     // together, so its staleness tracks the whole cache.
     if (!(await isTableStale("budgets"))) return;
     lastRefreshRef.current = now;
-    try {
-      await hydrateAllTables();
-      await qc.refetchQueries({ type: "active" });
-    } catch (err) {
-      console.warn("[SyncProvider] Foreground refresh failed:", err);
+    // Yield off the interaction path. On a long-background resume the user often
+    // taps the bottom nav the instant the app foregrounds; running the heavy
+    // 15-table hydrate + a query refetch synchronously here starves the
+    // low-priority router transition that drives the native pager, so the page
+    // slide stalls for seconds even though the nav pill (optimistic state) moves.
+    // Deferring to idle lets the pending navigation commit first.
+    const runRefresh = async () => {
+      try {
+        await hydrateAllTables();
+        // Lazy invalidate (not refetchQueries): mark stale and let queries
+        // refetch as they're observed, instead of a synchronous re-render storm
+        // across every mounted tab pane.
+        await qc.invalidateQueries({ type: "active" });
+      } catch (err) {
+        console.warn("[SyncProvider] Foreground refresh failed:", err);
+      }
+    };
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(() => void runRefresh(), { timeout: 2000 });
+    } else {
+      setTimeout(() => void runRefresh(), 0);
     }
   }, [qc]);
 

@@ -8,6 +8,7 @@ import { ColorPicker } from "@/components/ui/ColorPicker";
 import type { CatKey } from "@/lib/theme/dataViz";
 import { calcTotalRepayable, calcEMI } from "@/lib/utils/debt-calc";
 import { CurrencyText } from "@/components/ui/CurrencyText";
+import { DebtPaymentHistory } from "./DebtPaymentHistory";
 
 interface DebtFormData {
   name: string;
@@ -19,6 +20,8 @@ interface DebtFormData {
   loanTenureMonths: number | null;
   totalRepayable: number;
   color: string | null;
+  /** Edit mode only — set when the user changed the remaining amount. */
+  totalPaid?: number;
 }
 
 interface DebtData {
@@ -73,6 +76,7 @@ export function DebtDetailSheet({
   const [interestType, setInterestType] = useState<"flat" | "diminishing">("flat");
   const [tenure, setTenure] = useState("");
   const [monthlyMin, setMonthlyMin] = useState("");
+  const [remaining, setRemaining] = useState("");
   const [color, setColor] = useState<CatKey | null>(null);
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -88,6 +92,10 @@ export function DebtDetailSheet({
       setInterestType(debt.interestType ?? "flat");
       setTenure(debt.loanTenureMonths ? String(debt.loanTenureMonths) : "");
       setMonthlyMin(debt.monthlyMin > 0 ? String(debt.monthlyMin) : "");
+      {
+        const rep = debt.totalRepayable > 0 ? debt.totalRepayable : debt.principal;
+        setRemaining(String(Math.max(0, rep - debt.totalPaid)));
+      }
       setColor((debt.color as CatKey | null) ?? null);
     } else {
       setName("");
@@ -97,6 +105,7 @@ export function DebtDetailSheet({
       setInterestType("flat");
       setTenure("");
       setMonthlyMin("");
+      setRemaining("");
       setColor(null);
     }
     setError("");
@@ -125,6 +134,19 @@ export function DebtDetailSheet({
       haptic.error();
       return;
     }
+    // Derive total_paid from an edited remaining amount (only when it changed).
+    let totalPaidVal: number | undefined;
+    if (isEdit && debt && remaining.trim() !== "") {
+      const remainingNum = parseFloat(remaining);
+      if (!isNaN(remainingNum)) {
+        const origRep = debt.totalRepayable > 0 ? debt.totalRepayable : debt.principal;
+        const origRemaining = Math.max(0, origRep - debt.totalPaid);
+        if (Math.abs(remainingNum - origRemaining) > 0.001) {
+          const target = totalRepayable > 0 ? totalRepayable : principalNum;
+          totalPaidVal = Math.max(0, target - Math.max(0, remainingNum));
+        }
+      }
+    }
     setIsSaving(true);
     setError("");
     try {
@@ -138,6 +160,7 @@ export function DebtDetailSheet({
         loanTenureMonths: tenureNum,
         totalRepayable,
         color,
+        totalPaid: totalPaidVal,
       });
       haptic.success();
       onClose();
@@ -259,6 +282,24 @@ export function DebtDetailSheet({
                 </div>
               </div>
 
+              {/* Remaining amount (edit only) — direct-set; recomputes total_paid */}
+              {isEdit && debt && (
+                <div>
+                  <label className={labelCls}>Remaining amount</label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={remaining}
+                    onChange={(e) => setRemaining(e.target.value)}
+                    className={`${inputCls} tabular-nums`}
+                  />
+                  <p className="text-[11px] text-muted-foreground mt-1.5 font-medium">
+                    Amount still owed. Adjusts the paid-to-date total.
+                  </p>
+                </div>
+              )}
+
               {/* Interest Type */}
               <div>
                 <label className={labelCls}>Interest Type</label>
@@ -351,6 +392,13 @@ export function DebtDetailSheet({
                 <p className="text-[11px] font-medium text-neg">{error}</p>
               )}
             </div>
+
+            {/* Payment history (edit only) */}
+            {isEdit && debt && (
+              <div className="px-6 pt-4 pb-2">
+                <DebtPaymentHistory debtId={debt.id} />
+              </div>
+            )}
           </div>
 
           {/* Footer actions */}

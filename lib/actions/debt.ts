@@ -129,6 +129,28 @@ export async function updateDebt(id: string, updates: DebtUpdate) {
     }
   }
 
+  // A remaining-amount edit arrives as a total_paid change — reconcile is_closed
+  // (mirrors makePayment) unless the caller set it explicitly.
+  if (updates.total_paid !== undefined && updates.is_closed === undefined) {
+    let repayableTarget = updates.total_repayable;
+    if (repayableTarget === undefined) {
+      const { data: cur } = await supabase
+        .from("debts")
+        .select("total_repayable, principal")
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .single();
+      if (cur) {
+        repayableTarget = Number(cur.total_repayable) > 0
+          ? Number(cur.total_repayable)
+          : Number(cur.principal);
+      }
+    }
+    if (repayableTarget !== undefined) {
+      updates.is_closed = updates.total_paid >= repayableTarget;
+    }
+  }
+
   const { data, error } = await supabase
     .from("debts")
     .update(updates)
@@ -143,7 +165,12 @@ export async function updateDebt(id: string, updates: DebtUpdate) {
   const cur = await getUserCurrency(supabase, user.id);
   let title: string;
   let action_type: string;
-  if (updates.is_closed !== undefined) {
+  if (updates.total_paid !== undefined) {
+    const rep = Number(data.total_repayable) > 0 ? Number(data.total_repayable) : Number(data.principal);
+    const remaining = Math.max(0, rep - Number(data.total_paid));
+    action_type = "debt_remaining_adjusted";
+    title = `Adjusted "${debtName}" remaining to ${fmt(remaining, cur)}`;
+  } else if (updates.is_closed !== undefined) {
     action_type = updates.is_closed ? "debt_closed" : "debt_reopened";
     title = updates.is_closed ? `Closed debt "${debtName}"` : `Reopened debt "${debtName}"`;
   } else if (updates.principal !== undefined) {

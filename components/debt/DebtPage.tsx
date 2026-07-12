@@ -133,6 +133,7 @@ export default function DebtPage({ data }: { data: Debt[] }) {
     loanTenureMonths: number | null;
     totalRepayable: number;
     color: string | null;
+    totalPaid?: number;
   }) {
     if (sheetMode === "add") {
       addDebtMutation.mutate({
@@ -157,6 +158,7 @@ export default function DebtPage({ data }: { data: Debt[] }) {
           loan_tenure_months: formData.loanTenureMonths,
           total_repayable: formData.totalRepayable,
           color: formData.color,
+          ...(formData.totalPaid !== undefined ? { total_paid: formData.totalPaid } : {}),
         },
       });
     }

@@ -145,6 +145,7 @@ export function useUpdateDebt() {
         interest_type?: "flat" | "diminishing";
         loan_tenure_months?: number | null;
         total_repayable?: number;
+        total_paid?: number;
         color?: string | null;
       };
     }) => {
@@ -165,6 +166,16 @@ export function useUpdateDebt() {
           const iType = updates.interest_type ?? current.interest_type ?? "flat";
           updates.total_repayable = calcTotalRepayable(principal, rate, tenure, iType);
         }
+      }
+
+      // Editing the remaining amount arrives here as a total_paid change —
+      // reconcile is_closed optimistically the same way makePayment does.
+      if (updates.total_paid !== undefined && updates.is_closed === undefined) {
+        const current = await db.debts.get(id);
+        const repayable = updates.total_repayable
+          ?? (current ? Number(current.total_repayable ?? current.principal) : 0);
+        const target = repayable > 0 ? repayable : (current ? Number(current.principal) : 0);
+        if (target > 0) updates.is_closed = updates.total_paid >= target;
       }
 
       await db.debts.update(id, {

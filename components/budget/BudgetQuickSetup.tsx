@@ -465,13 +465,13 @@ export function BudgetQuickSetup({
                   role="switch"
                   aria-checked={saveAsTemplate}
                   onClick={() => setSaveAsTemplate((v) => !v)}
-                  className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${
+                  className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
                     saveAsTemplate ? "bg-[var(--accent-strong)]" : "bg-muted"
                   }`}
                 >
                   <span
-                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                      saveAsTemplate ? "translate-x-[18px]" : "translate-x-0.5"
+                    className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                      saveAsTemplate ? "translate-x-5" : "translate-x-0"
                     }`}
                   />
                 </button>

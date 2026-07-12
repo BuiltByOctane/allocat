@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   getActivityLogs,
   getActivityLogsForItem,
+  getDebtPayments,
 } from "@/lib/actions/activity-logs";
 import { getDB, type ActivityLogRow } from "@/lib/db";
 
@@ -9,6 +10,10 @@ export const ACTIVITY_LOGS_KEY = ["activity-logs"] as const;
 
 export function itemActivityKey(itemId: string) {
   return ["item-activity", itemId] as const;
+}
+
+export function debtPaymentsKey(debtId: string) {
+  return ["debt-payments", debtId] as const;
 }
 
 type ActivityCategory = "budget" | "net_worth" | "goals" | "debts";
@@ -70,6 +75,44 @@ async function fetchItemLogs(itemId: string): Promise<ActivityLogRow[]> {
     // Offline / fetch failed — fall back to whatever we have cached.
     return local;
   }
+}
+
+// ─── Per-debt payment history ──────────────────────────────────────────────────
+
+async function fetchDebtPayments(debtId: string): Promise<ActivityLogRow[]> {
+  const db = getDB();
+
+  const isDebtPayment = (l: ActivityLogRow) =>
+    (l.metadata as { debtId?: string } | null)?.debtId === debtId &&
+    (l.action_type === "debt_payment_made" ||
+      l.action_type === "debt_payment_reversed");
+
+  // IDB-first — instant, offline.
+  const local = (
+    await db.activity_logs.orderBy("created_at").reverse().toArray()
+  ).filter(isDebtPayment);
+
+  try {
+    const fresh = await getDebtPayments(debtId);
+    if (fresh.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await db.activity_logs.bulkPut(fresh as any);
+    }
+    return fresh as ActivityLogRow[];
+  } catch {
+    return local;
+  }
+}
+
+export function useDebtPayments(debtId: string | null) {
+  const isReal = !!debtId && !debtId.startsWith("temp_");
+
+  return useQuery({
+    queryKey: debtPaymentsKey(debtId ?? "none"),
+    queryFn: () => fetchDebtPayments(debtId!),
+    enabled: isReal,
+    staleTime: 30_000,
+  });
 }
 
 export function useItemActivity(itemId: string | null, enabled: boolean) {

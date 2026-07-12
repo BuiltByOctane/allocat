@@ -50,6 +50,10 @@ export function KeyboardInset() {
     const onFocusIn = (e: FocusEvent) => {
       const t = e.target;
       if (!(t instanceof HTMLElement) || !t.matches(FIELD)) return;
+      // Skip fixed bottom sheets (`.sheet-3q`, e.g. the emoji picker): they're
+      // already lifted above the keyboard by `--keyboard-inset`, so centering an
+      // input inside them scrolls the whole modal far off-screen to the top.
+      if (t.closest(".sheet-3q")) return;
       // Wait for the keyboard to finish animating, then center the field in its
       // scroll container so it sits comfortably above the keyboard.
       if (scrollTimer) clearTimeout(scrollTimer);

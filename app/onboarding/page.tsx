@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -8,14 +8,16 @@ import {
   type DeckSlide,
 } from "@/components/onboarding/OnboardingDeck";
 import { OnboardingCard } from "@/components/onboarding/OnboardingCard";
-import { TEACHING_SLIDES } from "@/components/onboarding/onboardingSlides";
-import { FirstBudgetCard } from "@/components/onboarding/FirstBudgetCard";
+import { QuizInviteCard, TEACHING_SLIDES } from "@/components/onboarding/onboardingSlides";
+import { QuizFlow } from "@/components/onboarding/quiz/QuizFlow";
+import { markUserAsOnboarded } from "@/lib/actions/profile";
 import { DASHBOARD_KEY } from "@/lib/hooks/useDashboard";
 import { getDashboardData } from "@/lib/actions/dashboard";
 
 export default function OnboardingFlow() {
   const router = useRouter();
   const qc = useQueryClient();
+  const [mode, setMode] = useState<"tour" | "quiz">("tour");
 
   // Warm the dashboard route + data so landing after onboarding has no skeleton.
   useEffect(() => {
@@ -27,6 +29,19 @@ export default function OnboardingFlow() {
       queryFn: () => getDashboardData(),
     }).catch(() => {});
   }, [router, qc]);
+
+  async function skipToExplore() {
+    try {
+      await markUserAsOnboarded();
+    } catch {
+      /* flag is best-effort; dashboard is still reachable */
+    }
+    router.push("/dashboard");
+  }
+
+  if (mode === "quiz") {
+    return <QuizFlow onDone={() => router.push("/dashboard")} />;
+  }
 
   const slides: DeckSlide[] = [
     ...TEACHING_SLIDES.map((s) => ({
@@ -41,7 +56,13 @@ export default function OnboardingFlow() {
         />
       ),
     })),
-    { key: "setup", hideNext: true, content: <FirstBudgetCard /> },
+    {
+      key: "invite",
+      hideNext: true,
+      content: (
+        <QuizInviteCard onBuildBudget={() => setMode("quiz")} onSkip={skipToExplore} />
+      ),
+    },
   ];
 
   return <OnboardingDeck slides={slides} />;

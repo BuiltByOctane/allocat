@@ -6,7 +6,6 @@ import { computeAutoCompletion } from "@/lib/utils/budget-completion";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { CurrencySymbol } from "@/components/ui/CurrencySymbol";
 import { useFormatCurrency } from "@/lib/hooks/useFormatCurrency";
-import { Progress } from "@/components/ui/Progress";
 import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 import EmojiPickerModal from "@/components/ui/EmojiPickerModal";
 import { ItemTransactionList } from "@/components/budget/ItemTransactionList";
@@ -48,6 +47,9 @@ interface ItemDetailSheetProps {
     assets: LinkTarget[];
     debts: LinkTarget[];
   };
+  /** Quick-add name suggestions for this category (new items only) — tap to
+   *  fill the name field instead of typing. */
+  suggestions?: string[];
   /** Hide the "Spent" field and force actual_amount to 0 on create.
    *  Used by the SMS allocate flow, where the spend is applied separately
    *  via categorize (which also cascades to a linked asset/debt). */
@@ -83,6 +85,7 @@ export function ItemDetailSheet({
   item,
   category,
   linkTargets,
+  suggestions = [],
   hideActual = false,
   onClose,
   onSave,
@@ -107,6 +110,11 @@ export function ItemDetailSheet({
   const [linkType, setLinkType] = useState<LinkType | "none">("none");
   const [linkId, setLinkId] = useState<string>("");
   const [userTouchedLink, setUserTouchedLink] = useState(false);
+  const [showMore, setShowMore] = useState(false);
+
+  // Planning and tracking are different modes: creation is plan-only (name +
+  // amount). Spent is only ever edited on an existing item.
+  const hideSpentField = isNew || hideActual;
 
   useEffect(() => {
     if (item) {
@@ -119,6 +127,7 @@ export function ItemDetailSheet({
       setLinkType(isNew ? "none" : ((item.link_type as LinkType) ?? "none"));
       setLinkId(isNew ? "" : (item.link_id ?? ""));
       setUserTouchedLink(false);
+      setShowMore(!isNew && (!!item.notes || !!item.link_type));
       setError("");
       setConfirmDelete(false);
       setIsSaving(false);
@@ -128,18 +137,20 @@ export function ItemDetailSheet({
     }
   }, [item?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Smart-suggest link type when creating a new item — only until the user
-  // explicitly touches the picker.
+  // Smart-suggest link type when creating a new item — only after the user
+  // opens "More options" (it's collapsed by default, so a silent link would
+  // otherwise get set with no visible target and no way to notice it), and
+  // only until the user explicitly touches the picker.
   const suggestion = useMemo(
     () => suggestLink(category.type ?? null, name),
     [category.type, name]
   );
   useEffect(() => {
-    if (!isNew || userTouchedLink) return;
+    if (!isNew || userTouchedLink || !showMore) return;
     if (suggestion.link_type && linkType === "none") {
       setLinkType(suggestion.link_type);
     }
-  }, [suggestion.link_type, isNew, userTouchedLink, linkType]);
+  }, [suggestion.link_type, isNew, userTouchedLink, linkType, showMore]);
 
   const targetOptions = useMemo(() => {
     if (linkType === "asset") return linkTargets?.assets ?? [];
@@ -165,14 +176,6 @@ export function ItemDetailSheet({
     : null;
   const remaining = available !== null ? available - plannedNum : null;
   const isOverAllocation = remaining !== null && remaining < 0;
-  const usedPct = hasCategoryBudget
-    ? Math.min(
-        100,
-        Math.round(
-          ((category.otherItemsPlanned + plannedNum) / category.allocation) * 100
-        )
-      )
-    : 0;
 
   async function handleSave() {
     if (!item) return;
@@ -206,7 +209,9 @@ export function ItemDetailSheet({
       const finalLinkId: string | null = finalLinkType ? linkId : null;
 
       if (isNew) {
-        const createdActual = hideActual ? 0 : actualVal;
+        // Spent isn't collected at creation — planning and tracking are
+        // separate modes; actual spend is logged later via transactions/SMS.
+        const createdActual = 0;
         await onCreate({
           name: name.trim(),
           emoji,
@@ -289,61 +294,26 @@ export function ItemDetailSheet({
               </div>
             </div>
 
-            {/* ── Category budget context ───────────────────────── */}
+            {/* ── Category budget context — one line, not a ledger ──── */}
             <div className="px-6 pb-3">
               {hasCategoryBudget ? (
-                <div className="rounded-tile bg-tile p-3.5">
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-medium text-muted-foreground">
-                        Category budget
-                      </span>
-                      <span className="text-xs font-bold tabular-nums text-foreground">
-                        <CurrencyText value={category.allocation} />
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-medium text-muted-foreground">
-                        Used by other items
-                      </span>
-                      <span className="text-xs font-medium tabular-nums text-muted-foreground">
-                        − <CurrencyText value={category.otherItemsPlanned} />
-                      </span>
-                    </div>
-                    <div className="pt-1.5 flex justify-between items-center">
-                      <span className="text-xs font-bold text-foreground">
-                        Available for this item
-                      </span>
-                      <span
-                        className={`text-xs font-bold tabular-nums ${
-                          isOverAllocation ? "text-neg" : "text-foreground"
-                        }`}
-                      >
-                        {isOverAllocation
-                          ? (
-                              <>
-                                −<CurrencyText value={Math.abs(remaining!)} />
-                              </>
-                            )
-                          : <CurrencyText value={remaining!} />}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Progress bar */}
-                  <Progress
-                    className="mt-2.5 h-1.5"
-                    value={usedPct}
-                    state={isOverAllocation ? "over" : "normal"}
-                  />
-                  <div className="flex justify-between mt-1.5 text-[10px] font-medium tabular-nums text-muted-foreground">
-                    <span>
-                      <CurrencyText value={category.otherItemsPlanned + plannedNum} />{" "}
-                      allocated
-                    </span>
-                    <span>{usedPct}% of budget</span>
-                  </div>
-                </div>
+                <p
+                  className={`text-xs font-medium ${
+                    isOverAllocation ? "text-neg" : "text-muted-foreground"
+                  }`}
+                >
+                  {isOverAllocation ? (
+                    <>
+                      −<CurrencyText value={Math.abs(remaining!)} /> over the{" "}
+                      <span className="font-bold">{category.name}</span> budget
+                    </>
+                  ) : (
+                    <>
+                      <CurrencyText value={remaining!} /> available in{" "}
+                      <span className="font-bold text-foreground">{category.name}</span>
+                    </>
+                  )}
+                </p>
               ) : (
                 /* No category budget set */
                 <div className="flex items-start gap-3 rounded-tile bg-[var(--warn)]/10 border border-[var(--warn)]/20 px-4 py-3">
@@ -416,10 +386,31 @@ export function ItemDetailSheet({
                     Remove emoji
                   </button>
                 ) : null}
+                {isNew && suggestions.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {suggestions.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => {
+                          haptic.selection();
+                          setName(s);
+                        }}
+                        className={`shrink-0 rounded-full border px-3 py-1.5 text-[11.5px] font-bold transition-colors ${
+                          name === s
+                            ? "bg-[var(--pill)] text-[var(--pill-foreground)] border-transparent"
+                            : "bg-tile text-foreground border-border"
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Planned + Actual */}
-              <div className={hideActual ? "" : "grid grid-cols-2 gap-3"}>
+              <div className={hideSpentField ? "" : "grid grid-cols-2 gap-3"}>
                 <div className="space-y-2">
                   <label
                     className={`text-[9px] font-bold uppercase tracking-wide block ${
@@ -465,7 +456,7 @@ export function ItemDetailSheet({
                     </p>
                   ) : null}
                 </div>
-                {!hideActual && (
+                {!hideSpentField && (
                   <div className="space-y-2">
                     <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground block">
                       Spent <CurrencySymbol className="currency-symbol" />
@@ -483,72 +474,97 @@ export function ItemDetailSheet({
                 )}
               </div>
 
-              {/* Link to (cross-section) */}
-              <div className="space-y-2">
-                <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground block">
-                  Link to
-                </label>
-                <BottomSheetSelect<"none" | LinkType>
-                  title="Link this item to"
-                  placeholder="None"
-                  value={linkType}
-                  onChange={(v) => {
-                    setUserTouchedLink(true);
-                    setLinkType(v);
+              {/* More options — Link to + Notes, collapsed by default */}
+              <div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    haptic.light();
+                    setShowMore((v) => !v);
                   }}
-                  options={[
-                    { value: "none", label: "None" },
-                    { value: "asset", label: "Asset / Goal", description: "Investment, savings, or goal" },
-                    { value: "debt", label: "Debt", description: "Loan repayment" },
-                  ]}
-                  className="flex w-full items-center justify-between rounded-[13px] border border-border bg-card px-3.5 py-3 text-sm font-medium text-foreground"
-                />
-                {linkType !== "none" && (
-                  <BottomSheetSelect
-                    title={`Pick ${linkType}`}
-                    placeholder={
-                      targetOptions.length === 0
-                        ? `No ${linkType}s yet - create one first`
-                        : `Select ${linkType}`
-                    }
-                    value={linkId}
-                    onChange={setLinkId}
-                    disabled={targetOptions.length === 0}
-                    options={targetOptions.map((t) => ({
-                      value: t.id,
-                      label: t.name,
-                      icon: t.icon ?? undefined,
-                    }))}
-                    className="flex w-full items-center justify-between rounded-[13px] border border-border bg-card px-3.5 py-3 text-sm font-medium text-foreground"
-                  />
-                )}
-                {!userTouchedLink &&
-                  isNew &&
-                  suggestion.link_type &&
-                  linkType === suggestion.link_type && (
-                    <p className="text-[10px] font-medium text-muted-foreground">
-                      Suggested · {suggestion.reason}
-                    </p>
-                  )}
-                {linkType !== "none" && linkId && (
-                  <p className="text-[10px] font-medium text-muted-foreground">
-                    Spend on this item also flows to the linked {linkType}.
-                  </p>
-                )}
-              </div>
+                  className="flex w-full items-center justify-center gap-1 py-1 text-xs font-semibold text-muted-foreground"
+                >
+                  More options
+                  <span
+                    className={`material-symbols-outlined text-base transition-transform ${
+                      showMore ? "rotate-180" : ""
+                    }`}
+                  >
+                    expand_more
+                  </span>
+                </button>
 
-              {/* Notes */}
-              <div className="space-y-2">
-                <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground block">
-                  Notes
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={2}
-                  className="w-full rounded-[13px] border border-border bg-card px-3.5 py-3 text-sm font-medium text-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40 resize-none"
-                  placeholder="Optional note…"
-                />
+                {showMore && (
+                  <div className="space-y-4 pt-3">
+                    {/* Link to (cross-section) */}
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground block">
+                        Link to
+                      </label>
+                      <BottomSheetSelect<"none" | LinkType>
+                        title="Link this item to"
+                        placeholder="None"
+                        value={linkType}
+                        onChange={(v) => {
+                          setUserTouchedLink(true);
+                          setLinkType(v);
+                        }}
+                        options={[
+                          { value: "none", label: "None" },
+                          { value: "asset", label: "Asset / Goal", description: "Investment, savings, or goal" },
+                          { value: "debt", label: "Debt", description: "Loan repayment" },
+                        ]}
+                        className="flex w-full items-center justify-between rounded-[13px] border border-border bg-card px-3.5 py-3 text-sm font-medium text-foreground"
+                      />
+                      {linkType !== "none" && (
+                        <BottomSheetSelect
+                          title={`Pick ${linkType}`}
+                          placeholder={
+                            targetOptions.length === 0
+                              ? `No ${linkType}s yet - create one first`
+                              : `Select ${linkType}`
+                          }
+                          value={linkId}
+                          onChange={setLinkId}
+                          disabled={targetOptions.length === 0}
+                          options={targetOptions.map((t) => ({
+                            value: t.id,
+                            label: t.name,
+                            icon: t.icon ?? undefined,
+                          }))}
+                          className="flex w-full items-center justify-between rounded-[13px] border border-border bg-card px-3.5 py-3 text-sm font-medium text-foreground"
+                        />
+                      )}
+                      {!userTouchedLink &&
+                        isNew &&
+                        suggestion.link_type &&
+                        linkType === suggestion.link_type && (
+                          <p className="text-[10px] font-medium text-muted-foreground">
+                            Suggested · {suggestion.reason}
+                          </p>
+                        )}
+                      {linkType !== "none" && linkId && (
+                        <p className="text-[10px] font-medium text-muted-foreground">
+                          Spend on this item also flows to the linked {linkType}.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Notes */}
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground block">
+                        Notes
+                      </label>
+                      <textarea
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        rows={2}
+                        className="w-full rounded-[13px] border border-border bg-card px-3.5 py-3 text-sm font-medium text-foreground outline-none transition-colors focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent)]/40 resize-none"
+                        placeholder="Optional note…"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {error ? <p className="text-xs font-medium text-neg">{error}</p> : null}
@@ -595,7 +611,13 @@ export function ItemDetailSheet({
               disabled={isSaving}
               className="flex-[2] h-[48px] rounded-pill bg-[var(--pill)] text-[var(--pill-foreground)] text-sm font-bold disabled:opacity-50 active:scale-[0.98] transition-all"
             >
-              {isSaving ? "Saving…" : isNew ? "Add Item" : "Save"}
+              {isSaving
+                ? "Saving…"
+                : isNew
+                ? hasCategoryBudget && remaining !== null && plannedNum > 0 && !isOverAllocation
+                  ? `Add · ${fmt(remaining)} left after this`
+                  : "Add Item"
+                : "Save"}
             </button>
           </div>
         </Drawer.Content>

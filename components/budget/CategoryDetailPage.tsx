@@ -15,6 +15,7 @@ import { ColorPicker } from "@/components/ui/ColorPicker";
 import { resolveColor, type CatKey } from "@/lib/theme/dataViz";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { SwipeToDeleteRow } from "@/components/ui/SwipeToDeleteRow";
 import { ItemDetailSheet, NEW_ITEM_ID } from "@/components/budget/ItemDetailSheet";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { useCategoryData, categoryDataKey } from "@/lib/hooks/useCategoryData";
@@ -27,6 +28,7 @@ import { applyLinkedSpendCascadeIDB } from "@/lib/utils/budget-cascade";
 import { NET_WORTH_KEY } from "@/lib/hooks/useNetWorth";
 import { GOALS_KEY } from "@/lib/hooks/useGoals";
 import { DEBT_KEY } from "@/lib/hooks/useDebt";
+import { suggestItemNames } from "@/lib/budget/categorySuggestions";
 
 type LinkType = "asset" | "debt";
 
@@ -115,6 +117,8 @@ function CategoryDetailContent({
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
   const [validationError, setValidationError] = useState("");
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showBreakdown, setShowBreakdown] = useState(false);
   const [linkTargets, setLinkTargets] = useState<{
     assets: LinkTargetEntry[];
     debts: LinkTargetEntry[];
@@ -510,11 +514,11 @@ function CategoryDetailContent({
     setSelectedItem(item);
   }
 
-  function openNewItem() {
+  function openNewItem(prefillName = "") {
     haptic.light();
     setSelectedItem({
       id: NEW_ITEM_ID,
-      name: "",
+      name: prefillName,
       planned: 0,
       actual: 0,
       is_completed: false,
@@ -522,7 +526,32 @@ function CategoryDetailContent({
     });
   }
 
+  // One-tap add — no sheet. Fill in, don't author: the seeded/suggested
+  // list exists so the user only ever types a number or deletes a row.
+  function quickAddItem(itemName: string) {
+    haptic.selection();
+    void handleAddItem({
+      name: itemName,
+      emoji: null,
+      planned_amount: 0,
+      actual_amount: 0,
+      is_completed: false,
+      notes: null,
+      link_type: null,
+      link_id: null,
+    });
+  }
+
   const categoryColor = resolveColor({ id: categoryId, color });
+
+  const itemSuggestions = suggestItemNames(name, data.type ?? null).filter(
+    (s) => !items.some((i) => i.name.toLowerCase() === s.toLowerCase())
+  );
+
+  // Done guardrail: how much of the category budget is still unassigned to
+  // an item, and how many of the (seeded) items have a number in them yet.
+  const filledItemCount = items.filter((i) => i.planned > 0).length;
+  const unplannedAmount = Math.max(0, categoryAllocation - totalPlanned);
 
   const otherItemsPlanned = selectedItem
     ? items.filter((i) => i.id !== selectedItem.id).reduce((s, i) => s + i.planned, 0)
@@ -561,6 +590,19 @@ function CategoryDetailContent({
         </div>
 
         <button
+          type="button"
+          onClick={() => { haptic.light(); setShowColorPicker((v) => !v); }}
+          className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-card"
+          title="Change color"
+          aria-label="Change category color"
+        >
+          <span
+            className="size-4 rounded-full"
+            style={{ background: categoryColor }}
+          />
+        </button>
+
+        <button
           id="category-delete"
           onClick={() => { haptic.heavy(); setIsConfirmDeleteOpen(true); }}
           className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-neg"
@@ -571,11 +613,13 @@ function CategoryDetailContent({
         </button>
       </div>
 
-      {/* Color */}
-      <Card compact className="flex items-center gap-3 flex-wrap">
-        <span className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground shrink-0">Color</span>
-        <ColorPicker value={color} onChange={handleUpdateColor} />
-      </Card>
+      {/* Color — tucked behind the swatch button above, auto-assigned by default */}
+      {showColorPicker && (
+        <Card compact className="flex items-center gap-3 flex-wrap">
+          <span className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground shrink-0">Color</span>
+          <ColorPicker value={color} onChange={handleUpdateColor} />
+        </Card>
+      )}
 
       {/* Stats card */}
       <Card>
@@ -608,20 +652,34 @@ function CategoryDetailContent({
         <SegBar pct={pct} over={totalActual > categoryAllocation && categoryAllocation > 0} color={categoryColor} />
 
         <div className="mt-2.5 space-y-1">
-          <p className="text-[10.5px] font-medium text-muted-foreground tabular-nums">
-            {Math.round(pct * 100)}% used · <CurrencyText value={totalPlanned} /> planned
-            {categoryAllocation > 0 ? (
-              <>
-                {" "}·{" "}
-                <CurrencyText value={Math.max(0, categoryAllocation - totalPlanned)} />{" "}
-                unallocated
-              </>
-            ) : null}
-          </p>
-          <p className="text-[10.5px] font-medium text-muted-foreground tabular-nums">
-            Total <CurrencyText value={data.totalBudget} /> · Other{" "}
-            <CurrencyText value={data.otherAllocated} />
-          </p>
+          <button
+            type="button"
+            onClick={() => { haptic.light(); setShowBreakdown((v) => !v); }}
+            className="text-[10.5px] font-medium text-muted-foreground tabular-nums text-left"
+          >
+            <CurrencyText value={Math.max(0, left)} /> to spend here ·{" "}
+            <CurrencyText value={totalActual} /> spent
+            <span className="ml-1 text-foreground/50">{showBreakdown ? "▲" : "▼"}</span>
+          </button>
+
+          {showBreakdown && (
+            <div className="pt-1 space-y-1">
+              <p className="text-[10.5px] font-medium text-muted-foreground tabular-nums">
+                <CurrencyText value={totalPlanned} /> planned
+                {categoryAllocation > 0 ? (
+                  <>
+                    {" "}·{" "}
+                    <CurrencyText value={Math.max(0, categoryAllocation - totalPlanned)} />{" "}
+                    unallocated
+                  </>
+                ) : null}
+              </p>
+              <p className="text-[10.5px] font-medium text-muted-foreground tabular-nums">
+                <CurrencyText value={data.otherAllocated} /> allocated to other categories
+              </p>
+            </div>
+          )}
+
           {data.totalBudget <= 0 ? (
             <button
               type="button"
@@ -649,94 +707,158 @@ function CategoryDetailContent({
         <button
           id="add-item-btn"
           type="button"
-          onClick={openNewItem}
+          onClick={() => openNewItem()}
           className="flex items-center gap-1 text-[13px] font-bold text-foreground"
         >
-          <span className="text-accent-strong text-base leading-none">＋</span>Add
+          <span className="text-accent-strong text-base leading-none">＋</span>Custom
         </button>
       </div>
 
+      {/* Done guardrail — always visible while there's a budget to fill against */}
+      {items.length > 0 && categoryAllocation > 0 && (
+        <div
+          className={`flex items-center justify-between rounded-pill px-3.5 py-2 text-[11.5px] font-bold ${
+            unplannedAmount <= 0
+              ? "bg-accent text-[var(--accent-ink)]"
+              : "bg-tile text-muted-foreground"
+          }`}
+        >
+          <span>
+            {unplannedAmount > 0 ? (
+              <><CurrencyText value={unplannedAmount} /> still unplanned</>
+            ) : (
+              "Fully planned"
+            )}
+          </span>
+          <span>
+            {filledItemCount} of {items.length} filled
+          </span>
+        </div>
+      )}
+
       {/* Item list — or a prominent empty state so the add action isn't buried */}
       {items.length === 0 ? (
-        <EmptyState
-          icon="list_alt"
-          title="No items yet"
-          description="Break this category into items (rent, groceries, a subscription) to plan and track what you spend."
-          action={{ label: "Add your first item", onClick: openNewItem }}
-        />
+        <>
+          <EmptyState
+            icon="list_alt"
+            title="No items yet"
+            description="Break this category into items (rent, groceries, a subscription) to plan and track what you spend."
+            action={{ label: "Add your first item", onClick: () => openNewItem() }}
+          />
+          {itemSuggestions.length > 0 && (
+            <div className="flex flex-wrap justify-center gap-2 px-4 -mt-4">
+              {itemSuggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => quickAddItem(suggestion)}
+                  className="shrink-0 rounded-full border border-border bg-tile px-3.5 py-2 text-[12px] font-bold text-foreground"
+                >
+                  + {suggestion}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
       ) : (
       <div className="flex flex-col gap-2.5">
         {items.map((item) => {
           const itemPct = item.planned > 0 ? Math.min(1, item.actual / item.planned) : 0;
 
           return (
-            <Card key={item.id} compact>
-              <button
-                type="button"
-                onClick={() => openItem(item)}
-                className="w-full text-left"
-              >
+            <SwipeToDeleteRow key={item.id} onDelete={() => handleDeleteItem(item.id)}>
+              <Card compact>
                 <div className="flex items-center gap-3">
-                  {item.is_completed ? (
-                    <div
-                      className="flex size-[22px] shrink-0 items-center justify-center rounded-full text-white"
-                      style={{ background: categoryColor }}
-                    >
-                      <Check size={13} strokeWidth={2.4} />
-                    </div>
-                  ) : (
-                    <div
-                      className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] text-[15px] font-bold"
-                      style={{
-                        background: `color-mix(in srgb, ${categoryColor} 16%, transparent)`,
-                        color: categoryColor,
-                      }}
-                    >
-                      {item.emoji || icon || item.name.charAt(0).toUpperCase() || "•"}
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div
-                      className={`text-[14px] font-bold truncate ${
-                        item.is_completed ? "line-through text-muted-foreground" : "text-foreground"
-                      }`}
-                    >
-                      {item.name}
-                    </div>
-                    {item.link_type && item.link_id ? (
-                      <div className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-semibold text-accent-strong">
-                        <Link2 size={12} strokeWidth={1.7} />
-                        {(() => {
-                          const target =
-                            item.link_type === "asset"
-                              ? allAssets.find((t) => t.id === item.link_id)
-                              : linkTargets.debts.find((t) => t.id === item.link_id);
-                          return target ? `${target.icon ?? ""} ${target.name}`.trim() : item.link_type;
-                        })()}
+                  <button
+                    type="button"
+                    onClick={() => openItem(item)}
+                    className="flex flex-1 min-w-0 items-center gap-3 text-left"
+                  >
+                    {item.is_completed ? (
+                      <div
+                        className="flex size-[22px] shrink-0 items-center justify-center rounded-full text-white"
+                        style={{ background: categoryColor }}
+                      >
+                        <Check size={13} strokeWidth={2.4} />
                       </div>
-                    ) : item.notes ? (
-                      <p className="text-[10.5px] font-medium text-muted-foreground truncate mt-0.5">
-                        {item.notes}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="text-right shrink-0">
-                    <div className="figure text-[13px]">
-                      <CurrencyText value={item.actual} />
+                    ) : (
+                      <div
+                        className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] text-[15px] font-bold"
+                        style={{
+                          background: `color-mix(in srgb, ${categoryColor} 16%, transparent)`,
+                          color: categoryColor,
+                        }}
+                      >
+                        {item.emoji || icon || item.name.charAt(0).toUpperCase() || "•"}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div
+                        className={`text-[14px] font-bold truncate ${
+                          item.is_completed ? "line-through text-muted-foreground" : "text-foreground"
+                        }`}
+                      >
+                        {item.name}
+                      </div>
+                      {item.link_type && item.link_id ? (
+                        <div className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-semibold text-accent-strong">
+                          <Link2 size={12} strokeWidth={1.7} />
+                          {(() => {
+                            const target =
+                              item.link_type === "asset"
+                                ? allAssets.find((t) => t.id === item.link_id)
+                                : linkTargets.debts.find((t) => t.id === item.link_id);
+                            return target ? `${target.icon ?? ""} ${target.name}`.trim() : item.link_type;
+                          })()}
+                        </div>
+                      ) : item.notes ? (
+                        <p className="text-[10.5px] font-medium text-muted-foreground truncate mt-0.5">
+                          {item.notes}
+                        </p>
+                      ) : null}
                     </div>
-                    {item.planned > 0 && (
+                    <ChevronRight size={15} strokeWidth={2} className="shrink-0 text-muted-foreground" />
+                  </button>
+
+                  {/* Tap the amount, type, next — no sheet for the common case. */}
+                  <div
+                    className="text-right shrink-0"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <InlineEditableNumber
+                      value={item.planned}
+                      onSave={(v) => handleUpdateItem(item.id, { planned_amount: v })}
+                      className="figure text-[13px]"
+                    />
+                    {item.actual > 0 && (
                       <div className="text-[9.5px] font-medium text-muted-foreground tabular-nums mt-0.5">
-                        of <CurrencyText value={item.planned} />
+                        <CurrencyText value={item.actual} /> spent
                       </div>
                     )}
                   </div>
-                  <ChevronRight size={15} strokeWidth={2} className="shrink-0 text-muted-foreground" />
                 </div>
-                {item.planned > 0 && <SegBar pct={itemPct} over={item.actual > item.planned} color={categoryColor} />}
-              </button>
-            </Card>
+                {item.planned > 0 && (
+                  <SegBar pct={itemPct} over={item.actual > item.planned} color={categoryColor} />
+                )}
+              </Card>
+            </SwipeToDeleteRow>
           );
         })}
+
+        {itemSuggestions.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-1 pt-1">
+            {itemSuggestions.map((suggestion) => (
+              <button
+                key={suggestion}
+                type="button"
+                onClick={() => quickAddItem(suggestion)}
+                className="shrink-0 rounded-full border border-border bg-tile px-3.5 py-2 text-[12px] font-bold text-foreground"
+              >
+                + {suggestion}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       )}
 
@@ -759,6 +881,7 @@ function CategoryDetailContent({
       <ItemDetailSheet
         item={selectedItem}
         category={{ name, icon, type: data.type ?? null, allocation: categoryAllocation, otherItemsPlanned }}
+        suggestions={itemSuggestions}
         linkTargets={(() => {
           // If currently selected item already references a now-mirrored asset,
           // re-include that asset in the picker so the user can see/keep it.

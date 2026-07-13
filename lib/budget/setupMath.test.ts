@@ -5,6 +5,7 @@ import {
   templateToSetupCategories,
   fitItemsToAllocation,
   resolveEffectiveTotal,
+  rebalanceAllocations,
 } from "./setupMath";
 import { PREDEFINED_TEMPLATES } from "@/lib/budget-templates";
 
@@ -94,5 +95,77 @@ describe("resolveEffectiveTotal", () => {
   });
   it("zero everywhere stays zero", () => {
     expect(resolveEffectiveTotal(0, 0)).toEqual({ total: 0, bumped: false });
+  });
+});
+
+describe("rebalanceAllocations", () => {
+  const base = () => [
+    { id: "a", allocation: 25000, allocationPct: 50 },
+    { id: "b", allocation: 15000, allocationPct: 30 },
+    { id: "c", allocation: 10000, allocationPct: 20 },
+  ];
+
+  it("redistributes the remainder proportionally and keeps the sum exact", () => {
+    const out = rebalanceAllocations(base(), "a", 35000, 50000);
+    expect(out.find((c) => c.id === "a")!.allocation).toBe(35000);
+    const sum = out.reduce((s, c) => s + c.allocation, 0);
+    expect(sum).toBe(50000);
+    // b:c were 15000:10000 (3:2) — remainder 15000 splits 9000:6000
+    expect(out.find((c) => c.id === "b")!.allocation).toBe(9000);
+    expect(out.find((c) => c.id === "c")!.allocation).toBe(6000);
+  });
+
+  it("clamps to 0 when dragged below zero", () => {
+    const out = rebalanceAllocations(base(), "a", -500, 50000);
+    expect(out.find((c) => c.id === "a")!.allocation).toBe(0);
+    expect(out.reduce((s, c) => s + c.allocation, 0)).toBe(50000);
+  });
+
+  it("clamps to total and zeroes the others when dragged above total", () => {
+    const out = rebalanceAllocations(base(), "a", 90000, 50000);
+    expect(out.find((c) => c.id === "a")!.allocation).toBe(50000);
+    expect(out.find((c) => c.id === "b")!.allocation).toBe(0);
+    expect(out.find((c) => c.id === "c")!.allocation).toBe(0);
+  });
+
+  it("splits evenly across others when their current weights are all zero", () => {
+    const cats = [
+      { id: "a", allocation: 0, allocationPct: null },
+      { id: "b", allocation: 0, allocationPct: null },
+      { id: "c", allocation: 0, allocationPct: null },
+    ];
+    const out = rebalanceAllocations(cats, "a", 10000, 30000);
+    expect(out.find((c) => c.id === "a")!.allocation).toBe(10000);
+    expect(out.find((c) => c.id === "b")!.allocation).toBe(10000);
+    expect(out.find((c) => c.id === "c")!.allocation).toBe(10000);
+    expect(out.reduce((s, c) => s + c.allocation, 0)).toBe(30000);
+  });
+
+  it("keeps the exact sum with awkward rounding splits", () => {
+    const cats = [
+      { id: "a", allocation: 1, allocationPct: null },
+      { id: "b", allocation: 1, allocationPct: null },
+      { id: "c", allocation: 1, allocationPct: null },
+    ];
+    const out = rebalanceAllocations(cats, "a", 1, 4);
+    expect(out.reduce((s, c) => s + c.allocation, 0)).toBe(4);
+    expect(out.every((c) => Number.isInteger(c.allocation) && c.allocation >= 0)).toBe(true);
+  });
+
+  it("marks touched categories as manual (allocationPct: null)", () => {
+    const out = rebalanceAllocations(base(), "a", 40000, 50000);
+    expect(out.every((c) => c.allocationPct === null)).toBe(true);
+  });
+
+  it("is a no-op when changedId isn't found", () => {
+    const cats = base();
+    const out = rebalanceAllocations(cats, "missing", 40000, 50000);
+    expect(out).toBe(cats);
+  });
+
+  it("clamps the single-category case to the total", () => {
+    const cats = [{ id: "a", allocation: 5000, allocationPct: 100 }];
+    const out = rebalanceAllocations(cats, "a", 99999, 50000);
+    expect(out[0].allocation).toBe(50000);
   });
 });

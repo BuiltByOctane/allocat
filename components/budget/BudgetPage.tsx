@@ -30,6 +30,9 @@ import { resolveColor } from "@/lib/theme/dataViz";
 import BudgetEmptyState from "@/components/budget/BudgetEmptyState";
 import { BudgetSetupSheet } from "@/components/budget/BudgetSetupSheet";
 import { BudgetQuickSetup } from "@/components/budget/BudgetQuickSetup";
+import { readDraftPlan, type QuizDraft } from "@/lib/budget/quizDraft";
+
+const DETAIL_HINT_KEY = "allocat-budget-detail-hint-dismissed";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -117,6 +120,25 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
   // until the refetched data.id catches up. Always prefer data.id when present.
   const [resolvedId, setResolvedId] = useState("");
   const effectiveBudgetId = data.id || resolvedId;
+
+  // A budget plan the onboarding quiz built but the user deferred ("Not now
+  // — keep it for later"). Only relevant while no budget row exists yet.
+  const [quizDraft, setQuizDraft] = useState<QuizDraft | null>(null);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!data.id) setQuizDraft(readDraftPlan());
+  }, [data.id]);
+
+  // One-line hint replacing any tutorial — dismissible, persisted locally.
+  // Defaults to hidden until the localStorage check runs, avoiding a flash.
+  const [detailHintDismissed, setDetailHintDismissed] = useState(true);
+  useEffect(() => {
+    setDetailHintDismissed(localStorage.getItem(DETAIL_HINT_KEY) === "1");
+  }, []);
+  const dismissDetailHint = useCallback(() => {
+    localStorage.setItem(DETAIL_HINT_KEY, "1");
+    setDetailHintDismissed(true);
+  }, []);
 
   const ensureRow = useEnsureBudgetRow();
   const ensureBudgetId = useCallback(async (): Promise<string> => {
@@ -326,7 +348,9 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
           <div id="budget-spend-meter">
             <div className="flex justify-between items-end">
               <div>
-                <span className="t-label text-muted-foreground">{overspent ? "Over" : "Left"}</span>
+                <span className="t-label text-muted-foreground">
+                  {overspent ? "Over" : "Left to spend"}
+                </span>
                 <div
                   className="figure text-[32px] mt-1"
                   style={{ color: overspent ? "var(--neg)" : "var(--foreground)" }}
@@ -452,6 +476,22 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
                 </Link>
               );
             })}
+
+            {!detailHintDismissed && (
+              <div className="flex items-center justify-between gap-2 rounded-2xl border-[1.5px] border-dashed border-border px-4 py-3">
+                <span className="text-[12px] text-muted-foreground">
+                  Tap a category to plan the details - optional
+                </span>
+                <button
+                  type="button"
+                  onClick={dismissDetailHint}
+                  aria-label="Dismiss hint"
+                  className="text-muted-foreground shrink-0"
+                >
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -463,6 +503,7 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
         month={defaultMonth}
         year={defaultYear}
         onEditTemplate={openEditTemplateFromPicker}
+        initialDraft={data.id ? null : quizDraft}
         onDone={() => {
           qc.invalidateQueries({ queryKey: budgetKey(defaultMonth, defaultYear) });
           qc.invalidateQueries({ queryKey: DASHBOARD_KEY });

@@ -6,6 +6,7 @@ import { getDB } from "@/lib/db";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { MaterialSymbol } from "@/components/ui/MaterialSymbol";
 import type { DashboardEmptySource } from "@/lib/utils/dashboard-empty";
+import { readDraftPlan } from "@/lib/budget/quizDraft";
 
 const DISMISS_KEY = "allocat-firstrun-dismissed";
 
@@ -39,12 +40,15 @@ export function useFirstRun(
 ): FirstRunState {
   const [dismissed, setDismissed] = useState(false);
   const [hasDebt, setHasDebt] = useState(false);
+  const [draftPlanName, setDraftPlanName] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     // Read persisted state after mount so SSR and the first client render agree.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDismissed(window.localStorage.getItem(DISMISS_KEY) === "1");
+    const draft = readDraftPlan();
+    if (draft) setDraftPlanName(draft.planName);
   }, []);
 
   useEffect(() => {
@@ -66,12 +70,16 @@ export function useFirstRun(
   const assetDone = (data?.netWorthHistory.length ?? 0) > 0;
   const goalDone = (data?.goals.length ?? 0) > 0;
 
+  const hasUnfinishedDraft = !!draftPlanName && !budgetDone;
+
   const items: FirstRunItem[] = [
     {
       id: "budget",
       icon: "account_balance_wallet",
-      title: "Set up your budget",
-      description: "Pick a template or add categories - your spending plan.",
+      title: hasUnfinishedDraft ? `Finish your ${draftPlanName}` : "Set up your budget",
+      description: hasUnfinishedDraft
+        ? "We already did the math - just confirm the amounts."
+        : "Pick a template or add categories - your spending plan.",
       href: "/budget",
       done: budgetDone,
       primary: true,

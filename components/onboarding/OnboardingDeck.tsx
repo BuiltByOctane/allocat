@@ -1,6 +1,11 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import {
+  forwardRef,
+  useImperativeHandle,
+  useState,
+  type ReactNode,
+} from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 
@@ -11,11 +16,29 @@ export interface DeckSlide {
   hideNext?: boolean;
 }
 
+/** Imperative navigation, for callers (e.g. the quiz) that need to advance a
+ *  slide programmatically from inside a screen's own tap handler. */
+export interface OnboardingDeckHandle {
+  next: () => void;
+  back: () => void;
+  goTo: (i: number) => void;
+}
+
+export interface OnboardingDeckProps {
+  slides: DeckSlide[];
+  /** Show the top-right "Skip to last slide" button. Default true. Quiz
+   *  screens set this false and render their own per-question Skip link,
+   *  since quiz-skip semantics (default value, advance one step) differ from
+   *  the tour's skip-to-last-slide behavior. */
+  showSkipToEnd?: boolean;
+}
+
 /**
  * Swipeable onboarding deck. Drag horizontally or use the Next/Back buttons and
  * progress dots. Honors prefers-reduced-motion (cross-fades, no drag/parallax).
  */
-export function OnboardingDeck({ slides }: { slides: DeckSlide[] }) {
+export const OnboardingDeck = forwardRef<OnboardingDeckHandle, OnboardingDeckProps>(
+  function OnboardingDeck({ slides, showSkipToEnd = true }, ref) {
   const reduce = useReducedMotion();
   const haptic = useHaptic();
   const [[page, dir], setPage] = useState<[number, number]>([0, 0]);
@@ -36,6 +59,12 @@ export function OnboardingDeck({ slides }: { slides: DeckSlide[] }) {
     setPage([i, i > current ? 1 : -1]);
   };
 
+  useImperativeHandle(ref, () => ({
+    next: () => paginate(1),
+    back: () => paginate(-1),
+    goTo,
+  }));
+
   const variants = {
     enter: (d: number) => ({ x: reduce ? 0 : d > 0 ? "100%" : "-100%", opacity: 0 }),
     center: { x: 0, opacity: 1 },
@@ -50,17 +79,19 @@ export function OnboardingDeck({ slides }: { slides: DeckSlide[] }) {
         className="pointer-events-none absolute left-1/2 top-[-12%] h-[55%] w-[130%] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(182,232,74,0.14),transparent_70%)]"
       />
 
-      {/* Skip — jumps to the final budget step (which has its own skip). */}
+      {/* Skip — jumps to the final slide (which has its own skip/CTAs). */}
       <div className="relative z-10 flex justify-end px-7 pt-5">
-        <button
-          type="button"
-          onClick={() => goTo(last)}
-          className={`py-1 text-xs font-bold uppercase tracking-widest text-white/45 transition hover:text-white/80 ${
-            current === last ? "pointer-events-none opacity-0" : "opacity-100"
-          }`}
-        >
-          Skip
-        </button>
+        {showSkipToEnd && (
+          <button
+            type="button"
+            onClick={() => goTo(last)}
+            className={`py-1 text-xs font-bold uppercase tracking-widest text-white/45 transition hover:text-white/80 ${
+              current === last ? "pointer-events-none opacity-0" : "opacity-100"
+            }`}
+          >
+            Skip
+          </button>
+        )}
       </div>
 
       {/* Card stage */}
@@ -147,4 +178,5 @@ export function OnboardingDeck({ slides }: { slides: DeckSlide[] }) {
       </div>
     </div>
   );
-}
+  }
+);

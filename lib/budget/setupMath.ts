@@ -106,3 +106,53 @@ export function resolveEffectiveTotal(
   const total = Math.max(enteredTotal, totalAllocated);
   return { total, bumped: totalAllocated > enteredTotal && enteredTotal > 0 };
 }
+
+/**
+ * Drag-to-rebalance: set one category's allocation to `newAmount` (clamped to
+ * [0, total]) and redistribute the remainder across the other categories,
+ * proportional to their current weights (even split if all are 0), so the
+ * sum always equals `total` exactly. Touched categories become manual
+ * (`allocationPct: null`) since the split no longer follows the original pct.
+ * No-op (returns `categories` unchanged) if `changedId` isn't found.
+ */
+export function rebalanceAllocations<
+  T extends { id: string; allocation: number; allocationPct: number | null }
+>(categories: T[], changedId: string, newAmount: number, total: number): T[] {
+  const idx = categories.findIndex((c) => c.id === changedId);
+  if (idx === -1) return categories;
+
+  const safeTotal = Math.max(0, total);
+  const clampedChanged = Math.max(0, Math.min(Math.round(newAmount), safeTotal));
+  const others = categories.filter((_, i) => i !== idx);
+
+  if (others.length === 0) {
+    return categories.map((c, i) =>
+      i === idx ? { ...c, allocation: clampedChanged, allocationPct: null } : c
+    );
+  }
+
+  const remainder = safeTotal - clampedChanged;
+  const weights = others.map((c) => c.allocation);
+  const weightSum = weights.reduce((a, b) => a + b, 0);
+  const shares =
+    weightSum > 0
+      ? weights.map((w) => (w / weightSum) * remainder)
+      : others.map(() => remainder / others.length);
+
+  const floored = shares.map(Math.floor);
+  let leftover = remainder - floored.reduce((a, b) => a + b, 0);
+  const order = shares
+    .map((v, i) => ({ frac: v - Math.floor(v), i }))
+    .sort((a, b) => b.frac - a.frac);
+  for (const { i } of order) {
+    if (leftover <= 0) break;
+    floored[i] += 1;
+    leftover -= 1;
+  }
+
+  let oi = 0;
+  return categories.map((c, i) => {
+    if (i === idx) return { ...c, allocation: clampedChanged, allocationPct: null };
+    return { ...c, allocation: floored[oi++], allocationPct: null };
+  });
+}

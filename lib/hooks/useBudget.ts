@@ -8,6 +8,7 @@ import {
 import { PREDEFINED_TEMPLATES, type BudgetTemplate } from "@/lib/budget-templates";
 import { computeTemplateDrift, type DriftCategory } from "@/lib/budget/templateDrift";
 import { fitItemsToAllocation, type SetupCategory } from "@/lib/budget/setupMath";
+import { suggestItemNames } from "@/lib/budget/categorySuggestions";
 import { reapplyRulesToPending } from "@/lib/sms/ingestClient";
 import { pushSmsMirrorToNative } from "@/lib/sms/nativeMirror";
 import { getDB } from "@/lib/db";
@@ -479,13 +480,14 @@ export function useAddBudgetCategory() {
       const db = getDB();
       const tempId = `temp_${crypto.randomUUID()}`;
       const now = new Date().toISOString();
+      const trimmedName = name.trim();
 
       // Optimistically write to IDB
       await db.categories.add({
         id: tempId,
         budget_id: budgetId,
         user_id: "__pending__",
-        name: name.trim(),
+        name: trimmedName,
         icon: null,
         color: null,
         type,
@@ -499,8 +501,51 @@ export function useAddBudgetCategory() {
         operation: "INSERT",
         recordId: tempId,
         tempId,
-        payload: { budgetId, name: name.trim(), type },
+        payload: { budgetId, name: trimmedName, type },
       });
+
+      // Seed 3-5 common items at ₹0 — fill in, don't author. The item INSERTs
+      // reference the category's tempId; SyncEngine resolves it via id_map
+      // once the category INSERT above has landed, so ordering is safe even
+      // though this category doesn't have a real id yet.
+      const seeded = suggestItemNames(trimmedName, type).slice(0, 5);
+      for (const itemName of seeded) {
+        const itemTempId = `temp_${crypto.randomUUID()}`;
+        await db.budget_items.add({
+          id: itemTempId,
+          category_id: tempId,
+          user_id: "__pending__",
+          name: itemName,
+          emoji: null,
+          planned_amount: 0,
+          actual_amount: 0,
+          is_completed: false,
+          notes: null,
+          link_type: null,
+          link_id: null,
+          template_id: null,
+          template_item_id: null,
+          overspend_count: 0,
+          created_at: now,
+          updated_at: now,
+        });
+        await enqueue({
+          table: "budget_items",
+          operation: "INSERT",
+          recordId: itemTempId,
+          tempId: itemTempId,
+          payload: {
+            categoryId: tempId,
+            name: itemName,
+            emoji: null,
+            planned: 0,
+            actual: 0,
+            is_completed: false,
+            notes: null,
+            link: null,
+          },
+        });
+      }
 
       return { id: tempId };
     },

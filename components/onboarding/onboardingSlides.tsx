@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { AnimatedNumber } from "./AnimatedNumber";
+import { OnboardingCard } from "./OnboardingCard";
 
 export interface TeachingSlide {
   key: string;
@@ -200,7 +201,7 @@ export const TEACHING_SLIDES: TeachingSlide[] = [
         calm way.
       </>
     ),
-    body: "Personal finance that feels as calm and intentional as a cat choosing its sunny spot.",
+    body: "Personal finance that feels as calm and intentional as a cat choosing its sunny spot. In the next minute you'll see what AlloCat does - then we'll build your first budget together. No forms, promise.",
     visual: <WelcomeVisual />,
   },
   {
@@ -209,12 +210,12 @@ export const TEACHING_SLIDES: TeachingSlide[] = [
     icon: "account_balance_wallet",
     title: (
       <>
-        See what&apos;s
+        One number to check,
         <br />
-        left to spend.
+        not ten.
       </>
     ),
-    body: "Split your income into categories and watch the bar fill as you go. It turns red before you overspend, not after.",
+    body: "“Can I spend this?” gets a yes or no at a glance. AlloCat warns you before you overspend - never after.",
     visual: <BudgetVisual />,
   },
   {
@@ -242,7 +243,7 @@ export const TEACHING_SLIDES: TeachingSlide[] = [
         themselves.
       </>
     ),
-    body: "AlloCat reads your bank & UPI transaction SMS on your device and logs the spend. Categorize a merchant once - it remembers forever. The raw SMS never leaves your phone.",
+    body: "Bank SMS becomes a logged spend, on your phone, automatically. The raw message never leaves your device.",
     visual: <SmsVisual />,
   },
   {
@@ -260,3 +261,65 @@ export const TEACHING_SLIDES: TeachingSlide[] = [
     visual: <AiVisual />,
   },
 ];
+
+// ─── Quiz invite slide (final tour slide, custom footer/CTAs) ──────────────
+
+const QUIZ_INVITE_TAGS = ["No typing", "~60 sec", "Editable later"];
+
+/** Content for the tour's final slide: sells the upcoming quiz, then hands
+ *  off to it (or lets the user skip straight to the dashboard). Not a plain
+ *  TeachingSlide since it needs two custom CTAs instead of the deck's Next
+ *  button - built by the caller (app/onboarding/page.tsx) with its own
+ *  handlers wired to the tour/quiz mode switch. */
+export function QuizInviteCard({
+  onBuildBudget,
+  onSkip,
+}: {
+  onBuildBudget: () => void;
+  onSkip: () => void;
+}) {
+  return (
+    <OnboardingCard
+      eyebrow="05 - Your budget"
+      icon="auto_awesome"
+      title={
+        <>
+          Tell us about
+          <br />
+          your month.
+        </>
+      }
+      body="A few quick taps about how you live and spend - we'll do the math and hand you a working budget."
+      footer={
+        <>
+          <div className="flex flex-wrap gap-2">
+            {QUIZ_INVITE_TAGS.map((tag) => (
+              <span
+                key={tag}
+                className="rounded-full border border-white/15 px-3 py-1.5 text-[11.5px] font-semibold text-white/55"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+          <div className="flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={onBuildBudget}
+              className="w-full rounded-pill bg-accent py-4 text-sm font-bold text-[var(--accent-ink)] transition active:scale-[0.98]"
+            >
+              Build my budget
+            </button>
+            <button
+              type="button"
+              onClick={onSkip}
+              className="w-full py-2 text-xs font-bold uppercase tracking-widest text-white/45 transition hover:text-white/80"
+            >
+              I&apos;ll explore first
+            </button>
+          </div>
+        </>
+      }
+    />
+  );
+}

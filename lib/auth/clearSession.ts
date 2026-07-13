@@ -22,6 +22,7 @@ export const ACCOUNT_SCOPED_LS_KEYS = [
   "push-prompt-sessions",
   "push-prompt-dismissed",
   "mobile-hint-dismissed",
+  "allocat-quiz-draft",
 ] as const;
 
 /** Removes the account-scoped keys from the given storage. Pure — testable. */

@@ -13,6 +13,8 @@ export interface OnboardingCardProps {
   icon?: string;
   /** Mini feature preview rendered above the copy. */
   visual?: ReactNode;
+  /** Extra content (e.g. tag pills, custom CTAs) rendered below the body. */
+  footer?: ReactNode;
 }
 
 /**
@@ -25,6 +27,7 @@ export function OnboardingCard({
   body,
   icon,
   visual,
+  footer,
 }: OnboardingCardProps) {
   const reduce = useReducedMotion();
   const rise = reduce
@@ -76,6 +79,12 @@ export function OnboardingCard({
           {body}
         </motion.p>
       </div>
+
+      {footer ? (
+        <motion.div {...rise} transition={{ duration: 0.5, delay: 0.28 }} className="mt-auto flex flex-col gap-4">
+          {footer}
+        </motion.div>
+      ) : null}
     </div>
   );
 }

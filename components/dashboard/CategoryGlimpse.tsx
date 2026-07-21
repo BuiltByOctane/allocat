@@ -3,23 +3,24 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { CurrencyText } from "@/components/ui/CurrencyText";
-import { Progress, type ProgressState } from "@/components/ui/Progress";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import type { DashboardCategory } from "@/lib/hooks/useDashboard";
 
 /** Categories over ~90% of their allocation get a warning tint. */
 const WARN_RATIO = 0.9;
-const MAX_ROWS = 5;
+const MAX_TILES = 6;
 
-interface CategoryRow extends DashboardCategory {
+type Tone = "normal" | "warn" | "over";
+
+interface CategoryTile extends DashboardCategory {
   remaining: number;
   pct: number;
-  state: ProgressState;
+  tone: Tone;
 }
 
-function toRow(cat: DashboardCategory): CategoryRow {
+function toTile(cat: DashboardCategory): CategoryTile {
   const ratio = cat.allocated > 0 ? cat.spent / cat.allocated : 0;
-  const state: ProgressState =
+  const tone: Tone =
     cat.spent > cat.allocated && cat.allocated > 0
       ? "over"
       : ratio >= WARN_RATIO && cat.allocated > 0
@@ -29,16 +30,21 @@ function toRow(cat: DashboardCategory): CategoryRow {
     ...cat,
     remaining: cat.allocated - cat.spent,
     pct: cat.allocated > 0 ? Math.min(100, ratio * 100) : 0,
-    state,
+    tone,
   };
 }
 
+const BAR_FILL: Record<Tone, string> = {
+  normal: "var(--accent-strong)",
+  warn: "var(--warn)",
+  over: "var(--neg)",
+};
+
 /**
- * "Where it's going" — a compact per-category glimpse of how much is left in
- * each budget category this month. Only categories with an allocation are
- * shown (a zero-allocation category has nothing to run down); sorted by how
- * close they are to their limit so the ones that need attention float up.
- * Each row deep-links to its category detail.
+ * "Where it's going" — a small horizontal glimpse of how much is left in each
+ * budget category this month. Deliberately compact (a scroll strip of tiles,
+ * not the budget page's full list); sorted by how close each is to its limit
+ * so the ones needing attention lead. Each tile deep-links to its detail.
  */
 export default function CategoryGlimpse({
   categories,
@@ -47,20 +53,18 @@ export default function CategoryGlimpse({
 }) {
   const haptic = useHaptic();
 
-  const rows = categories
+  const tiles = categories
     .filter((c) => c.allocated > 0)
-    .map(toRow)
-    .sort((a, b) => b.pct - a.pct);
+    .map(toTile)
+    .sort((a, b) => b.pct - a.pct)
+    .slice(0, MAX_TILES);
 
-  if (rows.length === 0) return null;
-
-  const shown = rows.slice(0, MAX_ROWS);
-  const hiddenCount = rows.length - shown.length;
+  if (tiles.length === 0) return null;
 
   return (
     <Card compact id="dashboard-category-glimpse">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-[13px] font-bold text-foreground">Where it&apos;s going</p>
+      <div className="flex items-center justify-between mb-2.5">
+        <p className="text-[12px] font-bold text-foreground">Where it&apos;s going</p>
         <Link
           href="/budget"
           onClick={() => haptic.light()}
@@ -70,56 +74,36 @@ export default function CategoryGlimpse({
         </Link>
       </div>
 
-      <ul className="flex flex-col gap-3">
-        {shown.map((row) => {
-          const over = row.state === "over";
+      <div className="flex gap-2 overflow-x-auto overscroll-x-contain -mx-0.5 px-0.5 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {tiles.map((t) => {
+          const over = t.tone === "over";
           return (
-            <li key={row.id}>
-              <Link
-                href={`/budget/${row.id}`}
-                onClick={() => haptic.selection()}
-                className="block active:opacity-70 transition-opacity"
+            <Link
+              key={t.id}
+              href={`/budget/${t.id}`}
+              onClick={() => haptic.selection()}
+              className="shrink-0 w-[92px] rounded-[13px] bg-tile p-2.5 active:scale-[0.97] transition-transform"
+            >
+              <span className="text-[15px] leading-none block mb-1.5">{t.icon || "📁"}</span>
+              <span
+                className="block text-[12px] font-bold tabular-nums leading-none truncate"
+                style={{ color: over ? "var(--neg)" : "var(--foreground)" }}
               >
-                <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <span className="flex items-center gap-2 min-w-0">
-                    {row.icon && (
-                      <span className="text-[15px] leading-none shrink-0">{row.icon}</span>
-                    )}
-                    <span className="text-[12.5px] font-semibold text-foreground truncate">
-                      {row.name}
-                    </span>
-                  </span>
-                  <span
-                    className="text-[11.5px] font-semibold tabular-nums shrink-0"
-                    style={{ color: over ? "var(--neg)" : "var(--muted-foreground)" }}
-                  >
-                    {over ? (
-                      <>
-                        Over by <CurrencyText value={Math.abs(row.remaining)} />
-                      </>
-                    ) : (
-                      <>
-                        <CurrencyText value={row.remaining} /> left
-                      </>
-                    )}
-                  </span>
-                </div>
-                <Progress
-                  value={over ? 100 : row.pct}
-                  state={row.state}
-                  color={over ? "var(--neg)" : undefined}
+                <CurrencyText value={Math.abs(t.remaining)} maximumFractionDigits={0} />
+              </span>
+              <span className="block text-[9.5px] font-medium text-muted-foreground mt-0.5 truncate">
+                {over ? "over" : "left"} · {t.name}
+              </span>
+              <div className="mt-1.5 h-1 rounded-full overflow-hidden" style={{ background: "var(--progress-empty)" }}>
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${over ? 100 : t.pct}%`, background: BAR_FILL[t.tone] }}
                 />
-              </Link>
-            </li>
+              </div>
+            </Link>
           );
         })}
-      </ul>
-
-      {hiddenCount > 0 && (
-        <p className="mt-3 text-[10.5px] font-medium text-muted-foreground">
-          +{hiddenCount} more {hiddenCount === 1 ? "category" : "categories"}
-        </p>
-      )}
+      </div>
     </Card>
   );
 }

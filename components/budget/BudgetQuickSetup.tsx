@@ -20,7 +20,6 @@ import {
   type SetupCategory,
 } from "@/lib/budget/setupMath";
 import { PREDEFINED_TEMPLATES, type BudgetTemplate } from "@/lib/budget-templates";
-import { suggestItemNames } from "@/lib/budget/categorySuggestions";
 import {
   deleteBudgetTemplate,
   type SaveTemplateInput,
@@ -86,6 +85,7 @@ export function BudgetQuickSetup({
   const [pickedTemplate, setPickedTemplate] = useState<BudgetTemplate | null>(null);
   const [categories, setCategories] = useState<SetupCategory[]>([]);
   const [newCatName, setNewCatName] = useState("");
+  const [newCatAmount, setNewCatAmount] = useState("");
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [error, setError] = useState("");
@@ -113,6 +113,7 @@ export function BudgetQuickSetup({
   useEffect(() => {
     if (!isOpen) return;
     setNewCatName("");
+    setNewCatAmount("");
     setSaveAsTemplate(false);
     setTemplateName("");
     setError("");
@@ -159,8 +160,6 @@ export function BudgetQuickSetup({
   const isOverAllocated = totalNum > 0 && leftToAllocate < 0;
   const effective = resolveEffectiveTotal(totalNum, totalAllocated);
   const canCreate = effective.total > 0 || categories.length > 0;
-  // "Blank" (or nothing picked yet) → free-form category rows, no rebalance slider.
-  const isManualMode = pickedTemplate === null;
 
   /** Apply a template against the current total. Categories with no pct (e.g.
    *  Zero-Based, Bare Minimum) would otherwise land on a wall of ₹0s — split
@@ -226,28 +225,24 @@ export function BudgetQuickSetup({
     const name = newCatName.trim();
     if (!name) return;
     haptic.selection();
-    // Seed 3-5 common items at ₹0 — fill in, don't author. The user types
-    // numbers and deletes what doesn't apply, instead of inventing item names.
-    const seeded = suggestItemNames(name, null).slice(0, 5);
+    // Capture the amount here too: it becomes the category allocation, and the
+    // generic starter items (Item 1/2/3) seeded on first open of the detail
+    // page get this amount split across them. No item seeding here — setup
+    // stays category-level.
+    const amount = Math.max(0, parseFloat(newCatAmount) || 0);
     setCategories((prev) => [
       ...prev,
       {
         id: crypto.randomUUID(),
         name,
         icon: null,
-        allocation: 0,
+        allocation: amount,
         allocationPct: null,
-        items: seeded.map((itemName) => ({
-          id: crypto.randomUUID(),
-          name: itemName,
-          allocation: 0,
-          linkType: null,
-          linkId: null,
-          templateItemId: null,
-        })),
+        items: [],
       },
     ]);
     setNewCatName("");
+    setNewCatAmount("");
   }
 
   async function handleDeleteTemplate(id: string) {
@@ -439,7 +434,7 @@ export function BudgetQuickSetup({
                     id="quick-setup-description"
                     className="mt-1 text-sm text-muted-foreground"
                   >
-                    A proven starting point. Drag to adjust - it always adds up.
+                    Rename, add, or drag any category. Sliders keep it adding up.
                   </p>
                 </div>
               </div>
@@ -459,163 +454,155 @@ export function BudgetQuickSetup({
                     </button>
                   </div>
                 )}
-                {isManualMode ? (
-                  <div className="space-y-2.5">
-                    {categories.map((cat) => (
-                      <div
-                        key={cat.id}
-                        className="flex items-center gap-2.5 rounded-2xl bg-tile px-3.5 py-2.5"
-                      >
-                        <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] bg-chip text-[15px]">
-                          {cat.icon || "📁"}
-                        </span>
-                        <input
-                          type="text"
-                          value={cat.name}
-                          onChange={(e) => updateName(cat.id, e.target.value)}
-                          placeholder="Category"
-                          className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-foreground outline-none"
-                        />
-                        <div className="flex items-center gap-1 shrink-0">
-                          <CurrencySymbol className="text-[11px] text-muted-foreground" />
-                          <input
-                            type="number"
-                            inputMode="decimal"
-                            value={cat.allocation || ""}
-                            onChange={(e) => updateAllocation(cat.id, e.target.value)}
-                            placeholder="0"
-                            min="0"
-                            className="w-[76px] bg-transparent text-right text-sm font-bold tabular-nums text-foreground outline-none"
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeCategory(cat.id)}
-                          className="text-muted-foreground shrink-0 p-0.5"
-                          aria-label={`Remove ${cat.name}`}
-                        >
-                          <span className="material-symbols-outlined text-[18px]">
-                            close
+                {/* One unified list — every category has an editable name, an
+                    editable amount, a drag-to-rebalance slider, and a remove
+                    button, whether it came from a template or was added by hand.
+                    Drag = rebalance (sum stays on total); typing an amount is
+                    free (the progress bar + total-bump absorb any mismatch). */}
+                <div className="space-y-2.5">
+                  {categories.map((cat) => {
+                    const pct =
+                      totalNum > 0 ? Math.round((cat.allocation / totalNum) * 100) : 0;
+                    const description = SPLIT_DESCRIPTIONS[cat.name] ?? null;
+                    return (
+                      <div key={cat.id} className="rounded-2xl bg-tile px-3.5 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] bg-chip text-[15px]">
+                            {cat.icon || "📁"}
                           </span>
-                        </button>
+                          <input
+                            type="text"
+                            value={cat.name}
+                            onChange={(e) => updateName(cat.id, e.target.value)}
+                            placeholder="Category"
+                            className="flex-1 min-w-0 bg-transparent text-sm font-bold text-foreground outline-none"
+                          />
+                          <div className="flex items-center gap-1 shrink-0">
+                            <CurrencySymbol className="text-[11px] text-muted-foreground" />
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              value={cat.allocation || ""}
+                              onChange={(e) => updateAllocation(cat.id, e.target.value)}
+                              placeholder="0"
+                              min="0"
+                              className="w-[76px] bg-transparent text-right text-[15px] font-extrabold tabular-nums text-foreground outline-none"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeCategory(cat.id)}
+                            className="text-muted-foreground shrink-0 p-0.5"
+                            aria-label={`Remove ${cat.name}`}
+                          >
+                            <span className="material-symbols-outlined text-[18px]">
+                              close
+                            </span>
+                          </button>
+                        </div>
+                        <p className="mt-1 ml-[44px] text-[11.5px] text-muted-foreground">
+                          {description ? `${description} · ${pct}%` : `${pct}% of budget`}
+                        </p>
+                        <input
+                          type="range"
+                          min={0}
+                          max={Math.max(totalNum, 1)}
+                          step={sliderStep}
+                          value={Math.min(cat.allocation, Math.max(totalNum, 1))}
+                          onChange={(e) =>
+                            handleSliderChange(cat.id, Number(e.target.value))
+                          }
+                          disabled={totalNum <= 0}
+                          className="mt-2 w-full accent-[var(--accent-strong)] disabled:opacity-40"
+                          aria-label={`${cat.name} amount`}
+                        />
                       </div>
-                    ))}
+                    );
+                  })}
 
-                    <div className="flex items-center gap-2 rounded-2xl border-[1.5px] border-dashed border-border px-4 py-3">
+                  <div className="flex items-center gap-2 rounded-2xl border-[1.5px] border-dashed border-border px-3.5 py-3">
+                    <input
+                      type="text"
+                      value={newCatName}
+                      onChange={(e) => setNewCatName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") addCategory();
+                      }}
+                      placeholder="Add category…"
+                      className="flex-1 min-w-0 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+                    />
+                    <div className="flex items-center gap-1 shrink-0">
+                      <CurrencySymbol className="text-[11px] text-muted-foreground" />
                       <input
-                        type="text"
-                        value={newCatName}
-                        onChange={(e) => setNewCatName(e.target.value)}
+                        type="number"
+                        inputMode="decimal"
+                        value={newCatAmount}
+                        onChange={(e) => setNewCatAmount(e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter") addCategory();
                         }}
-                        placeholder="Add category…"
-                        className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+                        placeholder="0"
+                        min="0"
+                        className="w-[68px] bg-transparent text-right text-sm font-bold tabular-nums text-foreground placeholder:text-muted-foreground outline-none"
                       />
-                      <button
-                        type="button"
-                        onClick={addCategory}
-                        disabled={!newCatName.trim()}
-                        className="text-muted-foreground disabled:opacity-30 transition-colors"
-                        aria-label="Add category"
-                      >
-                        <span className="material-symbols-outlined text-lg">
-                          add_circle
-                        </span>
-                      </button>
                     </div>
-
-                    {(totalNum > 0 || totalAllocated > 0) && (
-                      <div className="space-y-1.5 pt-1">
-                        <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-200 ${
-                              isOverAllocated ? "bg-amber-500" : "bg-accent-strong"
-                            }`}
-                            style={{
-                              width: `${
-                                totalNum > 0
-                                  ? Math.min(100, Math.round((totalAllocated / totalNum) * 100))
-                                  : 0
-                              }%`,
-                            }}
-                          />
-                        </div>
-                        <div className="flex justify-between text-[10px] tabular-nums text-muted-foreground">
-                          <span>
-                            <CurrencyText value={totalAllocated} /> allocated
-                          </span>
-                          <span
-                            className={
-                              isOverAllocated
-                                ? "text-amber-600 dark:text-amber-500 font-semibold"
-                                : "text-accent-strong font-semibold"
-                            }
-                          >
-                            {isOverAllocated ? (
-                              <>
-                                <CurrencyText value={Math.abs(leftToAllocate)} /> over -
-                                total will adjust
-                              </>
-                            ) : (
-                              <>
-                                <CurrencyText value={leftToAllocate} /> left
-                              </>
-                            )}
-                          </span>
-                        </div>
-                      </div>
-                    )}
+                    <button
+                      type="button"
+                      onClick={addCategory}
+                      disabled={!newCatName.trim()}
+                      className="text-muted-foreground disabled:opacity-30 transition-colors shrink-0"
+                      aria-label="Add category"
+                    >
+                      <span className="material-symbols-outlined text-lg">
+                        add_circle
+                      </span>
+                    </button>
                   </div>
-                ) : (
-                  <div className="space-y-2.5">
-                    {categories.map((cat) => {
-                      const pct =
-                        totalNum > 0 ? Math.round((cat.allocation / totalNum) * 100) : 0;
-                      const description =
-                        SPLIT_DESCRIPTIONS[cat.name] ?? `${pct}% of budget`;
-                      return (
-                        <div key={cat.id} className="rounded-2xl bg-tile px-4 py-3.5">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="flex items-center gap-2 text-sm font-bold text-foreground">
-                              {cat.icon ? <span>{cat.icon}</span> : null}
-                              {cat.name}
-                            </span>
-                            <span className="font-display text-[17px] font-extrabold tabular-nums text-foreground">
-                              <CurrencyText value={cat.allocation} />
-                            </span>
-                          </div>
-                          <p className="mt-0.5 text-[11.5px] text-muted-foreground">
-                            {description}
-                            {SPLIT_DESCRIPTIONS[cat.name] ? ` · ${pct}%` : ""}
-                          </p>
-                          <input
-                            type="range"
-                            min={0}
-                            max={Math.max(totalNum, 1)}
-                            step={sliderStep}
-                            value={Math.min(cat.allocation, Math.max(totalNum, 1))}
-                            onChange={(e) =>
-                              handleSliderChange(cat.id, Number(e.target.value))
-                            }
-                            disabled={totalNum <= 0}
-                            className="mt-2.5 w-full accent-[var(--accent-strong)]"
-                            aria-label={`${cat.name} amount`}
-                          />
-                        </div>
-                      );
-                    })}
 
-                    {totalNum > 0 && (
-                      <div className="flex items-center justify-between rounded-pill bg-accent px-4 py-2.5">
-                        <span className="text-[13px] font-bold text-[var(--accent-ink)]">
-                          All <CurrencyText value={totalNum} /> assigned
+                  {(totalNum > 0 || totalAllocated > 0) && (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-200 ${
+                            isOverAllocated ? "bg-amber-500" : "bg-accent-strong"
+                          }`}
+                          style={{
+                            width: `${
+                              totalNum > 0
+                                ? Math.min(100, Math.round((totalAllocated / totalNum) * 100))
+                                : 0
+                            }%`,
+                          }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[10px] tabular-nums text-muted-foreground">
+                        <span>
+                          <CurrencyText value={totalAllocated} /> allocated
                         </span>
-                        <span className="font-bold text-[var(--accent-ink)]">✓</span>
+                        <span
+                          className={
+                            isOverAllocated
+                              ? "text-amber-600 dark:text-amber-500 font-semibold"
+                              : "text-accent-strong font-semibold"
+                          }
+                        >
+                          {isOverAllocated ? (
+                            <>
+                              <CurrencyText value={Math.abs(leftToAllocate)} /> over -
+                              total will adjust
+                            </>
+                          ) : leftToAllocate === 0 ? (
+                            "All assigned ✓"
+                          ) : (
+                            <>
+                              <CurrencyText value={leftToAllocate} /> left
+                            </>
+                          )}
+                        </span>
                       </div>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
 
                 {/* More ways to split — other methods, custom categories, save-as-template */}
                 <div className="pt-1">

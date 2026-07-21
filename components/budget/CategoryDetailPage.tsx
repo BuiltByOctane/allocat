@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Link2, Trash2, Check } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CurrencyText } from "@/components/ui/CurrencyText";
@@ -140,6 +140,27 @@ function CategoryDetailContent({
     setCategoryAllocation(data.categoryAllocation);
   }, [data]);
 
+  // Lazy starter items: the first time an empty category is opened, seed three
+  // generic rows (Item 1/2/3) with the category allocation split evenly, so the
+  // user renames + tweaks numbers instead of authoring a list from nothing.
+  // Setup stays category-level; items only ever materialize here. The
+  // localStorage flag makes it fire once per category — if the user later
+  // deletes every item on purpose, reopening won't silently re-seed.
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (seededRef.current) return;
+    if (data.items.length > 0) {
+      seededRef.current = true;
+      return;
+    }
+    const flagKey = `allocat-cat-seeded:${categoryId}`;
+    if (typeof window !== "undefined" && localStorage.getItem(flagKey)) return;
+    seededRef.current = true;
+    if (typeof window !== "undefined") localStorage.setItem(flagKey, "1");
+    void seedStarterItems();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.items.length, categoryId]);
+
   useEffect(() => {
     const db = getDB();
     let cancelled = false;
@@ -217,6 +238,75 @@ function CategoryDetailContent({
     qc.invalidateQueries({ queryKey: categoryDataKey(categoryId) });
     // QuickSpend dropdown reads this key — keep it fresh too (Path-A hooks do).
     qc.invalidateQueries({ queryKey: ["categoryItems"] });
+  }
+
+  // Seed Item 1/2/3 with the allocation split evenly (largest-remainder), no
+  // haptic/toast — it runs silently on first open. Best-effort: a failed write
+  // just leaves the empty state, which the user can fill by hand.
+  async function seedStarterItems() {
+    const alloc = Math.max(0, categoryAllocation);
+    const base = Math.floor(alloc / 3);
+    const rem = alloc - base * 3;
+    const amounts = [base + (rem > 0 ? 1 : 0), base + (rem > 1 ? 1 : 0), base];
+    const now = new Date().toISOString();
+    const db = getDB();
+    const seeded: BudgetItem[] = [];
+    try {
+      for (let i = 0; i < 3; i++) {
+        const tempId = `temp_${crypto.randomUUID()}`;
+        const name = `Item ${i + 1}`;
+        const planned = amounts[i];
+        await db.budget_items.add({
+          id: tempId,
+          category_id: categoryId,
+          user_id: "__pending__",
+          name,
+          emoji: null,
+          planned_amount: planned,
+          actual_amount: 0,
+          is_completed: false,
+          notes: null,
+          link_type: null,
+          link_id: null,
+          template_id: null,
+          template_item_id: null,
+          overspend_count: 0,
+          created_at: now,
+          updated_at: now,
+        });
+        await enqueue({
+          table: "budget_items",
+          operation: "INSERT",
+          recordId: tempId,
+          tempId,
+          payload: {
+            categoryId,
+            name,
+            emoji: null,
+            planned,
+            actual: 0,
+            is_completed: false,
+            notes: null,
+            link: null,
+          },
+        });
+        seeded.push({
+          id: tempId,
+          name,
+          emoji: null,
+          planned,
+          actual: 0,
+          is_completed: false,
+          notes: null,
+          link_type: null,
+          link_id: null,
+        });
+      }
+      setItems((prev) => (prev.length > 0 ? prev : seeded));
+      await invalidateBudgetCaches();
+    } catch {
+      /* best-effort seed */
+    }
   }
 
   async function handleAddItem(data: {

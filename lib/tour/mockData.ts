@@ -10,10 +10,10 @@ export const mockDashboardData = {
     remaining: 37500,
   },
   categories: [
-    { id: "mock-cat-1", name: "Food & Groceries", icon: "🛒" },
-    { id: "mock-cat-2", name: "Rent", icon: "🏠" },
-    { id: "mock-cat-3", name: "Entertainment", icon: "🎬" },
-    { id: "mock-cat-4", name: "Investments", icon: "📈" },
+    { id: "mock-cat-1", name: "Food & Groceries", icon: "🛒", allocated: 15000, spent: 9850 },
+    { id: "mock-cat-2", name: "Rent", icon: "🏠", allocated: 25000, spent: 21950 },
+    { id: "mock-cat-3", name: "Entertainment", icon: "🎬", allocated: 5000, spent: 5600 },
+    { id: "mock-cat-4", name: "Investments", icon: "📈", allocated: 20000, spent: 5100 },
   ],
   goals: [
     {

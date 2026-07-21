@@ -15,6 +15,17 @@ import {
 
 export const DASHBOARD_KEY = ["dashboard"] as const;
 
+/** A budget category summarized for the dashboard's per-category glimpse. */
+export interface DashboardCategory {
+  id: string;
+  name: string;
+  icon?: string | null;
+  /** Category's planned allocation (allocated_amount). */
+  allocated: number;
+  /** Sum of item actual_amount for this category. */
+  spent: number;
+}
+
 // ─── IDB read helper ──────────────────────────────────────────────────────────
 
 export async function getDashboardFromIDB() {
@@ -37,7 +48,7 @@ export async function getDashboardFromIDB() {
     .first();
 
   let formattedBudget = null;
-  const summaryCategories: { id: string; name: string; icon?: string | null }[] = [];
+  const summaryCategories: DashboardCategory[] = [];
 
   if (budget) {
     const categories = await db.categories
@@ -46,15 +57,32 @@ export async function getDashboardFromIDB() {
       .toArray();
 
     const categoryIds = categories.map((c) => c.id);
-    categories.forEach((cat) =>
-      summaryCategories.push({ id: cat.id, name: cat.name, icon: cat.icon })
-    );
 
-    // Single bulk read instead of one query per category.
+    // Single bulk read instead of one query per category, then aggregate per
+    // category in memory (mirrors getBudgetFromIDB's enrichedCategories).
     const items = await db.budget_items
       .where("category_id")
       .anyOf(categoryIds)
       .toArray();
+
+    const spentByCategory = new Map<string, number>();
+    for (const item of items) {
+      spentByCategory.set(
+        item.category_id,
+        (spentByCategory.get(item.category_id) ?? 0) + Number(item.actual_amount)
+      );
+    }
+
+    categories.forEach((cat) =>
+      summaryCategories.push({
+        id: cat.id,
+        name: cat.name,
+        icon: cat.icon,
+        allocated: Number(cat.allocated_amount),
+        spent: spentByCategory.get(cat.id) ?? 0,
+      })
+    );
+
     const spent = items.reduce((sum, i) => sum + Number(i.actual_amount), 0);
 
     formattedBudget = {

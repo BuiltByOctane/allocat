@@ -24,6 +24,16 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       },
     },
     {
+      element: "#dashboard-category-glimpse",
+      popover: {
+        title: "Where it's going",
+        description:
+          "A quick look at how much is left in each budget category this month. Categories closest to their limit float to the top - tap any row to drill in.",
+        side: "top",
+        align: "start",
+      },
+    },
+    {
       element: "#dashboard-quick-spend",
       popover: {
         title: "Quick Logger",
@@ -40,16 +50,6 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
         description:
           "Total Assets minus Total Liabilities. The percentage shows change from the previous month. Goes up as you save and pay down debt.",
         side: "bottom",
-        align: "start",
-      },
-    },
-    {
-      element: "#dashboard-net-worth-chart",
-      popover: {
-        title: "Wealth Trend",
-        description:
-          "A 12-month line chart of your net worth. You want this line going up and to the right. Built automatically from your asset and debt data.",
-        side: "top",
         align: "start",
       },
     },

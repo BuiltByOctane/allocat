@@ -25,19 +25,30 @@ export async function getDashboardData() {
     .maybeSingle();
 
   let formattedBudget = null;
-  const summaryCategories: { id: string; name: string; icon?: string | null }[] = [];
+  const summaryCategories: {
+    id: string;
+    name: string;
+    icon?: string | null;
+    allocated: number;
+    spent: number;
+  }[] = [];
 
   if (budget) {
     let spent = 0;
     (budget.categories as CategoryWithItems[] | null)?.forEach((c) => {
+      const catSpent =
+        c.budget_items?.reduce(
+          (sum, item) => sum + Number(item.actual_amount || 0),
+          0
+        ) ?? 0;
       summaryCategories.push({
         id: c.id,
         name: c.name,
         icon: c.icon,
+        allocated: Number(c.allocated_amount || 0),
+        spent: catSpent,
       });
-      c.budget_items?.forEach((item) => {
-        spent += Number(item.actual_amount || 0);
-      });
+      spent += catSpent;
     });
 
     formattedBudget = {

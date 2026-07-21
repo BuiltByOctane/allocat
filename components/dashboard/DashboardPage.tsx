@@ -4,6 +4,7 @@ import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { TrendingUp } from "lucide-react";
 import QuickSpendInput from "@/components/dashboard/QuickSpendInput";
+import CategoryGlimpse from "@/components/dashboard/CategoryGlimpse";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { Card } from "@/components/ui/Card";
 import { StatCard } from "@/components/ui/StatCard";
@@ -12,77 +13,56 @@ import { useHaptic } from "@/lib/hooks/useHaptic";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { useIsPremium } from "@/lib/providers/EntitlementProvider";
 import { CrownBadge } from "@/components/ui/CrownBadge";
-import { getTimeGreeting, getWittyLine, WITTY_POOL_LEN } from "@/lib/utils/greeting";
+import { getTimeGreeting } from "@/lib/utils/greeting";
+import { projectMonthSpend } from "@/lib/sms/insightStats";
+import type { DashboardCategory } from "@/lib/hooks/useDashboard";
 
 interface DashboardProps {
   data: {
     budget: { id: string; totalBudget: number; spent: number; remaining: number } | null;
-    categories: { id: string; name: string; icon?: string | null }[];
+    categories: DashboardCategory[];
     goals: { id: string; name: string; icon?: string | null; current_amount: number | string; target_amount: number | string }[];
     netWorthHistory: { net_worth: number | string; snapshot_date: string }[];
   };
 }
 
-// Greeting depends on live clock + random pick. Computed once and cached so it
-// can serve as a stable useSyncExternalStore snapshot, and kept in a module fn
-// (not a component/hook) so the impure Date/Math.random calls don't trip the
-// react-hooks purity rule.
-let greetingCache: { hi: string; line: string } | null = null;
-function getGreetingSnapshot(): { hi: string; line: string } {
+// Greeting depends on the live clock. Computed once and cached so it can serve
+// as a stable useSyncExternalStore snapshot, and kept in a module fn (not a
+// component/hook) so the impure Date call doesn't trip the react-hooks purity
+// rule. The witty subline was dropped in favor of a static one.
+let greetingCache: string | null = null;
+function getGreetingSnapshot(): string {
   if (!greetingCache) {
-    const h = new Date().getHours();
-    greetingCache = {
-      hi: getTimeGreeting(h),
-      line: getWittyLine(h, Math.floor(Math.random() * WITTY_POOL_LEN)),
-    };
+    greetingCache = getTimeGreeting(new Date().getHours());
   }
   return greetingCache;
 }
 const subscribeNoop = () => () => {};
 
-// Days remaining in the current month. Date-dependent + impure, so it lives in a
-// module fn served through useSyncExternalStore (null on server/first paint) to
-// avoid an SSR/client hydration mismatch — same pattern as the greeting above.
-// Mirrors the math in lib/sms/insightStats.ts (month is 1-indexed there too).
-function getDaysLeftSnapshot(): number {
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
-  const daysInMonth = new Date(year, month, 0).getDate();
-  return daysInMonth - now.getDate();
+// Current-month day math (day-of-month, days in month, days remaining).
+// Date-dependent + impure, so it lives in a module fn served through
+// useSyncExternalStore (null on server/first paint) to avoid an SSR/client
+// hydration mismatch. Mirrors the math in lib/sms/insightStats.ts.
+interface MonthSnapshot {
+  daysElapsed: number;
+  daysInMonth: number;
+  daysLeft: number;
+}
+let monthCache: MonthSnapshot | null = null;
+function getMonthSnapshot(): MonthSnapshot {
+  if (!monthCache) {
+    const now = new Date();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const daysElapsed = now.getDate();
+    monthCache = { daysElapsed, daysInMonth, daysLeft: daysInMonth - daysElapsed };
+  }
+  return monthCache;
 }
 
 function daysLeftLabel(daysLeft: number): string {
   if (daysLeft <= 0) return "Last day";
   if (daysLeft === 1) return "1 day left";
   return `${daysLeft} days left`;
-}
-
-function NetWorthSparkline({ data }: { data: { net_worth: number | string }[] }) {
-  if (data.length < 2) return null;
-  const values = data.map((d) => Number(d.net_worth));
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const W = 90;
-  const H = 18;
-  const points = values.map((v, i) => {
-    const x = (i / (values.length - 1)) * W;
-    const y = 2 + (1 - (v - min) / range) * (H - 4);
-    return `${x},${y}`;
-  });
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full mt-1.5" style={{ height: 15 }}>
-      <path
-        d={`M ${points.join(" L ")}`}
-        fill="none"
-        stroke="var(--accent)"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
 }
 
 export default function DashboardPage({ data }: DashboardProps) {
@@ -92,12 +72,11 @@ export default function DashboardPage({ data }: DashboardProps) {
   const firstName = profile?.full_name?.trim().split(/\s+/)[0] ?? "";
 
   // Server (and first client render) get null to match SSR markup; after
-  // hydration useSyncExternalStore re-renders with the cached greeting. No
+  // hydration useSyncExternalStore re-renders with the cached values. No
   // synchronous setState-in-effect, so React 19's cascading-render warning
   // never fires.
   const greeting = useSyncExternalStore(subscribeNoop, getGreetingSnapshot, () => null);
-  // null on the server / first client paint, then the live count after hydration.
-  const daysLeft = useSyncExternalStore(subscribeNoop, getDaysLeftSnapshot, () => null);
+  const month = useSyncExternalStore(subscribeNoop, getMonthSnapshot, () => null);
 
   const currentNetWorth =
     data.netWorthHistory.length > 0
@@ -118,6 +97,23 @@ export default function DashboardPage({ data }: DashboardProps) {
       : 0;
   const overBudget = !!data.budget && data.budget.spent > data.budget.totalBudget;
 
+  // Forward-looking pace: linear month-end projection from spend-so-far vs the
+  // total budget. null until the clock snapshot hydrates (and only meaningful
+  // once there's a budget with a positive total and some spend to project).
+  let projected: number | null = null;
+  let offPace = false;
+  if (month && data.budget && data.budget.totalBudget > 0 && data.budget.spent > 0) {
+    projected = projectMonthSpend(data.budget.spent, month.daysElapsed, month.daysInMonth);
+    offPace = !overBudget && projected > data.budget.totalBudget;
+  }
+  const paceOverBy = projected !== null && data.budget ? projected - data.budget.totalBudget : 0;
+
+  const statusChip = overBudget
+    ? { tone: "neg" as const, label: "Over budget" }
+    : offPace
+      ? { tone: "neutral" as const, label: "Off pace" }
+      : { tone: "good" as const, label: "On track" };
+
   const topGoal = data.goals[0];
   const topGoalPct = topGoal
     ? Math.min(100, Math.round((Number(topGoal.current_amount) / (Number(topGoal.target_amount) || 1)) * 100))
@@ -130,13 +126,13 @@ export default function DashboardPage({ data }: DashboardProps) {
         <div>
           <h1 className="font-display text-[26px] font-bold leading-none tracking-[-0.03em] text-foreground">
             {greeting
-              ? `${greeting.hi}${firstName ? `, ${firstName}` : ""}`
+              ? `${greeting}${firstName ? `, ${firstName}` : ""}`
               : firstName
                 ? `Hi, ${firstName}`
                 : "Dashboard"}
           </h1>
           <p className="text-[11px] font-medium text-muted-foreground mt-1">
-            {greeting?.line ?? "Financial overview"}
+            Here&apos;s your money at a glance
           </p>
         </div>
         <Link
@@ -156,13 +152,13 @@ export default function DashboardPage({ data }: DashboardProps) {
               <span className="text-[11.5px] font-semibold">Left to spend · this month</span>
               <div className="flex flex-col items-end gap-1.5">
                 <div className="flex items-center gap-1.5">
-                  {daysLeft !== null && (
+                  {month !== null && (
                     <Chip tone="neutral" className="bg-white/40 border-0">
-                      {daysLeftLabel(daysLeft)}
+                      {daysLeftLabel(month.daysLeft)}
                     </Chip>
                   )}
-                  <Chip tone={overBudget ? "neg" : "good"} className="bg-white/60 border-0">
-                    {overBudget ? "Over budget" : "On track"}
+                  <Chip tone={statusChip.tone} className="bg-white/60 border-0">
+                    {statusChip.label}
                   </Chip>
                 </div>
                 {isPremium && <CrownBadge size={60} className="absolute top-9" />}
@@ -185,6 +181,25 @@ export default function DashboardPage({ data }: DashboardProps) {
               <span><CurrencyText value={data.budget.spent} /> spent</span>
               <span>of <CurrencyText value={data.budget.totalBudget} /></span>
             </div>
+            {/* Pace: projected month-end spend at the current daily rate. */}
+            {projected !== null && (
+              <div className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold opacity-90">
+                <span className="material-symbols-outlined text-[14px] leading-none">
+                  {offPace || overBudget ? "trending_up" : "check_circle"}
+                </span>
+                {overBudget ? (
+                  <span>Already over — ease up to recover</span>
+                ) : offPace ? (
+                  <span>
+                    On pace for <CurrencyText value={projected} /> · <CurrencyText value={paceOverBy} /> over
+                  </span>
+                ) : (
+                  <span>
+                    On pace for <CurrencyText value={projected} /> by month-end
+                  </span>
+                )}
+              </div>
+            )}
             <Link
               href="/budget"
               onClick={() => haptic.light()}
@@ -210,6 +225,9 @@ export default function DashboardPage({ data }: DashboardProps) {
         )}
       </div>
 
+      {/* Where it's going — per-category remaining glimpse */}
+      {data.budget && <CategoryGlimpse categories={data.categories} />}
+
       {/* Stat pair: Net worth + Goals */}
       <div className="flex gap-3">
         <Link href="/net-worth" className="flex-1" id="dashboard-net-worth-section">
@@ -222,11 +240,6 @@ export default function DashboardPage({ data }: DashboardProps) {
             }
             label="Net worth"
             value={<CurrencyText value={currentNetWorth} />}
-            footer={
-              <div id="dashboard-net-worth-chart">
-                <NetWorthSparkline data={data.netWorthHistory} />
-              </div>
-            }
             className="h-full"
           />
         </Link>

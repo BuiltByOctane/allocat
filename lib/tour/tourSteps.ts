@@ -24,11 +24,11 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       },
     },
     {
-      element: "#dashboard-category-glimpse",
+      element: "#dashboard-top-spending",
       popover: {
-        title: "Where it's going",
+        title: "Top spending",
         description:
-          "A quick look at how much is left in each budget category this month. Categories closest to their limit float to the top - tap any row to drill in.",
+          "Your biggest item spends this month at a glance. Items near or over their limit are flagged in color - tap any tile to drill in.",
         side: "top",
         align: "start",
       },

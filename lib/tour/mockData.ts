@@ -10,10 +10,17 @@ export const mockDashboardData = {
     remaining: 37500,
   },
   categories: [
-    { id: "mock-cat-1", name: "Food & Groceries", icon: "🛒", allocated: 15000, spent: 9850 },
-    { id: "mock-cat-2", name: "Rent", icon: "🏠", allocated: 25000, spent: 21950 },
-    { id: "mock-cat-3", name: "Entertainment", icon: "🎬", allocated: 5000, spent: 5600 },
-    { id: "mock-cat-4", name: "Investments", icon: "📈", allocated: 20000, spent: 5100 },
+    { id: "mock-cat-1", name: "Food & Groceries", icon: "🛒" },
+    { id: "mock-cat-2", name: "Rent", icon: "🏠" },
+    { id: "mock-cat-3", name: "Entertainment", icon: "🎬" },
+    { id: "mock-cat-4", name: "Investments", icon: "📈" },
+  ],
+  items: [
+    { id: "mock-item-1", name: "Rent", emoji: "🏠", categoryId: "mock-cat-2", planned: 25000, actual: 25000 },
+    { id: "mock-item-2", name: "Groceries", emoji: "🛒", categoryId: "mock-cat-1", planned: 12000, actual: 8200 },
+    { id: "mock-item-3", name: "Mutual Funds", emoji: "📈", categoryId: "mock-cat-4", planned: 20000, actual: 5100 },
+    { id: "mock-item-4", name: "Dining Out", emoji: "🍽️", categoryId: "mock-cat-3", planned: 3000, actual: 3400 },
+    { id: "mock-item-5", name: "Streaming", emoji: "🎬", categoryId: "mock-cat-3", planned: 2000, actual: 1650 },
   ],
   goals: [
     {

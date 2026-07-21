@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { TrendingUp } from "lucide-react";
 import QuickSpendInput from "@/components/dashboard/QuickSpendInput";
-import CategoryGlimpse from "@/components/dashboard/CategoryGlimpse";
+import TopSpendingGlimpse from "@/components/dashboard/TopSpendingGlimpse";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { Card } from "@/components/ui/Card";
 import { StatCard } from "@/components/ui/StatCard";
@@ -15,12 +15,13 @@ import { useIsPremium } from "@/lib/providers/EntitlementProvider";
 import { CrownBadge } from "@/components/ui/CrownBadge";
 import { getTimeGreeting } from "@/lib/utils/greeting";
 import { projectMonthSpend } from "@/lib/sms/insightStats";
-import type { DashboardCategory } from "@/lib/hooks/useDashboard";
+import type { DashboardCategory, DashboardItem } from "@/lib/hooks/useDashboard";
 
 interface DashboardProps {
   data: {
     budget: { id: string; totalBudget: number; spent: number; remaining: number } | null;
     categories: DashboardCategory[];
+    items: DashboardItem[];
     goals: { id: string; name: string; icon?: string | null; current_amount: number | string; target_amount: number | string }[];
     netWorthHistory: { net_worth: number | string; snapshot_date: string }[];
   };
@@ -225,8 +226,8 @@ export default function DashboardPage({ data }: DashboardProps) {
         )}
       </div>
 
-      {/* Where it's going — per-category remaining glimpse */}
-      {data.budget && <CategoryGlimpse categories={data.categories} />}
+      {/* Top spending — compact strip of the biggest item spends this month */}
+      {data.budget && <TopSpendingGlimpse items={data.items} />}
 
       {/* Stat pair: Net worth + Goals */}
       <div className="flex gap-3">

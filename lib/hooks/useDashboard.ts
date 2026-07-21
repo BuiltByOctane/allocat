@@ -15,15 +15,22 @@ import {
 
 export const DASHBOARD_KEY = ["dashboard"] as const;
 
-/** A budget category summarized for the dashboard's per-category glimpse. */
+/** A budget category summarized for the dashboard (feeds the quick-log picker). */
 export interface DashboardCategory {
   id: string;
   name: string;
   icon?: string | null;
-  /** Category's planned allocation (allocated_amount). */
-  allocated: number;
-  /** Sum of item actual_amount for this category. */
-  spent: number;
+}
+
+/** A budget item summarized for the dashboard's top-spending glimpse. */
+export interface DashboardItem {
+  id: string;
+  name: string;
+  emoji?: string | null;
+  /** Owning category — the glimpse tile deep-links to /budget/[categoryId]. */
+  categoryId: string;
+  planned: number;
+  actual: number;
 }
 
 // ─── IDB read helper ──────────────────────────────────────────────────────────
@@ -49,6 +56,7 @@ export async function getDashboardFromIDB() {
 
   let formattedBudget = null;
   const summaryCategories: DashboardCategory[] = [];
+  const items: DashboardItem[] = [];
 
   if (budget) {
     const categories = await db.categories
@@ -57,33 +65,28 @@ export async function getDashboardFromIDB() {
       .toArray();
 
     const categoryIds = categories.map((c) => c.id);
+    categories.forEach((cat) =>
+      summaryCategories.push({ id: cat.id, name: cat.name, icon: cat.icon })
+    );
 
-    // Single bulk read instead of one query per category, then aggregate per
-    // category in memory (mirrors getBudgetFromIDB's enrichedCategories).
-    const items = await db.budget_items
+    // Single bulk read instead of one query per category.
+    const rows = await db.budget_items
       .where("category_id")
       .anyOf(categoryIds)
       .toArray();
 
-    const spentByCategory = new Map<string, number>();
-    for (const item of items) {
-      spentByCategory.set(
-        item.category_id,
-        (spentByCategory.get(item.category_id) ?? 0) + Number(item.actual_amount)
-      );
-    }
-
-    categories.forEach((cat) =>
-      summaryCategories.push({
-        id: cat.id,
-        name: cat.name,
-        icon: cat.icon,
-        allocated: Number(cat.allocated_amount),
-        spent: spentByCategory.get(cat.id) ?? 0,
+    rows.forEach((it) =>
+      items.push({
+        id: it.id,
+        name: it.name,
+        emoji: it.emoji,
+        categoryId: it.category_id,
+        planned: Number(it.planned_amount),
+        actual: Number(it.actual_amount),
       })
     );
 
-    const spent = items.reduce((sum, i) => sum + Number(i.actual_amount), 0);
+    const spent = rows.reduce((sum, i) => sum + Number(i.actual_amount), 0);
 
     formattedBudget = {
       id: budget.id,
@@ -123,6 +126,7 @@ export async function getDashboardFromIDB() {
   return {
     budget: formattedBudget,
     categories: summaryCategories,
+    items,
     goals,
     netWorthHistory,
   };

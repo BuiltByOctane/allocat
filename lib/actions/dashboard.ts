@@ -25,30 +25,31 @@ export async function getDashboardData() {
     .maybeSingle();
 
   let formattedBudget = null;
-  const summaryCategories: {
+  const summaryCategories: { id: string; name: string; icon?: string | null }[] = [];
+  const items: {
     id: string;
     name: string;
-    icon?: string | null;
-    allocated: number;
-    spent: number;
+    emoji?: string | null;
+    categoryId: string;
+    planned: number;
+    actual: number;
   }[] = [];
 
   if (budget) {
     let spent = 0;
     (budget.categories as CategoryWithItems[] | null)?.forEach((c) => {
-      const catSpent =
-        c.budget_items?.reduce(
-          (sum, item) => sum + Number(item.actual_amount || 0),
-          0
-        ) ?? 0;
-      summaryCategories.push({
-        id: c.id,
-        name: c.name,
-        icon: c.icon,
-        allocated: Number(c.allocated_amount || 0),
-        spent: catSpent,
+      summaryCategories.push({ id: c.id, name: c.name, icon: c.icon });
+      c.budget_items?.forEach((item) => {
+        spent += Number(item.actual_amount || 0);
+        items.push({
+          id: item.id,
+          name: item.name,
+          emoji: item.emoji,
+          categoryId: c.id,
+          planned: Number(item.planned_amount || 0),
+          actual: Number(item.actual_amount || 0),
+        });
       });
-      spent += catSpent;
     });
 
     formattedBudget = {
@@ -91,6 +92,7 @@ export async function getDashboardData() {
   return {
     budget: formattedBudget,
     categories: summaryCategories,
+    items,
     goals,
     netWorthHistory: netWorthHistory || [],
   };

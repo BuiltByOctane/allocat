@@ -203,6 +203,24 @@ No test runner is configured yet — see [Roadmap](#roadmap). For type checking:
 pnpm exec tsc --noEmit
 ```
 
+### Android Release Build (Play Store AAB)
+
+Before building, bump `versionCode` in `android/app/build.gradle`. Then run from the repo root:
+
+```bash
+cd android && JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-24.jdk/Contents/Home ./gradlew bundleRelease
+```
+
+> **Why `JAVA_HOME` override?** The system default JDK is Java 19, but Capacitor Android requires Java 21+ source compatibility. JDK 24 (already installed) satisfies this.
+
+Signing is handled automatically via `android/app/keystore.properties` (gitignored). The signed `.aab` is output to:
+
+```
+android/app/build/outputs/bundle/release/app-release.aab
+```
+
+Upload this file to the Play Console → Internal Testing (or the target track).
+
 ## Project Structure
 
 ```

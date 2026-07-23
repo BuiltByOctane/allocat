@@ -23,6 +23,7 @@ export type Database = {
           plan: "monthly" | "yearly" | null
           subscription_expires_at: string | null
           trial_device_id: string | null
+          last_app_mode: "web" | "android" | null
           created_at: string
           updated_at: string
         }
@@ -39,6 +40,7 @@ export type Database = {
           plan?: "monthly" | "yearly" | null
           subscription_expires_at?: string | null
           trial_device_id?: string | null
+          last_app_mode?: "web" | "android" | null
           created_at?: string
           updated_at?: string
         }
@@ -54,6 +56,7 @@ export type Database = {
           plan?: "monthly" | "yearly" | null
           subscription_expires_at?: string | null
           trial_device_id?: string | null
+          last_app_mode?: "web" | "android" | null
           updated_at?: string
         }
         Relationships: []

@@ -74,3 +74,24 @@ export async function updateUserAvatar(avatarId: string) {
 
   return { success: true };
 }
+
+export async function updateAppMode(mode: "web" | "android") {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Not authenticated" };
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ last_app_mode: mode })
+    .eq("id", user.id);
+
+  if (error) {
+    console.error("Failed to update app mode:", error.message);
+    return { error: error.message };
+  }
+
+  return { success: true };
+}

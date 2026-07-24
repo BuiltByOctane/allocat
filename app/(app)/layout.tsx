@@ -7,6 +7,7 @@ import { InstallPrompt } from "@/components/ui/InstallPrompt";
 import { BadgeUpdater } from "@/components/pwa/BadgeUpdater";
 import { PushPermissionPrompt } from "@/components/pwa/PushPermissionPrompt";
 import { SmsBridge } from "@/components/pwa/SmsBridge";
+import { SheetScrollLock } from "@/components/pwa/SheetScrollLock";
 import { KeyboardInset } from "@/components/pwa/KeyboardInset";
 import { AdaptyBridge } from "@/components/pwa/AdaptyBridge";
 import { NativeSetup } from "@/components/pwa/NativeSetup";
@@ -17,6 +18,7 @@ import { EntitlementProvider } from "@/lib/providers/EntitlementProvider";
 import { PaywallProvider } from "@/lib/providers/PaywallProvider";
 import { TrialWelcomeModal } from "@/components/subscription/TrialWelcomeModal";
 import { CarryController } from "@/components/budget/CarryController";
+import { BudgetReminderController } from "@/components/budget/BudgetReminderController";
 import { PullToRefresh } from "@/components/PullToRefresh";
 import { PagerGate } from "@/components/pager/PagerGate";
 
@@ -55,12 +57,14 @@ export default async function AppLayout({
         <InstallPrompt />
         <KeyboardInset />
         <SmsBridge />
+        <SheetScrollLock />
         <AdaptyBridge />
         <TourPrompt />
         <NativeSetup />
         <BadgeUpdater />
         <TrialWelcomeModal />
         <CarryController />
+        <BudgetReminderController />
         <BottomDock />
       </div>
     </QuickActionProvider>

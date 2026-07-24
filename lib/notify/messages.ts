@@ -100,3 +100,24 @@ export function pickOverspendMessage(ctx: OverspendCtx): NotifMessage {
   const over = formatCurrency(Math.abs(ctx.over), { code: ctx.currency });
   return { title: t.title, body: t.body(ctx, over) };
 }
+
+// New-month "no budget set yet" nudge. Same cat voice, NO em-dash.
+const BUDGET_REMINDER: NotifMessage[] = [
+  {
+    title: "🐱 New month, empty bowl",
+    body: "It's a fresh month and no budget is set yet. Give AlloCat a plan to guard.",
+  },
+  {
+    title: "😺 Fresh month",
+    body: "Your budget for this month is still blank. Set it up so the cat can track your spends.",
+  },
+  {
+    title: "🐾 Plan the month",
+    body: "New month, no budget yet. Take a minute to set one up and stay in control.",
+  },
+];
+
+/** Pick a stable new-month budget reminder. `seed` should be `${year}-${month}`. */
+export function pickBudgetReminderMessage(seed: string): NotifMessage {
+  return BUDGET_REMINDER[poolIndex(seed, BUDGET_REMINDER.length)];
+}

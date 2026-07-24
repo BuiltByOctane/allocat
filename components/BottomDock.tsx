@@ -25,6 +25,7 @@ export default function BottomDock() {
     <motion.div
       layoutScroll
       layoutRoot
+      data-bottom-dock
       className="md:hidden fixed left-1/2 -translate-x-1/2 z-50 flex items-center gap-2"
       style={{ bottom: "calc(14px + env(safe-area-inset-bottom))" }}
     >

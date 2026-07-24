@@ -503,8 +503,8 @@ export function useAddBudgetCategory() {
         payload: { budgetId, name: trimmedName, type },
       });
 
-      // No item seeding — the category starts empty. Generic starter items
-      // (Item 1/2/3, split from the allocation) are seeded on the category's
+      // No item seeding — the category starts empty. A generic starter item
+      // ("Item 1", holding the whole allocation) is seeded on the category's
       // detail page the first time it's opened, so seeding is uniform across
       // every "new category" surface and "blank" truly means blank here.
 

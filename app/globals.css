@@ -299,6 +299,15 @@ input[type="date"] {
   transition: bottom 0.2s ease, height 0.2s ease;
 }
 
+/* While any bottom sheet is open, SheetScrollLock sets data-sheet-open on <html>.
+   Hide + disable the fixed bottom dock so its buttons (which can out-stack a
+   lower-z sheet overlay) can't be tapped through the dimmed background. */
+:root[data-sheet-open] [data-bottom-dock] {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
 /* Safe-area padding utilities (notch / home-indicator). Used across bottom
    sheets and footers; defined here because the project has no tailwind config. */
 @utility pb-safe { padding-bottom: env(safe-area-inset-bottom); }

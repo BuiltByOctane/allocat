@@ -226,9 +226,8 @@ export function BudgetQuickSetup({
     if (!name) return;
     haptic.selection();
     // Capture the amount here too: it becomes the category allocation, and the
-    // generic starter items (Item 1/2/3) seeded on first open of the detail
-    // page get this amount split across them. No item seeding here — setup
-    // stays category-level.
+    // generic starter item ("Item 1") seeded on first open of the detail page
+    // gets this whole amount. No item seeding here — setup stays category-level.
     const amount = Math.max(0, parseFloat(newCatAmount) || 0);
     setCategories((prev) => [
       ...prev,

@@ -140,9 +140,9 @@ function CategoryDetailContent({
     setCategoryAllocation(data.categoryAllocation);
   }, [data]);
 
-  // Lazy starter items: the first time an empty category is opened, seed three
-  // generic rows (Item 1/2/3) with the category allocation split evenly, so the
-  // user renames + tweaks numbers instead of authoring a list from nothing.
+  // Lazy starter item: the first time an empty category is opened, seed one
+  // generic row ("Item 1") holding the whole category allocation, so the user
+  // renames + tweaks the number instead of authoring a list from nothing.
   // Setup stays category-level; items only ever materialize here. The
   // localStorage flag makes it fire once per category — if the user later
   // deletes every item on purpose, reopening won't silently re-seed.
@@ -240,69 +240,62 @@ function CategoryDetailContent({
     qc.invalidateQueries({ queryKey: ["categoryItems"] });
   }
 
-  // Seed Item 1/2/3 with the allocation split evenly (largest-remainder), no
-  // haptic/toast — it runs silently on first open. Best-effort: a failed write
+  // Seed a single starter item ("Item 1") holding the whole category allocation,
+  // no haptic/toast — it runs silently on first open. Best-effort: a failed write
   // just leaves the empty state, which the user can fill by hand.
   async function seedStarterItems() {
-    const alloc = Math.max(0, categoryAllocation);
-    const base = Math.floor(alloc / 3);
-    const rem = alloc - base * 3;
-    const amounts = [base + (rem > 0 ? 1 : 0), base + (rem > 1 ? 1 : 0), base];
+    const planned = Math.max(0, categoryAllocation);
     const now = new Date().toISOString();
     const db = getDB();
-    const seeded: BudgetItem[] = [];
+    const tempId = `temp_${crypto.randomUUID()}`;
+    const name = "Item 1";
     try {
-      for (let i = 0; i < 3; i++) {
-        const tempId = `temp_${crypto.randomUUID()}`;
-        const name = `Item ${i + 1}`;
-        const planned = amounts[i];
-        await db.budget_items.add({
-          id: tempId,
-          category_id: categoryId,
-          user_id: "__pending__",
-          name,
-          emoji: null,
-          planned_amount: planned,
-          actual_amount: 0,
-          is_completed: false,
-          notes: null,
-          link_type: null,
-          link_id: null,
-          template_id: null,
-          template_item_id: null,
-          overspend_count: 0,
-          created_at: now,
-          updated_at: now,
-        });
-        await enqueue({
-          table: "budget_items",
-          operation: "INSERT",
-          recordId: tempId,
-          tempId,
-          payload: {
-            categoryId,
-            name,
-            emoji: null,
-            planned,
-            actual: 0,
-            is_completed: false,
-            notes: null,
-            link: null,
-          },
-        });
-        seeded.push({
-          id: tempId,
+      await db.budget_items.add({
+        id: tempId,
+        category_id: categoryId,
+        user_id: "__pending__",
+        name,
+        emoji: null,
+        planned_amount: planned,
+        actual_amount: 0,
+        is_completed: false,
+        notes: null,
+        link_type: null,
+        link_id: null,
+        template_id: null,
+        template_item_id: null,
+        overspend_count: 0,
+        created_at: now,
+        updated_at: now,
+      });
+      await enqueue({
+        table: "budget_items",
+        operation: "INSERT",
+        recordId: tempId,
+        tempId,
+        payload: {
+          categoryId,
           name,
           emoji: null,
           planned,
           actual: 0,
           is_completed: false,
           notes: null,
-          link_type: null,
-          link_id: null,
-        });
-      }
-      setItems((prev) => (prev.length > 0 ? prev : seeded));
+          link: null,
+        },
+      });
+      const seeded: BudgetItem = {
+        id: tempId,
+        name,
+        emoji: null,
+        planned,
+        actual: 0,
+        is_completed: false,
+        notes: null,
+        link_type: null,
+        link_id: null,
+      };
+      setItems((prev) => (prev.length > 0 ? prev : [seeded]));
       await invalidateBudgetCaches();
     } catch {
       /* best-effort seed */

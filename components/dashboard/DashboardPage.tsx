@@ -13,6 +13,7 @@ import { useHaptic } from "@/lib/hooks/useHaptic";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { useIsPremium } from "@/lib/providers/EntitlementProvider";
 import { CrownBadge } from "@/components/ui/CrownBadge";
+import NotificationBell from "@/components/notifications/NotificationBell";
 import { getTimeGreeting } from "@/lib/utils/greeting";
 import { projectMonthSpend } from "@/lib/sms/insightStats";
 import type { DashboardCategory, DashboardItem } from "@/lib/hooks/useDashboard";
@@ -136,13 +137,16 @@ export default function DashboardPage({ data }: DashboardProps) {
             Here&apos;s your money at a glance
           </p>
         </div>
-        <Link
-          href="/profile"
-          aria-label="Profile"
-          className="flex size-[38px] items-center justify-center rounded-xl border border-border bg-card text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <span className="material-symbols-outlined text-[18px]">person</span>
-        </Link>
+        <div className="flex items-center gap-2">
+          <NotificationBell />
+          <Link
+            href="/profile"
+            aria-label="Profile"
+            className="flex size-[38px] items-center justify-center rounded-xl border border-border bg-card text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <span className="material-symbols-outlined text-[18px]">person</span>
+          </Link>
+        </div>
       </div>
 
       {/* Budget hero (lime) */}

@@ -34,4 +34,6 @@ export type {
   SmsTransactionRow,
   SmsBlocklistRow,
   FeedbackRow,
+  NotificationRow,
+  NotifKind,
 } from "./AllocatDB";

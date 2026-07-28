@@ -16,7 +16,7 @@ import type { MerchantRule } from "@/lib/sms/match";
 import { selectRuleForPeriod, type RuleResolutionContext } from "@/lib/sms/resolveRuleItem";
 import { detectAppSource } from "@/lib/sms/appSource";
 import { randomUUID } from "@/lib/utils/uuid";
-import { notifyLocal } from "@/lib/native/notify";
+import { emitNotification } from "@/lib/notify/history";
 import { nearLimitFromIDB, paceFromIDB, ordinal } from "@/lib/sms/nearLimit";
 import { confirmAutoAllocate } from "@/lib/sms/notifPrefs";
 import { formatCurrency } from "@/lib/number-format";
@@ -276,13 +276,12 @@ export async function ingestSmsClient(
     });
 
     // Device-visible notifications (native local notifications; no-op on web).
-    // Suppressed when draining the native queue — the receiver already notified.
+    // Every branch records to the local inbox; the OS notification is suppressed
+    // when draining the native queue (`opts.silent`) — the receiver already
+    // notified the user, but we still backfill the in-app history.
     const money = (v: number) =>
       formatCurrency(v, { code: currency ?? "INR", maximumFractionDigits: 0 });
-
-    if (opts.silent) {
-      return { txnId: tempId, autoApplied };
-    }
+    const silent = opts.silent;
 
     if (autoApplied && resolvedItemId) {
       const nl = await nearLimitFromIDB(resolvedItemId);
@@ -299,41 +298,57 @@ export async function ingestSmsClient(
             firstOverspend: count === 1,
             seed: `${resolvedItemId}:${count}`,
           });
-          await notifyLocal({ title: msg.title, body: msg.body, url: "/budget" });
+          await emitNotification({ kind: "overspend", title: msg.title, body: msg.body, url: "/budget" }, { silent });
         } else {
-          await notifyLocal({
-            title: "😼 Budget's getting thin",
-            body: `${nl.name} at ${Math.round(nl.ratio * 100)}%, only ${money(nl.remaining)} left. Tread softly.`,
-            url: "/budget",
-          });
+          await emitNotification(
+            {
+              kind: "near-limit",
+              title: "😼 Budget's getting thin",
+              body: `${nl.name} at ${Math.round(nl.ratio * 100)}%, only ${money(nl.remaining)} left. Tread softly.`,
+              url: "/budget",
+            },
+            { silent },
+          );
         }
       } else {
         const pace = await paceFromIDB(resolvedItemId);
         if (pace) {
-          await notifyLocal({
-            title: "🐾 Spending fast",
-            body: `${pace.name} is on track to run out around the ${ordinal(pace.byDay)}. Ease up to stay in budget.`,
-            url: "/budget",
-          });
+          await emitNotification(
+            {
+              kind: "pace",
+              title: "🐾 Spending fast",
+              body: `${pace.name} is on track to run out around the ${ordinal(pace.byDay)}. Ease up to stay in budget.`,
+              url: "/budget",
+            },
+            { silent },
+          );
         } else if (confirmAutoAllocate()) {
           // Subtle confirmation that a known merchant was auto-logged — names the
           // budget ITEM (falls back to category, then "your budget").
           const bi = await db.budget_items.get(resolvedItemId);
           const cat = bi ? await db.categories.get(bi.category_id) : null;
           const target = bi?.name || cat?.name || null;
-          await notifyLocal({
-            title: `🐾 Sorted: ${money(amount)}${target ? ` → ${target}` : ""}`,
-            body: target ? `Auto-logged to ${target}.` : "Auto-logged to your budget.",
-            url: "/budget",
-          });
+          await emitNotification(
+            {
+              kind: "auto-allocate",
+              title: `🐾 Sorted: ${money(amount)}${target ? ` → ${target}` : ""}`,
+              body: target ? `Auto-logged to ${target}.` : "Auto-logged to your budget.",
+              url: "/budget",
+            },
+            { silent },
+          );
         }
       }
     } else if (isDebit) {
-      await notifyLocal({
-        title: "🐾 A wild spend appeared!",
-        body: `${money(amount)} at ${merchant ?? "someone"}. Tap to give it a home.`,
-        url: `/sms?txn=${tempId}`,
-      });
+      await emitNotification(
+        {
+          kind: "wild-spend",
+          title: "🐾 A wild spend appeared!",
+          body: `${money(amount)} at ${merchant ?? "someone"}. Tap to give it a home.`,
+          url: `/sms?txn=${tempId}`,
+        },
+        { silent },
+      );
     }
 
     return { txnId: tempId, autoApplied };

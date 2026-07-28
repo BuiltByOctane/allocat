@@ -7,7 +7,7 @@ import { smsTemplateKey } from "@/lib/sms/match";
 import { nearLimitFromIDB } from "@/lib/sms/nearLimit";
 import { groupAllocationsForMonth, type AllocatedGroup } from "@/lib/sms/monthAllocations";
 import { randomUUID } from "@/lib/utils/uuid";
-import { notifyLocal } from "@/lib/native/notify";
+import { emitNotification } from "@/lib/notify/history";
 import { pushSmsMirrorToNative } from "@/lib/sms/nativeMirror";
 import { formatCurrency } from "@/lib/number-format";
 import { pickOverspendMessage, tierForCount } from "@/lib/notify/messages";
@@ -362,13 +362,14 @@ export function useCategorizeSms() {
             firstOverspend: count === 1,
             seed: `${input.budgetItemId}:${count}`,
           });
-          await notifyLocal({ title: msg.title, body: msg.body, url: "/budget" });
+          await emitNotification({ kind: "overspend", title: msg.title, body: msg.body, url: "/budget" });
         } else {
           const left = formatCurrency(nl.remaining, {
             code: txn.currency ?? "INR",
             maximumFractionDigits: 0,
           });
-          await notifyLocal({
+          await emitNotification({
+            kind: "near-limit",
             title: "😼 Budget's getting thin",
             body: `${nl.name} at ${Math.round(nl.ratio * 100)}%, only ${left} left. Tread softly.`,
             url: "/budget",

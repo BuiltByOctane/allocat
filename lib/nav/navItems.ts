@@ -16,7 +16,7 @@ export const navItems: NavItem[] = [
 // Secondary routes that don't have their own tab but are reached *through*
 // Profile. Keep the Profile pill active on these so the dock doesn't jump to
 // Home. Profile sub-routes (/profile/*) are handled by the startsWith pass.
-export const PROFILE_OWNED = ["/activity", "/sms", "/transactions", "/reports"];
+export const PROFILE_OWNED = ["/activity", "/sms", "/transactions", "/reports", "/notifications"];
 
 export function hrefForPath(pathname: string): string {
   const match = navItems.find(

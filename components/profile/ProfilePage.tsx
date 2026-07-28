@@ -31,6 +31,7 @@ import { SmsReader } from "@/lib/native/SmsReader";
 import { useIsPremium } from "@/lib/providers/EntitlementProvider";
 import { CrownBadge } from "@/components/ui/CrownBadge";
 import { FeedbackSheet } from "@/components/feedback/FeedbackSheet";
+import NotificationBell from "@/components/notifications/NotificationBell";
 
 export default function ProfilePage() {
   const { data: profile } = useProfile();
@@ -85,11 +86,14 @@ export default function ProfilePage() {
   return (
     <div className="px-4 pt-4 flex flex-col gap-3">
       {/* Header */}
-      <div className="px-1 pt-1">
-        <h1 className="font-display text-[26px] font-bold leading-none tracking-[-0.03em] text-foreground">
-          Profile
-        </h1>
-        <p className="text-[11px] font-medium text-muted-foreground mt-1">Financial identity</p>
+      <div className="flex items-center justify-between px-1 pt-1">
+        <div>
+          <h1 className="font-display text-[26px] font-bold leading-none tracking-[-0.03em] text-foreground">
+            Profile
+          </h1>
+          <p className="text-[11px] font-medium text-muted-foreground mt-1">Financial identity</p>
+        </div>
+        <NotificationBell />
       </div>
 
       {/* Lime identity card */}

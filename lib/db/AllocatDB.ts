@@ -21,6 +21,29 @@ export type SmsBlocklistRow =
   Database["public"]["Tables"]["sms_blocklist"]["Row"];
 export type FeedbackRow = Database["public"]["Tables"]["feedback"]["Row"];
 
+// ─── Local-only notification inbox ────────────────────────────────────────────
+// Device-local history of notifications shown to the user. Never synced to the
+// server (absent from SyncTable / hydrate / prefetch), so it lives only in IDB
+// on the device that fired the notification. See lib/notify/history.ts.
+export type NotifKind =
+  | "wild-spend"
+  | "near-limit"
+  | "overspend"
+  | "pace"
+  | "auto-allocate"
+  | "budget-reminder"
+  | "other";
+
+export interface NotificationRow {
+  id: string; // plain uuid (NOT temp_-prefixed — never touches the sync engine)
+  kind: NotifKind;
+  title: string;
+  body: string;
+  url?: string;
+  createdAt: number; // Date.now()
+  read: boolean;
+}
+
 // ─── Sync infrastructure types ────────────────────────────────────────────────
 export type SyncTable =
   | "profiles"
@@ -118,6 +141,9 @@ export class AllocatDB extends Dexie {
   sync_queue!: Table<SyncQueueItem, number>;
   id_map!: Table<IdMapEntry, string>;
   sync_meta!: Table<SyncMetaEntry, string>;
+
+  // Local-only, never synced (like the infra tables above).
+  notifications!: Table<NotificationRow, string>;
 
   constructor() {
     super("AllocatDB");
@@ -291,6 +317,13 @@ export class AllocatDB extends Dexie {
     // so the schema string is unchanged; this bump only invalidates hydration to refetch it.
     this.version(17).upgrade(async (tx) => {
       await tx.table("sync_meta").delete("budget_items");
+    });
+
+    // v18: local-only `notifications` inbox. Device-local history of shown
+    // notifications — never synced, never hydrated. Indexed on createdAt
+    // (newest-first ordering + TTL prune) and read (unread count).
+    this.version(18).stores({
+      notifications: "id, createdAt, read",
     });
   }
 }

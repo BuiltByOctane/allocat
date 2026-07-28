@@ -6,7 +6,7 @@ import { useSync } from "@/lib/hooks/useSync";
 import { getDB } from "@/lib/db";
 import { findCarrySource, isEmptyBudget } from "@/lib/budget/carry";
 import { pickBudgetReminderMessage } from "@/lib/notify/messages";
-import { notifyLocal } from "@/lib/native/notify";
+import { emitNotification } from "@/lib/notify/history";
 
 /**
  * New-month nudge: if the CURRENT month has no budget set AND there's no prior
@@ -67,7 +67,7 @@ export function BudgetReminderController() {
       // Set the flag first so a re-fire (visibilitychange) can't double-notify.
       localStorage.setItem(flagKey, "1");
       const msg = pickBudgetReminderMessage(`${year}-${month}`);
-      await notifyLocal({ title: msg.title, body: msg.body, url: "/budget" });
+      await emitNotification({ kind: "budget-reminder", title: msg.title, body: msg.body, url: "/budget" });
     };
 
     void check();

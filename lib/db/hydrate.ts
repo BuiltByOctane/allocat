@@ -500,5 +500,6 @@ export async function clearDB(): Promise<void> {
     db.id_map.clear(),
     db.sync_meta.clear(),
     db.sync_queue.clear(),
+    db.notifications.clear(),
   ]);
 }

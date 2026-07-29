@@ -5,7 +5,8 @@ export default function manifest(): MetadataRoute.Manifest {
     id: '/',
     name: 'AlloCat',
     short_name: 'AlloCat',
-    description: 'Minimalist, manual personal finance control system.',
+    description:
+      'Budget planner and expense tracker that auto-logs spends from your bank SMS. Goals, debt and net worth in one offline-first app.',
     start_url: '/',
     scope: '/',
     display: 'standalone',

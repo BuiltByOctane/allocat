@@ -116,13 +116,19 @@ export default function PrivacyPolicyPage() {
         </p>
       </Section>
 
-      <Section title="Subscriptions and payments">
+      <Section title="Payments and donations">
         <p>
-          AlloCat offers an optional paid subscription. Purchases are processed by{" "}
-          <strong>Google Play Billing</strong>. We use{" "}
-          <strong>Adapty</strong> to manage your subscription status and
-          entitlements, which involves a device identifier. We do not receive or
-          store your full payment card details; those are handled by Google Play.
+          AlloCat is free. There is no subscription, no paid tier, and no in-app
+          purchase - every feature is available to every account.
+        </p>
+        <p>
+          If you choose to support development, donations are handled entirely by{" "}
+          <strong>Ko-fi</strong> on their own website, under their privacy policy.
+          Your payment details never reach AlloCat. Ko-fi tells us only the email
+          address, amount and currency of the donation, which we store so we can
+          show a thank-you badge on the matching account. That badge is cosmetic:
+          it unlocks nothing, and donating changes nothing about how the app works
+          for you.
         </p>
       </Section>
 

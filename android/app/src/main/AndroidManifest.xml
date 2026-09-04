@@ -2,12 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- tools:replace overrides Adapty SDK's backup attributes (it sets
-         fullBackupContent=@xml/adapty_backup_rules) so our no-backup policy wins. -->
+    <!-- No cloud backup: the local IDB cache is rebuilt from Supabase on sign-in,
+         and on-device SMS state should never leave the device. -->
     <application
         android:allowBackup="false"
         android:fullBackupContent="false"
-        tools:replace="android:allowBackup,android:fullBackupContent"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -70,9 +69,9 @@
          reads the existing SMS inbox, so READ_SMS is intentionally NOT declared. -->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
 
-    <!-- Adapty pulls in the advertising-ID permission for attribution. AlloCat
-         runs no ads and does not use the advertising ID, so strip it from the
-         merged manifest — lets us answer "No" to Play's advertising-ID question. -->
+    <!-- A dependency may pull in the advertising-ID permission. AlloCat runs no
+         ads and does not use the advertising ID, so strip it from the merged
+         manifest — lets us answer "No" to Play's advertising-ID question. -->
     <uses-permission android:name="com.google.android.gms.permission.AD_ID"
         tools:node="remove" />
 </manifest>

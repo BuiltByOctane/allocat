@@ -17,12 +17,8 @@ export type Database = {
           is_onboarded: boolean
           currency: string
           avatar: string | null
-          subscription_status: "trial" | "active" | "expired" | null
-          trial_started_at: string | null
-          trial_ends_at: string | null
-          plan: "monthly" | "yearly" | null
-          subscription_expires_at: string | null
-          trial_device_id: string | null
+          is_supporter: boolean
+          supporter_since: string | null
           last_app_mode: "web" | "android" | null
           created_at: string
           updated_at: string
@@ -34,12 +30,8 @@ export type Database = {
           is_onboarded?: boolean
           currency?: string
           avatar?: string | null
-          subscription_status?: "trial" | "active" | "expired" | null
-          trial_started_at?: string | null
-          trial_ends_at?: string | null
-          plan?: "monthly" | "yearly" | null
-          subscription_expires_at?: string | null
-          trial_device_id?: string | null
+          is_supporter?: boolean
+          supporter_since?: string | null
           last_app_mode?: "web" | "android" | null
           created_at?: string
           updated_at?: string
@@ -50,12 +42,8 @@ export type Database = {
           is_onboarded?: boolean
           currency?: string
           avatar?: string | null
-          subscription_status?: "trial" | "active" | "expired" | null
-          trial_started_at?: string | null
-          trial_ends_at?: string | null
-          plan?: "monthly" | "yearly" | null
-          subscription_expires_at?: string | null
-          trial_device_id?: string | null
+          is_supporter?: boolean
+          supporter_since?: string | null
           last_app_mode?: "web" | "android" | null
           updated_at?: string
         }
@@ -659,12 +647,63 @@ export type Database = {
         }
         Relationships: []
       }
+      supporters: {
+        Row: {
+          email: string
+          user_id: string | null
+          first_supported_at: string
+          last_supported_at: string
+          total_amount: number
+          currency: string | null
+          source: string
+          last_message_id: string | null
+          created_at: string
+        }
+        Insert: {
+          email: string
+          user_id?: string | null
+          first_supported_at?: string
+          last_supported_at?: string
+          total_amount?: number
+          currency?: string | null
+          source?: string
+          last_message_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          user_id?: string | null
+          last_supported_at?: string
+          total_amount?: number
+          currency?: string | null
+          last_message_id?: string | null
+        }
+        Relationships: []
+      }
+      ai_usage: {
+        Row: {
+          user_id: string
+          day: string
+          count: number
+        }
+        Insert: {
+          user_id: string
+          day?: string
+          count?: number
+        }
+        Update: {
+          count?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      increment_ai_usage: {
+        Args: { p_user: string }
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never

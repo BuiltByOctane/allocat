@@ -7,9 +7,6 @@ import { DebtPaymentSheet } from "./DebtPaymentSheet";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { useRegisterQuickAction } from "@/lib/providers/QuickActionProvider";
-import { useEntitlement } from "@/lib/providers/EntitlementProvider";
-import { usePaywallGate } from "@/lib/providers/PaywallProvider";
-import { isAtLimit } from "@/lib/subscription/limits";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Progress } from "@/components/ui/Progress";
 import { Card } from "@/components/ui/Card";
@@ -104,14 +101,7 @@ export default function DebtPage({ data }: { data: Debt[] }) {
       : null,
   );
 
-  const { tier } = useEntitlement();
-  const paywallGate = usePaywallGate();
-
   function openAddSheet() {
-    // Free tier: cap active (non-lent) debts. Premium is unlimited.
-    if (!paywallGate(isAtLimit("debts", allActiveDebts.length, tier), "debts")) {
-      return;
-    }
     setSheetMode("add");
     setSheetDebt(undefined);
     setSheetOpen(true);

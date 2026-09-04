@@ -66,7 +66,7 @@ The home screen. Time-aware greeting ("Good evening, Sam"), then:
 - **Top spending strip** — a compact row of the biggest item spends this month.
 - **Stat pair** — Net Worth (with % change) and Goals (top goal + progress) as tappable cards.
 - **Quick Log** — log an expense against a category/item right from the dashboard, no navigation.
-- A **crown badge** appears for Premium members.
+- A **crown badge** appears for people who've supported AlloCat on Ko-fi.
 
 New users see a friendly empty state prompting "Set up your budget."
 
@@ -137,7 +137,7 @@ The signature native feature. iOS can't read SMS, so this is Android-exclusive.
 - **Top spends** — your five biggest merchant/label totals for the month.
 - **Notes** — a free-text journal per month ("How did this month go?") saved with the report.
 
-### 4.9 Ask AlloCat (AI) — *a cat that knows your money* (Premium)
+### 4.9 Ask AlloCat (AI) — *a cat that knows your money*
 
 - A chat that answers **only** from your real financial data — budget, spending, goals, debts, net worth. It never invents numbers.
 - **Personality:** calm, observant, quietly witty, supportive, never judgmental. Answers are short and intentional (1–2 sentences), no lectures, no jargon, no emojis.
@@ -151,8 +151,8 @@ A timeline of everything you've changed across the app, with formatted summaries
 
 ### 4.11 Profile & Settings
 
-- **Identity card** — avatar (pickable), name, email, Verified chip, Premium crown.
-- **Subscription** — plan status and upgrade entry point.
+- **Identity card** — avatar (pickable), name, email, Verified chip, supporter crown.
+- **AlloCat** — entry to *Why AlloCat is free* (the support page).
 - **Tools** — quick links to Activity, SMS Transactions, Transaction History, and Monthly Report.
 - **Preferences** — **Accent color** (lime default, plus tangerine, lemon, purple, blue) and **Currency** (multi-currency; not locked to one region).
 - **Notifications** — toggle auto-allocate confirmations; **Weekly insights** (Android); and a **custom notification sound** picker (Android).
@@ -180,24 +180,18 @@ A swipeable teaching deck (Welcome → Budget → Grow → SMS → AI) with live
 
 ---
 
-## 6. Free vs Premium
+## 6. Free — all of it
 
-**SMS auto-tracking — the core feature — is never gated.** Free covers a casual user comfortably; limits nudge committed users toward Premium.
+**AlloCat is free for everyone.** There are no tiers, no trial, no caps and no paywall. Every feature listed above — SMS auto-tracking, budgets, goals, assets, debts, reports and Ask AlloCat — is available to every account, with no upper limit on how many goals/assets/debts you keep.
 
-| | Free | Premium (paid or in-trial) |
-|---|---|---|
-| SMS auto-tracking | ✅ Unlimited | ✅ Unlimited |
-| Budget & manual logging | ✅ | ✅ |
-| Goals | Up to **3** active | **Unlimited** |
-| Assets (net worth) | Up to **5** | **Unlimited** |
-| Debts | Up to **2** active | **Unlimited** |
-| History (reports/activity) | Last **3 months** | **Full history** |
-| Ask AlloCat (AI chat & insights) | — | ✅ |
+The one ceiling is a practical one: **AI chat has a daily message allowance per account** (30/day, resets at midnight UTC), because each message costs real money to run. Hitting it shows a plain explanation, never an upsell wall, and nothing else in the app is affected.
 
-- **Pricing:** ₹79 / month or ₹699 / year (~26% cheaper than paying monthly).
-- **Trial:** an opt-in **40-day free** Premium trial (offered once).
-- **Billing:** purchases happen in the **Android app**; on the web the paywall points you there.
-- Hitting a limit opens a paywall explaining exactly why ("More goals need Premium") and offering the trial or a plan.
+### Supporting the app
+
+- **Profile → Why AlloCat is free** explains what it costs to run and links to **Ko-fi**, where anyone who wants to can leave a one-time or monthly tip.
+- Payment happens entirely on Ko-fi. On Android the link opens in the system browser — there is no in-app purchase.
+- Supporters get a **cosmetic crown badge** on the dashboard and profile, and nothing else. No extra features, no higher limits, no ads either way.
+- A single dismissible card on the dashboard mentions this once, after the account is two weeks old. That is the only time AlloCat brings up money on its own.
 
 ---
 

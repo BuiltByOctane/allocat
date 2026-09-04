@@ -53,6 +53,24 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
           signal: abortRef.current.signal,
         });
 
+        // The daily allowance is the one "no" the chat can give. Say it plainly
+        // rather than letting it surface as a generic connection error.
+        if (res.status === 429) {
+          const body = await res.json().catch(() => null);
+          const daily = body?.error === "daily_limit";
+          setMessages((prev) => {
+            const updated = [...prev];
+            updated[assistantIdx] = {
+              role: "assistant",
+              content: daily
+                ? "That's my chat limit for today! 😅 Running the AI costs real money, so every account gets a daily allowance — mine resets at midnight UTC. Everything else in AlloCat keeps working as normal. If you'd like to help cover the bill, there's a note on why AlloCat is free in Profile → Why AlloCat is free."
+                : "Whoa, slow down a sec! 😅 Give me a minute and try again.",
+            };
+            return updated;
+          });
+          return;
+        }
+
         if (!res.ok || !res.body) {
           throw new Error("Failed to connect to AlloCat AI.");
         }

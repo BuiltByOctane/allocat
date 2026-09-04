@@ -9,14 +9,11 @@ import { PushPermissionPrompt } from "@/components/pwa/PushPermissionPrompt";
 import { SmsBridge } from "@/components/pwa/SmsBridge";
 import { SheetScrollLock } from "@/components/pwa/SheetScrollLock";
 import { KeyboardInset } from "@/components/pwa/KeyboardInset";
-import { AdaptyBridge } from "@/components/pwa/AdaptyBridge";
 import { NativeSetup } from "@/components/pwa/NativeSetup";
 import { TourPrompt } from "@/components/tour/TourPrompt";
 import { TourProvider } from "@/lib/tour/TourContext";
 import { CurrencyProvider } from "@/lib/providers/CurrencyProvider";
-import { EntitlementProvider } from "@/lib/providers/EntitlementProvider";
-import { PaywallProvider } from "@/lib/providers/PaywallProvider";
-import { TrialWelcomeModal } from "@/components/subscription/TrialWelcomeModal";
+import { SupporterSync } from "@/components/support/SupporterSync";
 import { CarryController } from "@/components/budget/CarryController";
 import { BudgetReminderController } from "@/components/budget/BudgetReminderController";
 import { PullToRefresh } from "@/components/PullToRefresh";
@@ -31,8 +28,6 @@ export default async function AppLayout({
     <TourProvider>
     <SyncProvider>
     <CurrencyProvider>
-    <EntitlementProvider>
-    <PaywallProvider>
     <QuickActionProvider>
       <div
         className="relative flex flex-col min-h-[100dvh] w-full max-w-[480px] mx-auto md:max-w-full md:flex-row bg-background overflow-x-hidden md:overflow-x-visible"
@@ -58,18 +53,15 @@ export default async function AppLayout({
         <KeyboardInset />
         <SmsBridge />
         <SheetScrollLock />
-        <AdaptyBridge />
         <TourPrompt />
         <NativeSetup />
         <BadgeUpdater />
-        <TrialWelcomeModal />
+        <SupporterSync />
         <CarryController />
         <BudgetReminderController />
         <BottomDock />
       </div>
     </QuickActionProvider>
-    </PaywallProvider>
-    </EntitlementProvider>
     </CurrencyProvider>
     </SyncProvider>
     </TourProvider>

@@ -10,7 +10,7 @@ import AvatarPickerSheet from "@/components/profile/AvatarPickerSheet";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
 import AccentSelector from "@/components/profile/AccentSelector";
-import SubscriptionCard from "@/components/profile/SubscriptionCard";
+import SupportCard from "@/components/profile/SupportCard";
 import { useRegisterQuickAction } from "@/lib/providers/QuickActionProvider";
 import CurrencySelector from "@/components/profile/CurrencySelector";
 import NotificationSoundSelector from "@/components/profile/NotificationSoundSelector";
@@ -28,7 +28,7 @@ import {
 } from "@/lib/sms/notifPrefs";
 import { scheduleWeeklyRecap } from "@/lib/sms/recap";
 import { SmsReader } from "@/lib/native/SmsReader";
-import { useIsPremium } from "@/lib/providers/EntitlementProvider";
+import { useIsSupporter } from "@/lib/hooks/useSupporter";
 import { CrownBadge } from "@/components/ui/CrownBadge";
 import { FeedbackSheet } from "@/components/feedback/FeedbackSheet";
 import NotificationBell from "@/components/notifications/NotificationBell";
@@ -37,7 +37,7 @@ export default function ProfilePage() {
   const { data: profile } = useProfile();
   const { engine } = useSyncContext();
   const tour = useTour();
-  const isPremium = useIsPremium();
+  const isSupporter = useIsSupporter();
   const { resolvedTheme, setTheme } = useTheme();
 
   // Quick-action dock on /profile = light/dark toggle. Icon reflects the
@@ -124,13 +124,13 @@ export default function ProfilePage() {
             {profile?.email || ""}
           </div>
         </div>
-        {isPremium && (
-          <CrownBadge size={44} className="self-center -mr-0.5" aria-label="Premium member" />
+        {isSupporter && (
+          <CrownBadge size={44} className="self-center -mr-0.5" aria-label="AlloCat supporter" />
         )}
       </div>
 
-      {/* Subscription group */}
-      <SubscriptionCard />
+      {/* Support group */}
+      <SupportCard />
 
       {/* Tools group — the sections that don't have their own nav tab */}
       <p className="t-label text-muted-foreground mt-1 ml-1">Tools</p>

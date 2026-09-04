@@ -16,7 +16,6 @@
     "android:run": "npm run android:sync && npm run android:build && npm run android:install"
   },
   "dependencies": {
-    "@adapty/capacitor": "^3.17.1",
     "@capacitor/android": "^8.4.0",
     "@capacitor/app": "^8.1.0",
     "@capacitor/browser": "^8.0.3",

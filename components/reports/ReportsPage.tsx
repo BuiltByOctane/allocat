@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { getDB } from "@/lib/db";
 import { getBudgetFromIDB } from "@/lib/hooks/useBudget";
 import { getBudgetView } from "@/lib/actions/budget";
 import { useMonthlyReport, useSaveReportNotes } from "@/lib/hooks/useReports";
+import { generateMonthlySummary } from "@/lib/actions/monthly-summary";
+import { useCurrency } from "@/lib/providers/CurrencyProvider";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { useTourDriver } from "@/lib/tour/useTourDriver";
 import { Card } from "@/components/ui/Card";
@@ -38,6 +40,18 @@ interface MonthSummary {
   totalSpent: number;
   categories: CategorySummary[];
   topMerchants: MerchantSummary[];
+  /** Categorized (allocated) debit transactions this month. */
+  txnCount: number;
+  /** Still-pending (uncategorized) transactions this month. */
+  pendingCount: number;
+  /** Total amount of those still-pending transactions. */
+  pendingAmount: number;
+}
+
+/** True when (month, year) is strictly before the current calendar month. */
+function isPastMonth(month: number, year: number): boolean {
+  const now = new Date();
+  return year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1);
 }
 
 function summaryKey(month: number, year: number) {
@@ -79,6 +93,7 @@ async function computeSummary(month: number, year: number): Promise<MonthSummary
     .toArray();
 
   const merchantTotals = new Map<string, number>();
+  let txnCount = 0;
   for (const t of txns) {
     if (t.direction === "credit") continue;
     const when = t.occurred_at ?? t.created_at;
@@ -87,12 +102,31 @@ async function computeSummary(month: number, year: number): Promise<MonthSummary
     if (d.getFullYear() !== year || d.getMonth() + 1 !== month) continue;
     const amount = Number(t.amount ?? 0);
     if (!amount) continue;
+    txnCount += 1;
     const label =
       t.label ||
       t.merchant_normalized ||
       t.merchant_raw ||
       "Other";
     merchantTotals.set(label, (merchantTotals.get(label) ?? 0) + amount);
+  }
+
+  // Pending (uncategorized) spends that occurred this month — drives the
+  // "were all transactions allocated" line in the AI summary.
+  const pendingTxns = await db.sms_transactions
+    .where("status")
+    .equals("pending")
+    .toArray();
+  let pendingCount = 0;
+  let pendingAmount = 0;
+  for (const t of pendingTxns) {
+    if (t.direction === "credit") continue;
+    const when = t.occurred_at ?? t.created_at;
+    if (!when) continue;
+    const d = new Date(when);
+    if (d.getFullYear() !== year || d.getMonth() + 1 !== month) continue;
+    pendingCount += 1;
+    pendingAmount += Number(t.amount ?? 0);
   }
 
   const topMerchants: MerchantSummary[] = [...merchantTotals.entries()]
@@ -107,12 +141,16 @@ async function computeSummary(month: number, year: number): Promise<MonthSummary
     totalSpent,
     categories: categories.sort((a, b) => b.spent - a.spent),
     topMerchants,
+    txnCount,
+    pendingCount,
+    pendingAmount,
   };
 }
 
 export default function ReportsPage() {
   const router = useRouter();
   const haptic = useHaptic();
+  const { code: currencyCode } = useCurrency();
   useTourDriver("reports");
 
   const now = new Date();
@@ -129,6 +167,27 @@ export default function ReportsPage() {
 
   const [notes, setNotes] = useState("");
   const [savedHint, setSavedHint] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState(false);
+
+  // Grow the notes editor to fit its content (no inner scroll). CSS
+  // `field-sizing-content` handles this natively on Chromium (the Android
+  // WebView); the JS below is the fallback for browsers without it and keeps
+  // the height correct on mount, month switch, and AI-generated fills.
+  const notesRef = useRef<HTMLTextAreaElement | null>(null);
+  function autosize(el: HTMLTextAreaElement) {
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }
+  // Callback ref: fires when the textarea actually mounts (it renders only
+  // after the loading gate opens), so the first sizing isn't missed.
+  const setNotesRef = useCallback((el: HTMLTextAreaElement | null) => {
+    notesRef.current = el;
+    if (el) autosize(el);
+  }, []);
+  useLayoutEffect(() => {
+    if (notesRef.current) autosize(notesRef.current);
+  }, [notes]);
 
   // Sync the textarea with the loaded note when navigating between months or
   // when the saved note resolves. Render-time reconciliation (vs. an effect)
@@ -142,6 +201,7 @@ export default function ReportsPage() {
     setPrevNote(loadedNote);
     setNotes(loadedNote);
     setSavedHint(false);
+    setGenError(false);
   }
 
   const monthLabel = useMemo(
@@ -171,6 +231,47 @@ export default function ReportsPage() {
     setSavedHint(true);
     setTimeout(() => setSavedHint(false), 2000);
   }
+
+  async function handleGenerate() {
+    if (!summary?.budgetId || generating) return;
+    haptic.light();
+    setGenerating(true);
+    setGenError(false);
+    try {
+      const text = await generateMonthlySummary({
+        currency: currencyCode,
+        monthLabel,
+        totalBudget: summary.totalBudget,
+        totalAllocated: summary.totalAllocated,
+        totalSpent: summary.totalSpent,
+        txnCount: summary.txnCount,
+        pendingCount: summary.pendingCount,
+        pendingAmount: summary.pendingAmount,
+        categories: summary.categories.map((c) => ({
+          name: c.name,
+          allocated: c.allocated,
+          spent: c.spent,
+        })),
+        topMerchants: summary.topMerchants,
+      });
+      if (!text) {
+        setGenError(true);
+        return;
+      }
+      haptic.success();
+      // Fill the field only — the user reviews and taps Save to persist.
+      setNotes(text);
+    } catch {
+      setGenError(true);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  // AI recap is offered only for a finished month with a budget and an empty
+  // note (a written summary means "no need"). Keeps the call rare and opt-in.
+  const canGenerate =
+    !!summary?.budgetId && isPastMonth(month, year) && notes.trim().length === 0;
 
   const maxCatValue = Math.max(
     1,
@@ -351,12 +452,31 @@ export default function ReportsPage() {
             <span className="font-display text-[15px] font-bold text-foreground">Notes</span>
           </div>
           <Card>
+            {canGenerate && (
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={generating}
+                className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-pill border border-border bg-tile px-4 h-[40px] text-[13px] font-bold text-foreground disabled:opacity-50 active:scale-[0.98] transition-all"
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  {generating ? "hourglass_empty" : "auto_awesome"}
+                </span>
+                {generating ? "Generating…" : "Generate AI summary"}
+              </button>
+            )}
+            {genError && (
+              <p className="mb-2 text-[11px] font-medium text-neg">
+                Couldn&apos;t generate a summary. Try again.
+              </p>
+            )}
             <textarea
+              ref={setNotesRef}
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => { setNotes(e.target.value); autosize(e.target); }}
               placeholder="How did this month go? Anything to remember…"
               rows={4}
-              className="w-full resize-none bg-transparent text-[13.5px] font-medium text-foreground placeholder:text-muted-foreground outline-none"
+              className="w-full resize-none overflow-hidden bg-transparent text-[13.5px] font-medium text-foreground placeholder:text-muted-foreground outline-none field-sizing-content min-h-[6rem]"
             />
             <div className="flex items-center justify-between mt-2">
               <span className="text-[11px] font-medium text-muted-foreground">

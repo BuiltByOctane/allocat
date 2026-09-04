@@ -40,8 +40,13 @@ Requires Android Studio JBR (JDK 21). Open `android/` in Android Studio to build
 ```
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=
-OPENROUTER_API_KEY=     # used by app/api/ai/chat
+SUPABASE_SERVICE_ROLE_KEY=   # push, AI daily counter, Ko-fi supporter ledger
+OPENROUTER_API_KEY=          # used by app/api/ai/chat
+KOFI_VERIFICATION_TOKEN=     # app/api/kofi/webhook (503s without it)
+NEXT_PUBLIC_KOFI_URL=        # where the support CTA points
 ```
+
+See `.env.example` for the full list (web push, `NEXT_PUBLIC_SUPPORT_CTA_NATIVE`).
 
 ## Architecture
 
@@ -49,7 +54,7 @@ OPENROUTER_API_KEY=     # used by app/api/ai/chat
 
 Every page reads from IndexedDB first; the network is a fallback and a background reconciler. Three layers cooperate:
 
-1. **IDB cache** — `lib/db/AllocatDB.ts` defines a Dexie schema mirroring the Supabase tables (`profiles`, `budgets`, `categories`, `budget_items`, `goals`, `assets`, `asset_categories`, `asset_value_history`, `debts`, `reports`, `net_worth_snapshots`, `activity_logs`, `merchant_rules`, `sms_transactions`) plus three sync infra tables: `sync_queue`, `id_map`, `sync_meta`. Currently at schema version 10. The DB is a browser-only singleton via `getDB()` — calling it on the server throws. Schema version bumps live in `AllocatDB.ts` constructor; add a new `.version(N).stores({...})` block, never mutate prior versions.
+1. **IDB cache** — `lib/db/AllocatDB.ts` defines a Dexie schema mirroring the Supabase tables (`profiles`, `budgets`, `categories`, `budget_items`, `goals`, `assets`, `asset_categories`, `asset_value_history`, `debts`, `reports`, `net_worth_snapshots`, `activity_logs`, `merchant_rules`, `sms_transactions`) plus three sync infra tables: `sync_queue`, `id_map`, `sync_meta`. Currently at schema version 19. The DB is a browser-only singleton via `getDB()` — calling it on the server throws. Schema version bumps live in `AllocatDB.ts` constructor; add a new `.version(N).stores({...})` block, never mutate prior versions.
 
 2. **Hydration + prefetch** — on mount, `SyncProvider` (`lib/providers/SyncProvider.tsx`) calls `hydrateAllTables()` (`lib/db/hydrate.ts`) which bulk-pulls every table for the current user into IDB. If `sync_meta.__userId__` differs from the active user, IDB is wiped first (multi-account device safety). After hydration, `prefetchAllQueries()` (`lib/db/prefetch.ts`) warms the React Query cache from IDB so first navigation has no skeletons. Use `qc.fetchQuery` (not `prefetchQuery`) when adding new prefetched keys — staleTime semantics would otherwise serve stale entries across reloads.
 
@@ -62,11 +67,12 @@ Cross-cutting rules:
 
 ### Routing
 
-- `app/(app)/*` — protected app shell (dashboard, budget, debt, goals, net-worth, profile, activity, **sms**). Layout wraps in `TourProvider` → `SyncProvider`, with mobile-first 480px frame and `md:` desktop layout.
+- `app/(app)/*` — protected app shell (dashboard, budget, debt, goals, net-worth, profile, activity, **sms**, **support**). Layout wraps in `TourProvider` → `SyncProvider`, with mobile-first 480px frame and `md:` desktop layout.
 - `app/auth/*` — login / signup / oauth callback.
 - `app/onboarding/page.tsx` — post-signup flow.
 - `app/share-target/` — PWA Web Share Target landing (manifest `share_target` posts here); shared text is parsed by `lib/ai/parseSpend.ts`.
-- `app/api/ai/chat/route.ts` — streaming AI chat. Hard off-topic regex guard runs *before* the model call; topic detection in `lib/ai-utils.ts` decides which slice of `buildFinancialContext` to attach.
+- `app/api/ai/chat/route.ts` — streaming AI chat. Hard off-topic regex guard runs *before* the model call; topic detection in `lib/ai-utils.ts` decides which slice of `buildFinancialContext` to attach. AI is free for everyone; the only ceiling is `DAILY_AI_MESSAGES` (30/day/account) counted via the `increment_ai_usage` RPC, plus the per-instance burst limiter in `lib/server/rateLimit.ts`.
+- `app/api/kofi/webhook/route.ts` — Ko-fi donation webhook (see *Monetization* below).
 
 ### Auth + middleware quirk
 
@@ -78,6 +84,18 @@ Auth uses `@supabase/ssr` with cookie-based sessions:
 **Note**: The Next.js middleware file is named `proxy.ts` (not `middleware.ts`), exports a `proxy` function, and lives at the repo root. Do not rename it without verifying the Next 16 convention — both forms have existed across versions.
 
 Protected paths (redirect to `/auth/login` if no user): `/dashboard`, `/budget`, `/net-worth`, `/debt`, `/onboarding`. `/goals`, `/profile`, `/activity` are *not* in this list — confirm intent before adding new private routes.
+
+### Monetization: there isn't any
+
+AlloCat is **free for everyone** — no tiers, no trial, no caps, no paywall. The old Adapty/Play-Billing subscription system was removed entirely; if you find a reference to entitlement, premium, trial or paywall anywhere, it's stale and should go.
+
+The only money surface is **optional support**:
+- `app/(app)/support/` + `components/support/SupportPage.tsx` — the "Why AlloCat is free" page. Links out to Ko-fi (`lib/support/links.ts`); on native it opens the **system browser**, never an in-app checkout. `NEXT_PUBLIC_SUPPORT_CTA_NATIVE=false` hides that button on Android (Play-review escape hatch).
+- `app/api/kofi/webhook/route.ts` — verifies Ko-fi's `verification_token`, banks the donation in `supporters` (idempotent on `last_message_id`), and flips `profiles.is_supporter`.
+- `lib/actions/support.ts` `syncSupporterStatus()` — reconciles a donation made before signup; called once per session by `components/support/SupporterSync.tsx`.
+- `useIsSupporter()` (`lib/hooks/useSupporter.ts`) — reads `profiles.is_supporter`. **Cosmetic only** (a `CrownBadge`). Never gate a feature on it: doing so would turn an off-Play donation into a purchase of digital content.
+
+Migration: `docs/migrations/2026-07-29-supporters.sql`.
 
 ### Activity log
 

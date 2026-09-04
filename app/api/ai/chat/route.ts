@@ -1,8 +1,8 @@
 import { buildFinancialContext } from "@/lib/actions/ai-chat";
 import { detectTopic } from "@/lib/ai-utils";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { openRouterChat } from "@/lib/server/openrouter";
-import { getServerEntitlement } from "@/lib/actions/subscription";
 import { rateLimit } from "@/lib/server/rateLimit";
 import {
   createLeakGuardStream,
@@ -19,9 +19,15 @@ import {
 // Max number of previous messages to retain in the window (system prompt excluded)
 const HISTORY_WINDOW = 8;
 
-// Chat is expensive and is the main prompt-injection surface — cap per user.
+// Burst dampening. In-memory and per-instance, so this caps how fast one user
+// can hammer the endpoint (the main prompt-injection surface) — not a quota.
 const RATE_LIMIT = 25;
 const RATE_WINDOW_MS = 5 * 60 * 1000;
+
+// The real quota. AI is free for everyone, but the model isn't free to run, so
+// each account gets a durable per-day message allowance counted in Postgres.
+// Same number for supporters — supporting AlloCat unlocks nothing.
+const DAILY_AI_MESSAGES = 30;
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -32,20 +38,29 @@ export async function POST(req: Request) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
   }
 
-  // AI chat is Premium-only — guard server-side so a tampered client can't bypass it.
-  const entitlement = await getServerEntitlement();
-  if (entitlement.tier !== "premium") {
-    return new Response(JSON.stringify({ error: "premium_required" }), {
-      status: 402,
-    });
-  }
-
   const limited = rateLimit(`ai-chat:${user.id}`, RATE_LIMIT, RATE_WINDOW_MS);
   if (!limited.ok) {
     return new Response(JSON.stringify({ error: "rate_limited" }), {
       status: 429,
       headers: { "Retry-After": String(limited.retryAfter) },
     });
+  }
+
+  // Durable daily quota. Counted before any model call so a burst of parallel
+  // requests can't slip past; if the counter is unavailable we fail open rather
+  // than lock a user out of a free feature.
+  try {
+    const { data: used, error } = await createServiceClient().rpc("increment_ai_usage", {
+      p_user: user.id,
+    });
+    if (!error && typeof used === "number" && used > DAILY_AI_MESSAGES) {
+      return new Response(
+        JSON.stringify({ error: "daily_limit", limit: DAILY_AI_MESSAGES }),
+        { status: 429, headers: { "content-type": "application/json" } },
+      );
+    }
+  } catch {
+    // Service client unconfigured or Postgres unreachable — let the chat through.
   }
 
   // ── 0. Sanitize the client payload ────────────────────────────────────────

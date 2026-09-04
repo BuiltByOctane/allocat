@@ -40,7 +40,7 @@
 
 ## About
 
-AlloCat is a minimalist, personal-finance PWA. Track budgets, debts, savings goals, assets, and net worth in one place. The app reads from a local IndexedDB cache first and reconciles with Supabase in the background, so it stays fast and usable even on flaky networks or fully offline.
+AlloCat is a minimalist, personal-finance Application. Track budgets, debts, savings goals, assets, and net worth in one place. The app reads from a local IndexedDB cache first and reconciles with Supabase in the background, so it stays fast and usable even on flaky networks or fully offline.
 
 Hosted at **[allocat.xyz](https://allocat.xyz)**. Works on mobile, desktop, and installs as a PWA.
 

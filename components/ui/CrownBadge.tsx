@@ -17,14 +17,15 @@ export interface CrownBadgeProps {
 }
 
 /**
- * Animated premium crown (public/lottie/crown.lottie). Render this only when the
- * user is premium — it has no entitlement check of its own so it can be reused
- * in any premium-gated spot. Autoplays on a loop, subtle and inline.
+ * Animated crown (public/lottie/crown.lottie) — the thank-you mark for people
+ * who've supported AlloCat on Ko-fi. Purely decorative: it does no check of its
+ * own, so callers gate on `useIsSupporter()`. Autoplays on a loop, subtle and
+ * inline. Nothing in the app is ever gated on this being visible.
  */
 export function CrownBadge({
   size = 24,
   className = "",
-  "aria-label": ariaLabel = "Premium",
+  "aria-label": ariaLabel = "Supporter",
 }: CrownBadgeProps) {
   return (
     <span

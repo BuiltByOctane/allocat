@@ -325,5 +325,14 @@ export class AllocatDB extends Dexie {
     this.version(18).stores({
       notifications: "id, createdAt, read",
     });
+
+    // v19: free-forever pivot. The subscription/trial columns on profiles are
+    // gone from the app's row type; `is_supporter` + `supporter_since` replace
+    // them (cosmetic thank-you badge only, gates nothing). Non-indexed → the
+    // profiles schema string is unchanged; the bump forces re-hydration so
+    // cached profile rows pick up the new shape.
+    this.version(19).upgrade(async (tx) => {
+      await tx.table("sync_meta").delete("profiles");
+    });
   }
 }

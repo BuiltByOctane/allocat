@@ -8,9 +8,6 @@ importers:
 
   .:
     dependencies:
-      '@adapty/capacitor':
-        specifier: ^3.17.1
-        version: 3.17.1(@capacitor/core@8.4.0)
       '@capacitor/android':
         specifier: ^8.4.0
         version: 8.4.0(@capacitor/core@8.4.0)
@@ -134,14 +131,6 @@ importers:
         version: 4.1.8(@types/node@20.19.37)(vite@8.0.16(@types/node@20.19.37)(esbuild@0.28.0)(jiti@2.6.1))
 
 packages:
-
-  '@adapty/capacitor@3.17.1':
-    resolution: {integrity: sha512-+0QdVPcCvTej9CX0m2LfD+B4V1jGrRSdfI2kFc4tbo4LZRJyV/o+E+zNfKIOsraFXqJUyVncrv4YO1EaYX+IZg==}
-    peerDependencies:
-      '@capacitor/core': '>=8.0.0'
-
-  '@adapty/core@3.17.2':
-    resolution: {integrity: sha512-+rr1vnuad6fMbHuViAo2BJol4mFxGlYOsFL4COlu+fBVTYDPLy3Qa4pdMC1hMkvZkZKpYKpHrxYiwbZ6yUTYJQ==}
 
   '@alloc/quick-lru@5.2.0':
     resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
@@ -3989,16 +3978,6 @@ packages:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
 snapshots:
-
-  '@adapty/capacitor@3.17.1(@capacitor/core@8.4.0)':
-    dependencies:
-      '@adapty/core': 3.17.2
-      '@capacitor/core': 8.4.0
-      tslib: 2.8.1
-
-  '@adapty/core@3.17.2':
-    dependencies:
-      tslib: 2.8.1
 
   '@alloc/quick-lru@5.2.0': {}
 

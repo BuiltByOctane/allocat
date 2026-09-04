@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     template: "%s · AlloCat",
   },
   description:
-    "AlloCat is a minimalist, offline-first personal finance PWA. Track budgets, debts, goals, and net worth in INR with AI-powered insights. Free 40-day trial, then ₹79/mo or ₹699/yr.",
+    "AlloCat is a minimalist, offline-first personal finance PWA. Track budgets, debts, goals, and net worth with AI-powered insights. Free forever — no subscription, no ads, no in-app purchases.",
   applicationName: "AlloCat",
   keywords: [
     "allocat",
@@ -141,12 +141,11 @@ const jsonLd = {
       description:
         "Minimalist, offline-first personal finance PWA. Track budgets, debts, goals, and net worth with AI-powered insights.",
       offers: {
-        "@type": "AggregateOffer",
+        "@type": "Offer",
+        price: "0",
         priceCurrency: "INR",
-        lowPrice: "79",
-        highPrice: "699",
-        offerCount: "2",
-        description: "Free 40-day trial. Monthly ₹79 or yearly ₹699.",
+        availability: "https://schema.org/InStock",
+        description: "Free forever. No subscription and no in-app purchases.",
       },
     },
   ],

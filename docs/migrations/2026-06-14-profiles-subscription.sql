@@ -1,3 +1,7 @@
+-- ⚠️ SUPERSEDED (2026-07-29). AlloCat is free for everyone; the subscription
+-- system was removed. These columns still exist in the database but nothing
+-- reads them. See docs/migrations/2026-07-29-supporters.sql. Kept for history.
+--
 -- Subscription + free-trial state on profiles.
 -- Single source of truth for entitlement: derived client- and server-side by
 -- lib/subscription/entitlement.ts. A native purchase (Adapty/Play) updates these

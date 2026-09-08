@@ -160,6 +160,11 @@ interface ExecOptions {
   results?: Record<string, unknown>;
   /** make the whole bulk round trip throw */
   failBatch?: boolean;
+  /**
+   * Per-round-trip seam for executeItem: called once per attempt, so a test can
+   * fail the first N attempts and then succeed. Return value is the result.
+   */
+  respond?: (item: SyncQueueItem, payload: unknown) => unknown;
 }
 
 type BatchOutcome = { ok: true; result: unknown } | { ok: false; error: string };
@@ -175,6 +180,8 @@ class TestEngine extends (SyncEngine as unknown as {
       payloads: unknown[],
     ): Promise<BatchOutcome[]>;
     retryDelayMs(retries: number): number;
+    transientDelayMs(retries: number): number;
+    getPendingCount(): Promise<number>;
   };
 }) {
   /** One entry per bulk round trip: the recordIds it carried. */
@@ -195,6 +202,12 @@ class TestEngine extends (SyncEngine as unknown as {
   // Small backoff so retry tests don't wait real seconds.
   retryDelayMs(): number {
     return 10;
+  }
+
+  // Zero backoff for transient (network) retries — otherwise a drain that
+  // keeps retrying past the old MAX_RETRIES would hang the test on real timers.
+  transientDelayMs(): number {
+    return 0;
   }
 
   async executeBatch(
@@ -229,6 +242,9 @@ class TestEngine extends (SyncEngine as unknown as {
       await delay(this.opts.latency ?? 20);
       if (this.opts.failRecordIds?.has(item.recordId)) {
         throw new Error("simulated failure");
+      }
+      if (this.opts.respond) {
+        return this.opts.respond(item, payload);
       }
       if (this.opts.results && item.recordId in this.opts.results) {
         return this.opts.results[item.recordId];
@@ -914,5 +930,58 @@ describe("SyncEngine supersede collapsing", () => {
     await engine.processQueue();
 
     expect(engine.order.sort()).toEqual(["UPDATE:a1#1", "UPDATE:a2#2"]);
+  });
+});
+
+describe("SyncEngine transient failures never roll back", () => {
+  beforeEach(() => {
+    resetDB();
+    vi.stubGlobal("navigator", { onLine: true });
+  });
+
+  it("keeps retrying past MAX_RETRIES on a network failure, never rolls back, and eventually syncs", async () => {
+    tables.assets.rows.push({ id: "temp_n" });
+    seed([
+      {
+        table: "assets",
+        operation: "INSERT",
+        recordId: "temp_n",
+        tempId: "temp_n",
+        payload: {},
+        createdAt: 0,
+      },
+    ]);
+    const rolledBack: string[] = [];
+    let calls = 0;
+    const engine = new TestEngine({
+      latency: 0,
+      // executeItem seam: fail the first 5 round trips with a fetch-style
+      // TypeError (the way fetch() rejects on a network failure), then succeed.
+      respond: () => {
+        calls++;
+        if (calls <= 5) throw new TypeError("Failed to fetch");
+        return { id: "real_n" };
+      },
+    });
+    engine.setCallbacks({
+      onRollback: (item: SyncQueueItem) => rolledBack.push(item.recordId),
+    });
+
+    await engine.processQueue();
+
+    // Never rolled back, however many transient failures preceded success.
+    expect(rolledBack).toEqual([]);
+
+    const q = tables.sync_queue.rows.find((r) => r.recordId === "temp_n");
+    // Went well past the old MAX_RETRIES (3) without ever landing on "failed".
+    expect(q?.retries).toBeGreaterThanOrEqual(3);
+    expect(q?.status).toBe("done");
+
+    // The item eventually synced: id_map maps temp_n → real_n, and the
+    // optimistic row was reconciled to the real id (never simply deleted/lost).
+    expect(tables.id_map.rows.find((r) => r.tempId === "temp_n")?.realId).toBe(
+      "real_n"
+    );
+    expect(tables.assets.rows.map((r) => r.id)).toEqual(["real_n"]);
   });
 });

@@ -1,6 +1,7 @@
 import { getDB, type SyncQueueItem, type SyncTable } from "@/lib/db";
 import { reconcileInsertReplacement } from "@/lib/sync/reconcile";
 import { MAX_BULK_INGEST } from "@/lib/sms/bulkIngest";
+import { isTransientSyncError, transientBackoffMs } from "@/lib/sync/errors";
 import {
   addBudgetCategory,
   updateBudgetTotal,
@@ -661,7 +662,7 @@ export class SyncEngine {
       outcomes = await this.executeBatch(group, payloads);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Bulk sync failed";
-      for (const item of group) await this.applyFailure(item, msg);
+      for (const item of group) await this.applyFailure(item, msg, err);
       await this.notifyPendingChange();
       return;
     }
@@ -763,7 +764,8 @@ export class SyncEngine {
     } catch (err) {
       await this.applyFailure(
         item,
-        err instanceof Error ? err.message : "Sync failed"
+        err instanceof Error ? err.message : "Sync failed",
+        err
       );
       await this.notifyPendingChange();
     }
@@ -824,13 +826,32 @@ export class SyncEngine {
   /**
    * Handle ONE failed round trip: retry with backoff, or — out of retries —
    * fail permanently and roll the optimistic state back.
+   *
+   * `cause` is the raw thrown error, and is passed ONLY when the request never
+   * got a verdict. A per-item `outcome.error` from a bulk action is a real
+   * answer from the server, so it must stay on the bounded retry → rollback
+   * path; see isTransientSyncError.
    */
   private async applyFailure(
     item: SyncQueueItem,
-    errMsg: string
+    errMsg: string,
+    cause?: unknown
   ): Promise<void> {
     const db = getDB();
     const nextRetries = item.retries + 1;
+
+    if (cause !== undefined && isTransientSyncError(cause)) {
+      // No verdict from the server — offline, DNS/TLS failure, 5xx, a timeout.
+      // Keep the optimistic row and retry forever with a capped backoff: a
+      // network blip must never cost the user their data.
+      await db.sync_queue.update(item.id as number, {
+        status: "pending",
+        retries: nextRetries,
+        lastError: errMsg,
+        nextAttemptAt: Date.now() + this.transientDelayMs(nextRetries),
+      });
+      return;
+    }
 
     if (nextRetries >= MAX_RETRIES) {
       await db.sync_queue.update(item.id as number, {
@@ -852,9 +873,14 @@ export class SyncEngine {
     });
   }
 
-  /** Backoff before a retry. Overridable in tests. */
+  /** Backoff before a retry (permanent-track failures). Overridable in tests. */
   protected retryDelayMs(retries: number): number {
     return Math.pow(2, retries) * 1000;
+  }
+
+  /** Backoff for transient (network) failures. Overridable in tests. */
+  protected transientDelayMs(retries: number): number {
+    return transientBackoffMs(retries);
   }
 
   /**

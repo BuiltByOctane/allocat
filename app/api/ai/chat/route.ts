@@ -1,6 +1,7 @@
 import { buildFinancialContext } from "@/lib/actions/ai-chat";
 import { detectTopic } from "@/lib/ai-utils";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/supabase/session";
 import { createServiceClient } from "@/lib/supabase/service";
 import { openRouterChat } from "@/lib/server/openrouter";
 import { rateLimit } from "@/lib/server/rateLimit";
@@ -37,9 +38,7 @@ const DAILY_AI_MESSAGES = 30;
 
 export async function POST(req: Request) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
   if (!user) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
   }

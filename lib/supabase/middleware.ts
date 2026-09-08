@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { getSessionUser } from "@/lib/supabase/session";
 
 /**
  * Requests that must NOT pay for an auth round trip.
@@ -48,10 +49,9 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // refreshing the auth token
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Refreshes the token if needed and verifies it locally against the cached
+  // JWKS — no round trip to Supabase Auth on projects with signing keys.
+  const user = await getSessionUser(supabase);
 
   // Redirect logic: simple protection for /auth vs app routes
   const isAuthRoute = request.nextUrl.pathname.startsWith("/auth");

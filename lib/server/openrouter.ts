@@ -19,12 +19,21 @@ export function openRouterChat(opts: {
   stream?: boolean;
   /** Ask the model to return a JSON object (insight). */
   json?: boolean;
-  /** Abort the upstream request after this long. Default 45s. */
+  /** Abort if the upstream sends no response headers within this long. Default 45s. */
   timeoutMs?: number;
 }): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(new DOMException("OpenRouter request timed out", "TimeoutError")),
+    opts.timeoutMs ?? 45_000,
+  );
+  // Node keeps the event loop alive for a pending timer; this one must never
+  // hold a serverless invocation open on its own.
+  timer.unref?.();
+
   return fetch(OPENROUTER_URL, {
     method: "POST",
-    signal: AbortSignal.timeout(opts.timeoutMs ?? 45_000),
+    signal: controller.signal,
     headers: {
       Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
       "HTTP-Referer": "https://allocat.xyz",
@@ -37,5 +46,19 @@ export function openRouterChat(opts: {
       ...(opts.json ? { response_format: { type: "json_object" } } : {}),
       messages: opts.messages,
     }),
-  });
+  }).then(
+    (res) => {
+      // The signal stays bound to the whole fetch, body included. For a streamed
+      // completion the body legitimately outlives the timeout, so once headers
+      // prove the upstream is alive we disarm — otherwise a working answer gets
+      // cut off mid-stream. Non-streaming callers read the body immediately, so
+      // their timer stays armed and still guards a hung body.
+      if (opts.stream) clearTimeout(timer);
+      return res;
+    },
+    (err) => {
+      clearTimeout(timer);
+      throw err;
+    },
+  );
 }

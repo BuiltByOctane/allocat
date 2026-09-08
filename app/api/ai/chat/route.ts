@@ -173,7 +173,7 @@ export async function POST(req: Request) {
       messages: [{ role: "system", content: systemPrompt }, ...windowedMessages],
     });
   } catch (err) {
-    console.error("[ai/chat] upstream fetch failed:", err);
+    console.error("[ai/chat] upstream fetch failed:", err instanceof Error ? err.name : err, err);
     return new Response(JSON.stringify({ error: "upstream_unavailable" }), {
       status: 503,
       headers: { "content-type": "application/json" },

@@ -13,6 +13,7 @@
  */
 import { getAuthedUser } from "@/lib/supabase/server";
 import { openRouterChat } from "@/lib/server/openrouter";
+import { rateLimit } from "@/lib/server/rateLimit";
 import {
   MONTHLY_SUMMARY_SYSTEM,
   buildMonthlySummaryPrompt,
@@ -28,6 +29,8 @@ export async function generateMonthlySummary(
 
     const user = await getAuthedUser();
     if (!user) return null;
+
+    if (!rateLimit(`monthly-summary:${user.id}`, 10, 60 * 60 * 1000).ok) return null;
 
     const res = await openRouterChat({
       messages: [

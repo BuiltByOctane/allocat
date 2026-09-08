@@ -9,6 +9,7 @@
  */
 import { getAuthedUser } from "@/lib/supabase/server";
 import { openRouterChat } from "@/lib/server/openrouter";
+import { rateLimit } from "@/lib/server/rateLimit";
 import {
   INSIGHT_SYSTEM,
   buildInsightPrompt,
@@ -24,6 +25,10 @@ export async function generateWeeklyInsight(
 
     const user = await getAuthedUser();
     if (!user) return null;
+
+    // The client caches the result for a week; anything above a handful per
+    // hour is a loop, not a user.
+    if (!rateLimit(`insight:${user.id}`, 5, 60 * 60 * 1000).ok) return null;
 
     const res = await openRouterChat({
       json: true,

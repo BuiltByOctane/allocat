@@ -6,6 +6,27 @@ const nextConfig: NextConfig = {
   // http://<mac-ip>:3000), so /_next/* requests arrive cross-origin. Whitelist
   // private-LAN ranges so Next's dev cross-origin guard doesn't block them.
   allowedDevOrigins: ["10.168.3.228", "192.168.1.20", "192.168.1.3"],
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          // The app is never framed (Capacitor loads it top-level).
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains; preload",
+          },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=(), payment=()",
+          },
+        ],
+      },
+    ];
+  },
   experimental: {
     // Next 15+ stopped reusing page segments from the client Router Cache on
     // forward <Link>/router nav (default staleTimes.dynamic = 0). That made

@@ -98,6 +98,8 @@ type DebtUpdate = Partial<{
   total_paid: number;
   total_repayable: number;
   icon: string;
+  color: string | null;
+  type: "internal" | "external" | "lent";
 }>;
 
 export async function updateDebt(id: string, updates: DebtUpdate) {
@@ -117,6 +119,8 @@ export async function updateDebt(id: string, updates: DebtUpdate) {
     "total_paid",
     "total_repayable",
     "icon",
+    "color",
+    "type",
   ]);
 
   // Recalculate total_repayable if any relevant field changed

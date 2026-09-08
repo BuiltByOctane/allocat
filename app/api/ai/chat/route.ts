@@ -17,6 +17,9 @@ import {
   SSE_HEADERS,
 } from "@/lib/ai/guard";
 
+// Streaming responses can outlive the platform's default function timeout.
+export const maxDuration = 60;
+
 // Max number of previous messages to retain in the window (system prompt excluded)
 const HISTORY_WINDOW = 8;
 
@@ -163,15 +166,25 @@ export async function POST(req: Request) {
   const windowedMessages = userMessages.slice(-HISTORY_WINDOW);
 
   // ── 6. Call OpenRouter ────────────────────────────────────────────────────
-  const openRouterRes = await openRouterChat({
-    stream: true,
-    messages: [{ role: "system", content: systemPrompt }, ...windowedMessages],
-  });
+  let openRouterRes: Response;
+  try {
+    openRouterRes = await openRouterChat({
+      stream: true,
+      messages: [{ role: "system", content: systemPrompt }, ...windowedMessages],
+    });
+  } catch (err) {
+    console.error("[ai/chat] upstream fetch failed:", err);
+    return new Response(JSON.stringify({ error: "upstream_unavailable" }), {
+      status: 503,
+      headers: { "content-type": "application/json" },
+    });
+  }
 
   if (!openRouterRes.ok || !openRouterRes.body) {
-    const err = await openRouterRes.text();
-    return new Response(JSON.stringify({ error: err }), {
-      status: openRouterRes.status,
+    console.error("[ai/chat] upstream status", openRouterRes.status, await openRouterRes.text());
+    return new Response(JSON.stringify({ error: "upstream_error" }), {
+      status: openRouterRes.status === 429 ? 429 : 502,
+      headers: { "content-type": "application/json" },
     });
   }
 

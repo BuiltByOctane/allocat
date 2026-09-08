@@ -19,9 +19,12 @@ export function openRouterChat(opts: {
   stream?: boolean;
   /** Ask the model to return a JSON object (insight). */
   json?: boolean;
+  /** Abort the upstream request after this long. Default 45s. */
+  timeoutMs?: number;
 }): Promise<Response> {
   return fetch(OPENROUTER_URL, {
     method: "POST",
+    signal: AbortSignal.timeout(opts.timeoutMs ?? 45_000),
     headers: {
       Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
       "HTTP-Referer": "https://allocat.xyz",

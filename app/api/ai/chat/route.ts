@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { openRouterChat } from "@/lib/server/openrouter";
 import { rateLimit } from "@/lib/server/rateLimit";
+import { getServerFlags } from "@/lib/config/serverFlags";
 import {
   createLeakGuardStream,
   isOffTopic,
@@ -27,6 +28,8 @@ const RATE_WINDOW_MS = 5 * 60 * 1000;
 // The real quota. AI is free for everyone, but the model isn't free to run, so
 // each account gets a durable per-day message allowance counted in Postgres.
 // Same number for supporters — supporting AlloCat unlocks nothing.
+// This is the fallback; the live value is the `daily_ai_messages` runtime flag,
+// so the ceiling can be moved from the admin portal without a redeploy.
 const DAILY_AI_MESSAGES = 30;
 
 export async function POST(req: Request) {
@@ -37,6 +40,17 @@ export async function POST(req: Request) {
   if (!user) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
   }
+
+  // Kill switch + live quota (lib/config/flags.ts). Memoised for a minute, and
+  // fails open to the compiled-in defaults.
+  const flags = await getServerFlags();
+  if (!flags.ai_enabled) {
+    return new Response(JSON.stringify({ error: "ai_disabled" }), {
+      status: 503,
+      headers: { "content-type": "application/json" },
+    });
+  }
+  const dailyLimit = flags.daily_ai_messages || DAILY_AI_MESSAGES;
 
   const limited = rateLimit(`ai-chat:${user.id}`, RATE_LIMIT, RATE_WINDOW_MS);
   if (!limited.ok) {
@@ -53,9 +67,9 @@ export async function POST(req: Request) {
     const { data: used, error } = await createServiceClient().rpc("increment_ai_usage", {
       p_user: user.id,
     });
-    if (!error && typeof used === "number" && used > DAILY_AI_MESSAGES) {
+    if (!error && typeof used === "number" && used > dailyLimit) {
       return new Response(
-        JSON.stringify({ error: "daily_limit", limit: DAILY_AI_MESSAGES }),
+        JSON.stringify({ error: "daily_limit", limit: dailyLimit }),
         { status: 429, headers: { "content-type": "application/json" } },
       );
     }

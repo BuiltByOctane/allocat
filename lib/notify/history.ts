@@ -23,6 +23,8 @@ const MAX = 50;
 const TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 export interface NotificationInput {
+  /** Optional stable ID for a notification received from a remote transport. */
+  id?: string;
   kind: NotifKind;
   title: string;
   body: string;
@@ -35,7 +37,7 @@ export async function recordNotification(entry: NotificationInput): Promise<void
     const db = getDB();
     const now = Date.now();
     await db.notifications.add({
-      id: randomUUID(), // plain uuid — never touches the sync engine
+      id: entry.id ?? randomUUID(), // plain uuid — never touches the sync engine
       kind: entry.kind,
       title: entry.title,
       body: entry.body,

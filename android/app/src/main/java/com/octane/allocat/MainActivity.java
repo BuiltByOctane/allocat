@@ -65,12 +65,19 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
-    /** A tapped transaction notification carries a deep-link; the web layer
-     *  consumes it via SmsReader.consumeDeepLink() to land on /sms. */
+    /**
+     * A tapped native SMS notification carries `deeplink`; an FCM admin
+     * broadcast carries `url`. Save either while the WebView starts so the web
+     * layer can consume it via SmsReader.consumeDeepLink(). This also covers a
+     * cold launch, where Capacitor's push action listener has not loaded yet.
+     */
     private void stashDeepLink(Intent intent) {
         if (intent == null) return;
         String url = intent.getStringExtra("deeplink");
-        if (url != null) {
+        if (url == null) url = intent.getStringExtra("url");
+        // Only allow an in-app path; the server owns broadcast payloads, but
+        // this guards against a malformed or externally-crafted launch intent.
+        if (url != null && url.startsWith("/")) {
             getSharedPreferences("allocat_sms", Context.MODE_PRIVATE)
                 .edit()
                 .putString("pending_deeplink", url)

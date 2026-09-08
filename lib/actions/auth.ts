@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { updateAppMode } from "@/lib/actions/profile";
 
 export async function login(formData: FormData) {
   const email = formData.get("email") as string;
@@ -20,8 +19,6 @@ export async function login(formData: FormData) {
   if (error) {
     return { error: error.message };
   }
-
-  await updateAppMode("web");
 
   revalidatePath("/", "layout");
   redirect("/dashboard");

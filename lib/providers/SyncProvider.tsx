@@ -340,6 +340,36 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     };
   }, [refreshFromServer]);
 
+  // Stamp `profiles.last_seen_at` + `last_app_mode` at most once per UTC day.
+  // `activity_logs` only records mutations, so without this a user who opens the
+  // app daily just to read their budget is invisible in the admin portal's
+  // DAU/WAU numbers. The day key is written only on success, so an offline
+  // launch retries later.
+  //
+  // This is also the ONLY place the platform gets recorded: the native shell is
+  // a Capacitor WebView of this same app, so login and the OAuth callback run
+  // identical server code on both platforms and cannot tell them apart. Only the
+  // client knows, via Capacitor.isNativePlatform().
+  useEffect(() => {
+    const KEY = "allocat-last-seen-day";
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      if (localStorage.getItem(KEY) === today) return;
+    } catch {
+      return;
+    }
+    const mode = Capacitor.isNativePlatform() ? "android" : "web";
+    void import("@/lib/actions/profile")
+      .then(({ touchLastSeen }) => touchLastSeen(mode))
+      .then((res) => {
+        if (res?.error) return;
+        try {
+          localStorage.setItem(KEY, today);
+        } catch {}
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <SyncContext.Provider value={{ pendingCount, isOnline, isHydrated, engine }}>
       {children}

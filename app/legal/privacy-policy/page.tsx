@@ -7,7 +7,7 @@ export const metadata = {
   alternates: { canonical: "https://allocat.xyz/legal/privacy-policy" },
 };
 
-const UPDATED = "7 July 2026";
+const UPDATED = "8 September 2026";
 
 export default function PrivacyPolicyPage() {
   return (
@@ -99,6 +99,23 @@ export default function PrivacyPolicyPage() {
           budgets and spending, syncing across your devices, and sending you
           notifications you have enabled (for example, a budget-limit alert). We do
           not use it for advertising or marketing, and we do not sell it.
+        </p>
+      </Section>
+
+      <Section title="Website analytics">
+        <p>
+          Our marketing site (grow.allocat.xyz) counts page views and clicks on
+          the download, sign-in and donate buttons so we can tell whether the page
+          is doing its job. These counts are <strong>anonymous</strong>: we record
+          the event name, a coarse device type (Android, iOS or desktop), the page
+          path, and the hostname of the site you arrived from. We do{" "}
+          <strong>not</strong> set cookies, use any third-party analytics service,
+          or store your IP address, and nothing recorded can be linked back to you
+          or to an AlloCat account.
+        </p>
+        <p>
+          The AlloCat app itself contains no analytics or tracking SDKs of any
+          kind.
         </p>
       </Section>
 

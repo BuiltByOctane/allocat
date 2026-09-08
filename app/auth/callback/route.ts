@@ -20,12 +20,6 @@ export async function GET(request: Request) {
           .eq("id", user.id)
           .single();
 
-        // Stamp this session as coming from the web app
-        await supabase
-          .from("profiles")
-          .update({ last_app_mode: "web" })
-          .eq("id", user.id);
-
         if (!profile || !profile.is_onboarded) {
           next = "/onboarding";
         }

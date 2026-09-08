@@ -1,4 +1,5 @@
 import { clearDB } from "@/lib/db/hydrate";
+import { FCM_TOKEN_KEY } from "@/components/pwa/PushRegistration";
 
 /**
  * localStorage keys holding per-account / personal state. Cleared on logout and
@@ -23,6 +24,7 @@ export const ACCOUNT_SCOPED_LS_KEYS = [
   "push-prompt-dismissed",
   "mobile-hint-dismissed",
   "allocat-quiz-draft",
+  "allocat-last-seen-day",
 ] as const;
 
 /** Removes the account-scoped keys from the given storage. Pure — testable. */
@@ -40,6 +42,21 @@ export function clearAccountLocalStorage(storage: Pick<Storage, "removeItem">): 
  * effort: never throws.
  */
 export async function clearClientSession(): Promise<void> {
+  // Drop this device's FCM token FIRST, while the session cookie is still
+  // valid — the server action authenticates the caller. Without this, a shared
+  // device keeps receiving broadcasts addressed to the previous account until
+  // someone signs in again and the token is reassigned.
+  try {
+    const token = window.localStorage.getItem(FCM_TOKEN_KEY);
+    if (token) {
+      const { unregisterFcmToken } = await import("@/lib/actions/push");
+      await unregisterFcmToken(token);
+      window.localStorage.removeItem(FCM_TOKEN_KEY);
+    }
+  } catch {
+    /* best effort — never block sign-out on this */
+  }
+
   try {
     await clearDB();
   } catch {

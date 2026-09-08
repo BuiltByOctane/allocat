@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "550561678383",
+    "project_id": "allocat-e9a40",
+    "storage_bucket": "allocat-e9a40.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:550561678383:android:d1bd1fe658d25413a7f2da",
+        "android_client_info": {
+          "package_name": "com.octane.allocat"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDyIRIrMC0ARAOGB9l3p7mdfsM7kIspX7E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

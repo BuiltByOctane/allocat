@@ -17,8 +17,8 @@ import {
   KOFI_URL,
   SUPPORT_WEB_URL,
   SUPPORT_CONTACT_EMAIL,
-  SUPPORT_CTA_ON_NATIVE,
 } from "@/lib/support/links";
+import { useAppFlags } from "@/lib/hooks/useAppFlags";
 
 const COSTS = [
   {
@@ -54,8 +54,11 @@ export default function SupportPage() {
   const [claiming, setClaiming] = useState(false);
   const [claimResult, setClaimResult] = useState<"none" | "found" | "missing">("none");
 
+  // DB-backed so the button can be pulled from an already-shipped Android build
+  // during a Play review, without a redeploy. Defaults to the build-time env.
+  const flags = useAppFlags();
   const isNative = Capacitor.isNativePlatform();
-  const showKofiButton = !isNative || SUPPORT_CTA_ON_NATIVE;
+  const showKofiButton = !isNative || flags.support_cta_native;
 
   async function openKofi() {
     haptic.light();

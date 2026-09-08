@@ -13,6 +13,7 @@ import { scheduleDebtReminders } from "@/lib/native/debtReminders";
 import { pushSmsMirrorToNative } from "@/lib/sms/nativeMirror";
 import { getDB } from "@/lib/db";
 import { useSyncContext } from "@/lib/providers/SyncProvider";
+import { useAppFlags } from "@/lib/hooks/useAppFlags";
 
 /**
  * Native-only bridge between the SMS plugin and the web ingest pipeline.
@@ -267,4 +268,21 @@ export function SmsBridge() {
   }, [isHydrated]);
 
   return null;
+}
+
+/**
+ * Mount gate for the whole SMS pipeline.
+ *
+ * `sms_enabled` is a runtime kill switch (lib/config/flags.ts) rather than an
+ * env var, because the thing that would need switching off lives in an
+ * already-shipped Android build. Unmounting the bridge stops live ingest, queue
+ * draining and the native rule mirror; the on-device native receiver keeps
+ * queueing, so nothing is lost when the flag goes back on.
+ *
+ * Gating here rather than inside SmsBridge keeps the bridge's hook order fixed.
+ */
+export function SmsBridgeGate() {
+  const { sms_enabled } = useAppFlags();
+  if (!sms_enabled) return null;
+  return <SmsBridge />;
 }

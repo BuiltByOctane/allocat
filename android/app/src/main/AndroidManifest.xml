@@ -27,6 +27,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- FCM broadcasts set this as android.notification.click_action.
+                 Without a matching activity intent filter Android has no
+                 destination for the banner tap. The `url` data extra is then
+                 saved by MainActivity for the web layer to navigate to. -->
+            <intent-filter>
+                <action android:name="FCM_PLUGIN_ACTIVITY" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
             <!-- OAuth deep link: returns from the Google sign-in Custom Tab. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -58,6 +67,22 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- FCM defaults for admin broadcast pushes. Without an explicit icon
+             Android draws a plain white square for the small icon; without a
+             default channel id, notifications on O+ land in a generic
+             "Miscellaneous" channel the user cannot meaningfully control.
+             Matches the LocalNotifications config in capacitor.config.ts so
+             pushes and on-device alerts look identical in the shade. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notif_accent" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="allocat-broadcast-v2" />
     </application>
 
     <!-- Permissions -->

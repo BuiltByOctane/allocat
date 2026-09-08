@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { logActivity } from "@/lib/server/activity-logger";
 import { notifyUser } from "@/lib/server/push-notify";
 
@@ -13,20 +14,6 @@ interface PushSubscriptionInput {
   endpoint: string;
   keys: PushKeys;
 }
-
-type RawSupabase = {
-  from: (t: "push_subscriptions") => {
-    upsert: (
-      vals: Record<string, unknown>,
-      opts?: { onConflict?: string },
-    ) => Promise<{ error: { message: string } | null }>;
-    delete: () => {
-      eq: (k: string, v: string) => {
-        eq: (k: string, v: string) => Promise<{ error: { message: string } | null }>;
-      };
-    };
-  };
-};
 
 async function getAuthed() {
   const supabase = await createClient();
@@ -46,9 +33,8 @@ export async function subscribePush(
   }
 
   const { supabase, user } = await getAuthed();
-  const raw = supabase as unknown as RawSupabase;
 
-  const { error } = await raw.from("push_subscriptions").upsert(
+  const { error } = await supabase.from("push_subscriptions").upsert(
     {
       user_id: user.id,
       endpoint: sub.endpoint,
@@ -75,9 +61,8 @@ export async function subscribePush(
 export async function unsubscribePush(endpoint: string) {
   if (!endpoint) throw new Error("Missing endpoint");
   const { supabase, user } = await getAuthed();
-  const raw = supabase as unknown as RawSupabase;
 
-  const { error } = await raw
+  const { error } = await supabase
     .from("push_subscriptions")
     .delete()
     .eq("endpoint", endpoint)
@@ -95,5 +80,49 @@ export async function sendTestPush() {
     tag: "test",
     url: "/dashboard",
   });
+  return { ok: true };
+}
+
+/* ── FCM (native Android) ────────────────────────────────────────────────────
+ * Web Push and FCM are separate transports: the Capacitor WebView has no Web
+ * Push API, so the native app registers an FCM token here instead of a
+ * push_subscriptions row. See lib/server/fcm.ts.
+ * ───────────────────────────────────────────────────────────────────────────*/
+
+export async function registerFcmToken(token: string, appVersion?: string) {
+  if (!token || token.length > 500) throw new Error("Invalid FCM token");
+  const { user } = await getAuthed();
+
+  // Service client, not the caller's: keyed on the token, so when a device that
+  // was signed into a DIFFERENT account re-registers, the row must be reassigned
+  // to the current user. The row-owner RLS policy would reject that update,
+  // leaving the old account still receiving this device's pushes. The user is
+  // already authenticated above and user_id is taken from the session, never
+  // from the request, so this cannot be used to write someone else's row.
+  const { error } = await createServiceClient().from("fcm_tokens").upsert(
+    {
+      token,
+      user_id: user.id,
+      platform: "android",
+      app_version: appVersion ?? null,
+      last_used_at: new Date().toISOString(),
+    },
+    { onConflict: "token" },
+  );
+
+  if (error) throw new Error(error.message);
+  return { ok: true };
+}
+
+/** Called on sign-out so a shared device stops receiving the old account's pushes. */
+export async function unregisterFcmToken(token: string) {
+  if (!token) return { ok: true };
+  const { user } = await getAuthed();
+  const { error } = await createServiceClient()
+    .from("fcm_tokens")
+    .delete()
+    .eq("token", token)
+    .eq("user_id", user.id);
+  if (error) throw new Error(error.message);
   return { ok: true };
 }

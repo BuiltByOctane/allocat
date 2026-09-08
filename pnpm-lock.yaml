@@ -32,6 +32,9 @@ importers:
       '@capacitor/local-notifications':
         specifier: ^8.2.0
         version: 8.2.0(@capacitor/core@8.4.0)
+      '@capacitor/push-notifications':
+        specifier: ^8.1.2
+        version: 8.1.2(@capacitor/core@8.4.0)
       '@capacitor/splash-screen':
         specifier: ^8.0.1
         version: 8.0.1(@capacitor/core@8.4.0)
@@ -238,6 +241,11 @@ packages:
 
   '@capacitor/local-notifications@8.2.0':
     resolution: {integrity: sha512-fvLY0w2w4MiX+DD4+Wv4DOwOLdzKZsMDwAcRv/Juudd+QbKbn69s6cM3xVqPwAiDqfnqsY4/S8xtQD6M73wY2A==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
+
+  '@capacitor/push-notifications@8.1.2':
+    resolution: {integrity: sha512-TQl4XxqJfNF+KbSYBFMXYYT5WXUaleVKXlByhh/8+KySMVNjp+l5OqAUoGe/sY1IAnGXEuUeCjA/WLZEVvGwrA==}
     peerDependencies:
       '@capacitor/core': '>=8.0.0'
 
@@ -4128,6 +4136,10 @@ snapshots:
       '@capacitor/core': 8.4.0
 
   '@capacitor/local-notifications@8.2.0(@capacitor/core@8.4.0)':
+    dependencies:
+      '@capacitor/core': 8.4.0
+
+  '@capacitor/push-notifications@8.1.2(@capacitor/core@8.4.0)':
     dependencies:
       '@capacitor/core': 8.4.0
 

@@ -20,6 +20,7 @@ export type Database = {
           is_supporter: boolean
           supporter_since: string | null
           last_app_mode: "web" | "android" | null
+          last_seen_at: string | null
           created_at: string
           updated_at: string
         }
@@ -33,6 +34,7 @@ export type Database = {
           is_supporter?: boolean
           supporter_since?: string | null
           last_app_mode?: "web" | "android" | null
+          last_seen_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -45,6 +47,7 @@ export type Database = {
           is_supporter?: boolean
           supporter_since?: string | null
           last_app_mode?: "web" | "android" | null
+          last_seen_at?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -614,6 +617,7 @@ export type Database = {
           app_version: string | null
           platform: string | null
           created_at: string
+          resolved_at: string | null
         }
         Insert: {
           id?: string
@@ -623,10 +627,12 @@ export type Database = {
           app_version?: string | null
           platform?: string | null
           created_at?: string
+          resolved_at?: string | null
         }
         Update: {
           kind?: "bug" | "feature" | "feedback"
           message?: string
+          resolved_at?: string | null
         }
         Relationships: []
       }
@@ -635,15 +641,18 @@ export type Database = {
           id: number
           min_android_version_code: number
           update_message: string | null
+          flags: Json
         }
         Insert: {
           id?: number
           min_android_version_code?: number
           update_message?: string | null
+          flags?: Json
         }
         Update: {
           min_android_version_code?: number
           update_message?: string | null
+          flags?: Json
         }
         Relationships: []
       }
@@ -695,6 +704,152 @@ export type Database = {
         }
         Relationships: []
       }
+      push_subscriptions: {
+        Row: {
+          id: string
+          user_id: string
+          endpoint: string
+          p256dh: string
+          auth: string
+          user_agent: string | null
+          last_used_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          endpoint: string
+          p256dh: string
+          auth: string
+          user_agent?: string | null
+          last_used_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          p256dh?: string
+          auth?: string
+          user_agent?: string | null
+          last_used_at?: string | null
+        }
+        Relationships: []
+      }
+      fcm_tokens: {
+        Row: {
+          token: string
+          user_id: string
+          platform: string
+          app_version: string | null
+          created_at: string
+          last_used_at: string | null
+        }
+        Insert: {
+          token: string
+          user_id: string
+          platform?: string
+          app_version?: string | null
+          created_at?: string
+          last_used_at?: string | null
+        }
+        Update: {
+          platform?: string
+          app_version?: string | null
+          last_used_at?: string | null
+        }
+        Relationships: []
+      }
+      user_active_days: {
+        Row: {
+          user_id: string
+          day: string
+        }
+        Insert: {
+          user_id: string
+          day?: string
+        }
+        Update: {
+          day?: string
+        }
+        Relationships: []
+      }
+      landing_events: {
+        Row: {
+          id: string
+          event: string
+          platform: string | null
+          path: string | null
+          referrer: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          event: string
+          platform?: string | null
+          path?: string | null
+          referrer?: string | null
+          created_at?: string
+        }
+        Update: {
+          event?: string
+        }
+        Relationships: []
+      }
+      play_install_stats: {
+        Row: {
+          day: string
+          package: string
+          daily_device_installs: number | null
+          daily_device_uninstalls: number | null
+          active_device_installs: number | null
+          total_user_installs: number | null
+          synced_at: string
+        }
+        Insert: {
+          day: string
+          package: string
+          daily_device_installs?: number | null
+          daily_device_uninstalls?: number | null
+          active_device_installs?: number | null
+          total_user_installs?: number | null
+          synced_at?: string
+        }
+        Update: {
+          daily_device_installs?: number | null
+          daily_device_uninstalls?: number | null
+          active_device_installs?: number | null
+          total_user_installs?: number | null
+          synced_at?: string
+        }
+        Relationships: []
+      }
+      push_campaigns: {
+        Row: {
+          id: string
+          title: string
+          body: string
+          url: string | null
+          segment: string
+          sent_count: number
+          failed_count: number
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          title: string
+          body: string
+          url?: string | null
+          segment: string
+          sent_count?: number
+          failed_count?: number
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          sent_count?: number
+          failed_count?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -703,6 +858,50 @@ export type Database = {
       increment_ai_usage: {
         Args: { p_user: string }
         Returns: number
+      }
+      admin_overview: {
+        Args: Record<string, never>
+        Returns: Json
+      }
+      admin_daily_series: {
+        Args: { p_days?: number }
+        Returns: Array<{
+          day: string
+          signups: number
+          active_users: number
+          engaged_users: number
+          ai_messages: number
+          sms_txns: number
+          play_clicks: number
+          installs: number
+          uninstalls: number
+        }>
+      }
+      admin_user_search: {
+        Args: { p_q: string; p_limit?: number }
+        Returns: Array<{
+          id: string
+          email: string
+          full_name: string
+          is_onboarded: boolean
+          is_supporter: boolean
+          last_app_mode: string | null
+          currency: string
+          created_at: string
+          last_seen_at: string | null
+        }>
+      }
+      admin_user_detail: {
+        Args: { p_user: string }
+        Returns: Json
+      }
+      admin_feature_usage: {
+        Args: Record<string, never>
+        Returns: Json
+      }
+      admin_push_reach: {
+        Args: Record<string, never>
+        Returns: Json
       }
     }
     Enums: {

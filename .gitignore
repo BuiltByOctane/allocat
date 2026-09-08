@@ -53,3 +53,14 @@ android/app/keystore.properties
 /public/swe-worker-*.js.map
 /public/workbox-*.js
 /public/workbox-*.js.map
+
+# Service-account private keys. These are secrets and belong in .env.local as
+# base64 (PLAY_SA_JSON_B64 / FCM_SA_JSON_B64), never as loose files in the repo.
+# The real copies live in ~/.allocat-keys/.
+*-firebase-adminsdk-*.json
+*.iam.gserviceaccount.com.json
+allocat-*-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]*.json
+service-account*.json
+
+# Local env backups
+.env.local.bak-*

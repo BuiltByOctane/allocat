@@ -21,43 +21,44 @@ export interface PushPayload {
   url?: string;
 }
 
+/**
+ * Outcome of a send. Callers in product code ignore it, but anything that
+ * reports back to a human (the admin portal) must not treat "didn't throw" as
+ * "delivered" — every failure path here is deliberately silent so a missing
+ * VAPID key or a stale subscription can't break a budget save.
+ */
+export interface PushResult {
+  /** Subscriptions found for the user. 0 means the user has no push-capable device registered. */
+  subscriptions: number;
+  sent: number;
+  failed: number;
+  /** Why nothing was attempted, when nothing was. */
+  skipped?: "vapid_unconfigured" | "service_unavailable" | "query_failed" | "no_subscriptions";
+}
+
 export async function notifyUser(
   userId: string,
   payload: PushPayload,
-): Promise<void> {
+): Promise<PushResult> {
+  const none = (skipped: PushResult["skipped"]): PushResult => ({
+    subscriptions: 0,
+    sent: 0,
+    failed: 0,
+    skipped,
+  });
+
   if (!ensureConfigured()) {
     console.warn("[push-notify] VAPID env not set; skipping push.");
-    return;
+    return none("vapid_unconfigured");
   }
 
-  let client;
+  let supabase;
   try {
-    client = createServiceClient();
+    supabase = createServiceClient();
   } catch (err) {
     console.warn("[push-notify] service client unavailable:", err);
-    return;
+    return none("service_unavailable");
   }
-  const supabase = client as unknown as {
-    from: (
-      t: "push_subscriptions",
-    ) => {
-      select: (cols: string) => {
-        eq: (
-          k: string,
-          v: string,
-        ) => Promise<{
-          data: Array<{ id: string; endpoint: string; p256dh: string; auth: string }> | null;
-          error: { message: string } | null;
-        }>;
-      };
-      update: (vals: Record<string, unknown>) => {
-        eq: (k: string, v: string) => Promise<{ error: unknown }>;
-      };
-      delete: () => {
-        in: (k: string, v: string[]) => Promise<{ error: unknown }>;
-      };
-    };
-  };
 
   const { data: subs, error } = await supabase
     .from("push_subscriptions")
@@ -66,12 +67,14 @@ export async function notifyUser(
 
   if (error) {
     console.warn("[push-notify] fetch subs failed:", error.message);
-    return;
+    return none("query_failed");
   }
-  if (!subs?.length) return;
+  if (!subs?.length) return none("no_subscriptions");
 
   const body = JSON.stringify(payload);
   const stale: string[] = [];
+  let sent = 0;
+  let failed = 0;
 
   await Promise.allSettled(
     subs.map(async (s) => {
@@ -80,11 +83,13 @@ export async function notifyUser(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
           body,
         );
+        sent += 1;
         await supabase
           .from("push_subscriptions")
           .update({ last_used_at: new Date().toISOString() })
           .eq("id", s.id);
       } catch (err) {
+        failed += 1;
         const status = err instanceof WebPushError ? err.statusCode : 0;
         if (status === 404 || status === 410) {
           stale.push(s.endpoint);
@@ -98,4 +103,6 @@ export async function notifyUser(
   if (stale.length) {
     await supabase.from("push_subscriptions").delete().in("endpoint", stale);
   }
+
+  return { subscriptions: subs.length, sent, failed };
 }

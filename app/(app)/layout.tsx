@@ -6,7 +6,8 @@ import { SyncStatusBadge } from "@/components/ui/SyncStatusBadge";
 import { InstallPrompt } from "@/components/ui/InstallPrompt";
 import { BadgeUpdater } from "@/components/pwa/BadgeUpdater";
 import { PushPermissionPrompt } from "@/components/pwa/PushPermissionPrompt";
-import { SmsBridge } from "@/components/pwa/SmsBridge";
+import { SmsBridgeGate } from "@/components/pwa/SmsBridge";
+import { PushRegistration } from "@/components/pwa/PushRegistration";
 import { SheetScrollLock } from "@/components/pwa/SheetScrollLock";
 import { KeyboardInset } from "@/components/pwa/KeyboardInset";
 import { NativeSetup } from "@/components/pwa/NativeSetup";
@@ -51,7 +52,8 @@ export default async function AppLayout({
         </main>
         <InstallPrompt />
         <KeyboardInset />
-        <SmsBridge />
+        <SmsBridgeGate />
+        <PushRegistration />
         <SheetScrollLock />
         <TourPrompt />
         <NativeSetup />

@@ -39,7 +39,10 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/budget") ||
     request.nextUrl.pathname.startsWith("/net-worth") ||
     request.nextUrl.pathname.startsWith("/debt") ||
-    request.nextUrl.pathname.startsWith("/onboarding");
+    request.nextUrl.pathname.startsWith("/onboarding") ||
+    // Admin portal. The allowlist check itself lives in lib/admin/guard.ts and
+    // 404s non-admins; this only spares a signed-out visitor a blank render.
+    request.nextUrl.pathname.startsWith("/admin");
 
   if (!user && isProtectedAppRoute) {
     const url = request.nextUrl.clone();

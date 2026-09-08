@@ -64,3 +64,6 @@ service-account*.json
 
 # Local env backups
 .env.local.bak-*
+
+# SDD scratch (superpowers)
+.superpowers/

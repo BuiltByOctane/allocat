@@ -4,6 +4,7 @@ import { createClient, getAuthedUser } from "@/lib/supabase/server";
 import { logActivity, fmt, getUserCurrency } from "@/lib/server/activity-logger";
 import { calcTotalRepayable } from "@/lib/utils/debt-calc";
 import { upsertTodaySnapshot } from "@/lib/actions/asset-history";
+import { pick } from "@/lib/utils/pick";
 
 export async function getDebtData() {
   const supabase = await createClient();
@@ -103,6 +104,20 @@ export async function updateDebt(id: string, updates: DebtUpdate) {
   const supabase = await createClient();
   const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
+
+  updates = pick(updates, [
+    "name",
+    "principal",
+    "interest_rate",
+    "monthly_minimum",
+    "expected_payoff_date",
+    "is_closed",
+    "interest_type",
+    "loan_tenure_months",
+    "total_paid",
+    "total_repayable",
+    "icon",
+  ]);
 
   // Recalculate total_repayable if any relevant field changed
   const needsRecalc = (

@@ -5,6 +5,7 @@ import { upsertTodaySnapshot } from "./asset-history";
 import { computeMonthlyHistory } from "@/lib/utils/netWorthHistory";
 import { logActivity, fmt, getUserCurrency } from "@/lib/server/activity-logger";
 import { notifyUser } from "@/lib/server/push-notify";
+import { pick } from "@/lib/utils/pick";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function normalizeAsset(raw: any) {
@@ -163,12 +164,22 @@ export async function updateAsset(
   const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
+  const safe = pick(updates, [
+    "name",
+    "value",
+    "icon",
+    "color",
+    "category_id",
+    "is_goal",
+    "target_amount",
+  ]);
+
   // Toggling is_goal off clears goal-only fields
   const finalUpdates: Record<string, unknown> = {
-    ...updates,
+    ...safe,
     updated_at: new Date().toISOString(),
   };
-  if (updates.is_goal === false) {
+  if (safe.is_goal === false) {
     finalUpdates.target_amount = null;
     finalUpdates.achieved_at = null;
   }

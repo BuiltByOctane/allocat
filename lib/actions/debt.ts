@@ -5,6 +5,7 @@ import { logActivity, fmt, getUserCurrency } from "@/lib/server/activity-logger"
 import { calcTotalRepayable } from "@/lib/utils/debt-calc";
 import { upsertTodaySnapshot } from "@/lib/actions/asset-history";
 import { pick } from "@/lib/utils/pick";
+import { withCas } from "@/lib/actions/concurrency";
 
 export async function getDebtData() {
   const supabase = await createClient();
@@ -272,33 +273,42 @@ export async function makePayment(id: string, amount: number, options?: { suppre
   const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
-  const { data: debt } = await supabase
-    .from("debts")
-    .select("*")
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .single();
+  // Compare-and-swap on total_paid: budget-item cascades + SMS ingest can call
+  // makePayment concurrently for the same debt (SyncEngine drains 4 at a time);
+  // a plain read→write would drop one payment. The update is filtered on the
+  // value we read, so a lost race yields no row and we re-read.
+  const { debt, data } = await withCas(4, async () => {
+    const { data: debt } = await supabase
+      .from("debts")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .single();
+    if (!debt) throw new Error("Debt not found");
 
-  if (!debt) throw new Error("Debt not found");
+    const newTotalPaid = Number(debt.total_paid) + Number(amount);
+    const repayableTarget = Number(debt.total_repayable) > 0
+      ? Number(debt.total_repayable)
+      : Number(debt.principal);
+    const isClosed = newTotalPaid >= repayableTarget;
 
-  const newTotalPaid = Number(debt.total_paid) + Number(amount);
-  const repayableTarget = Number(debt.total_repayable) > 0
-    ? Number(debt.total_repayable)
-    : Number(debt.principal);
-  const isClosed = newTotalPaid >= repayableTarget;
+    const { data, error } = await supabase
+      .from("debts")
+      .update({
+        total_paid: newTotalPaid,
+        is_closed: isClosed || debt.is_closed
+      })
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .eq("total_paid", debt.total_paid)
+      .select()
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return null; // lost the race — re-read
+    return { debt, data };
+  });
 
-  const { data, error } = await supabase
-    .from("debts")
-    .update({
-      total_paid: newTotalPaid,
-      is_closed: isClosed || debt.is_closed
-    })
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .select()
-    .single();
-
-  if (error) throw new Error(error.message);
+  const newTotalPaid = Number(data.total_paid);
 
   if (!options?.suppressLog) {
     const cur = await getUserCurrency(supabase, user.id);

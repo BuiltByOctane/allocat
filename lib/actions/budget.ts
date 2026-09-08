@@ -10,6 +10,7 @@ import { makePayment, reverseDebtPayment } from "@/lib/actions/debt";
 import { resolveOverspendMessage } from "@/lib/actions/notify-messages";
 import { tierForCount } from "@/lib/notify/messages";
 import type { CarryPayload } from "@/lib/budget/carry";
+import { withCas } from "@/lib/actions/concurrency";
 
 type LinkType = "asset" | "debt";
 
@@ -792,37 +793,49 @@ export async function quickLogSpend(
   const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
-  // Item fetch and the user's currency are independent reads — run together.
-  const [{ data: item }, cur] = await Promise.all([
-    supabase
+  const cur = await getUserCurrency(supabase, user.id);
+
+  // Compare-and-swap on actual_amount: two SMS ingests for the same item can
+  // run concurrently (SyncEngine drains 4 at a time); a plain read→write would
+  // drop one increment. The update is filtered on the value we read, so a lost
+  // race yields no row and we re-read.
+  const { item, updatedItem } = await withCas(4, async () => {
+    const { data: item } = await supabase
       .from("budget_items")
       .select("*")
       .eq("id", itemId)
       .eq("user_id", user.id)
-      .single(),
-    getUserCurrency(supabase, user.id),
-  ]);
+      .single();
+    if (!item) throw new Error("Item not found");
 
-  if (!item) throw new Error("Item not found");
+    const previousActual = Number(item.actual_amount);
+    const newActual = previousActual + Number(amount);
+    const planned = Number(item.planned_amount);
+    const previousOverspendCount = Number(item.overspend_count ?? 0);
+    const isOver = planned > 0 && newActual > planned;
+    const nextOverspendCount = isOver ? previousOverspendCount + 1 : previousOverspendCount;
+    const nextCompleted = computeAutoCompletion(planned, newActual);
+
+    const { data: updatedItem, error } = await supabase
+      .from("budget_items")
+      .update({ actual_amount: newActual, is_completed: nextCompleted, overspend_count: nextOverspendCount })
+      .eq("id", itemId)
+      .eq("user_id", user.id)
+      .eq("actual_amount", item.actual_amount)
+      .select()
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!updatedItem) return null; // lost the race — re-read
+    return { item, updatedItem };
+  });
 
   const previousActual = Number(item.actual_amount);
   const previousCompleted = Boolean(item.is_completed);
-  const newActual = previousActual + Number(amount);
-  const planned = Number(item.planned_amount);
   const previousOverspendCount = Number(item.overspend_count ?? 0);
+  const newActual = Number(updatedItem.actual_amount);
+  const planned = Number(item.planned_amount);
   const isOver = planned > 0 && newActual > planned;
-  const nextOverspendCount = isOver ? previousOverspendCount + 1 : previousOverspendCount;
-  const nextCompleted = computeAutoCompletion(planned, newActual);
-
-  const { data: updatedItem, error } = await supabase
-    .from("budget_items")
-    .update({ actual_amount: newActual, is_completed: nextCompleted, overspend_count: nextOverspendCount })
-    .eq("id", itemId)
-    .eq("user_id", user.id)
-    .select()
-    .single();
-
-  if (error) throw new Error(error.message);
+  const nextOverspendCount = Number(updatedItem.overspend_count ?? 0);
 
   // Cascade to linked target. If cascade fails, revert the item update.
   let cascadeSummary: { kind: "asset" | "goal" | "debt"; targetName: string } | null = null;

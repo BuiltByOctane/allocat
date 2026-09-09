@@ -105,11 +105,6 @@ export interface IngestSmsInput {
   budgetItemId?: string | null;
   /** Optional human-readable name for the transaction. */
   label?: string | null;
-  /**
-   * Derived UPI/payment-app label (e.g. "gpay") computed on-device from the SMS
-   * sender. Low-sensitivity (like merchant) — the raw sender never syncs.
-   */
-  appSource?: string | null;
 }
 
 /**
@@ -160,7 +155,6 @@ export async function ingestSmsTransaction(input: IngestSmsInput) {
         label: input.label ?? null,
         source: "manual",
         original_amount: null,
-        app_source: input.appSource ?? null,
       })
       .select()
       .single();
@@ -218,8 +212,6 @@ export async function ingestSmsTransaction(input: IngestSmsInput) {
       occurred_at: input.occurredAt ?? null,
       dedupe_key: input.dedupeKey,
       status: initialStatus,
-      // Derived UPI/payment-app label (sender stays on-device).
-      app_source: input.appSource ?? null,
     })
     .select()
     .single();

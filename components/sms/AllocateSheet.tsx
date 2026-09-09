@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Drawer } from "vaul";
 import { hasNumericText, formatCurrency } from "@/lib/number-format";
-import { AppSourceBadge } from "@/components/sms/AppSourceBadge";
 import type { SmsTransactionRow } from "@/lib/db";
 
 export interface AllocatePickerItem {
@@ -129,11 +128,8 @@ export function AllocateSheet({
                     placeholder={amountLabel}
                     className="figure min-w-0 flex-1 bg-transparent text-[26px] font-bold text-foreground focus:outline-none"
                   />
-                  <span className="flex items-center gap-1.5 shrink-0">
-                    <AppSourceBadge source={txn?.app_source} />
-                    <span className="truncate text-[13px] font-bold text-foreground">
-                      {merchant}
-                    </span>
+                  <span className="shrink-0 truncate text-[13px] font-bold text-foreground">
+                    {merchant}
                   </span>
                 </div>
                 {!amountValid && (

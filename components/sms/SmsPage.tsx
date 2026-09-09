@@ -20,7 +20,6 @@ import {
   useUnblockSms,
   useMonthAllocations,
 } from "@/lib/hooks/useSmsTransactions";
-import { AppSourceBadge } from "@/components/sms/AppSourceBadge";
 import { useAddBudgetItem } from "@/lib/hooks/useBudget";
 import { useTourDriver } from "@/lib/tour/useTourDriver";
 import {
@@ -491,11 +490,8 @@ export default function SmsPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex min-w-0 flex-col">
                     <span className="figure text-[26px] text-foreground">{money(txn)}</span>
-                    <span className="flex items-center gap-1.5 mt-0.5 min-w-0">
-                      <span className="truncate text-[13px] font-bold text-foreground">
-                        {txn.merchant_raw ?? "Unknown merchant"}
-                      </span>
-                      <AppSourceBadge source={txn.app_source} />
+                    <span className="mt-0.5 min-w-0 truncate text-[13px] font-bold text-foreground">
+                      {txn.merchant_raw ?? "Unknown merchant"}
                     </span>
                   </div>
                   {meta && <Chip tone="neutral">{meta}</Chip>}
@@ -601,11 +597,8 @@ export default function SmsPage() {
                     <div key={txn.id} className="flex flex-col gap-2">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex min-w-0 flex-col">
-                          <span className="flex items-center gap-1.5 min-w-0">
-                            <span className="truncate text-sm font-bold text-foreground">
-                              {txn.label || txn.merchant_raw || "Unknown"}
-                            </span>
-                            <AppSourceBadge source={txn.app_source} />
+                          <span className="min-w-0 truncate text-sm font-bold text-foreground">
+                            {txn.label || txn.merchant_raw || "Unknown"}
                           </span>
                           {when && (
                             <span className="text-[11px] text-muted-foreground mt-0.5">{when}</span>

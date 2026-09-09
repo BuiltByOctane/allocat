@@ -701,7 +701,6 @@ export async function writeManualTransaction(
     direction: "debit",
     occurred_at: now,
     dedupe_key: dedupeKey,
-    app_source: null,
     status: "categorized",
     matched_rule_id: null,
     budget_item_id: input.budgetItemId,

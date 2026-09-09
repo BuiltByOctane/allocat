@@ -2,7 +2,6 @@
 
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { useItemTransactions } from "@/lib/hooks/useSmsTransactions";
-import { AppSourceBadge } from "@/components/sms/AppSourceBadge";
 import type { SmsTransactionRow } from "@/lib/db";
 
 function formatDateTime(iso: string) {
@@ -72,7 +71,6 @@ export function ItemTransactionList({
                     <p className="text-[12.5px] font-semibold text-foreground leading-snug truncate">
                       {title}
                     </p>
-                    <AppSourceBadge source={txn.app_source} />
                     <span className="shrink-0 rounded-full bg-card px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-muted-foreground">
                       {txn.source === "manual" ? "Manual" : "SMS"}
                     </span>

@@ -64,6 +64,13 @@ Every page reads from IndexedDB first; the network is a fallback and a backgroun
 
 3. **Mutation queue** — mutations write to IDB optimistically (with a `temp_<uuid>` id for INSERTs), then `useEnqueue()` appends a `SyncQueueItem` to `sync_queue`. `SyncEngine` (`lib/sync/SyncEngine.ts`) drains the queue: each `(table, operation)` pair maps to a server action via the `dispatch` table — when adding new tables/operations, you must register a dispatcher entry there or the item will permanently fail. Failed items retry up to `MAX_RETRIES = 3` with backoff; permanent failures invoke `onRollback` (which invalidates relevant React Query keys). `temp_` ids inside payloads are rewritten to real ids via `id_map` before the action fires — use `extractTempIds` patterns when designing new payloads.
 
+   Three request-shaping rules live in the drain (a phone that was closed for a day comes back with a queue full of SMS, and one request per item was the old behaviour):
+   - **Batched ops** — `bulkDispatch` maps a `(table, operation)` to a server action taking an ARRAY (today: `sms_transactions:INSERT` → `ingestSmsTransactionsBulk`). Up to `MAX_BATCH` independent items go in one round trip; the action returns one `BulkIngestOutcome` per input **positionally**, so a single bad item retries alone. `onSynced` fires ONCE per group. To make an op batchable, add a bulk action + a `bulkDispatch` entry — never change the per-item semantics.
+   - **Superseded writes are dropped unsent** — `selectSupersededIds` deletes an older `UPDATE` when the immediately-following queued op writes the *same field signature* to the same record (five slider drags → one request). Only tables in `COLLAPSIBLE_UPDATE_TABLES`, never a delta-bearing op (PAYMENT/CATEGORIZE/ACHIEVE) and never `actual_amount` (it cascades into a linked asset/debt and logs activity). Adding a new `UPDATE` payload shape? Check it is an absolute write before the table goes on that list.
+   - **One post-sync refresh per drain** — the engine emits `onDrainEnd` when the queue comes to rest; `SyncProvider` accumulates `forceRefreshTable` targets during a drain and flushes them once there (the 150 ms coalesce timer only applies to isolated mutations).
+
+Cancellation: `clearDB()` bumps a module-level generation counter in `lib/db/hydrate.ts`, and every pull re-checks it before writing. A hydrate already in flight when the user signs out (or switches account) therefore discards its payload instead of resurrecting the previous user's rows. Single-table refreshes read the user id from `auth.getSession()` (local) — **not** `getUser()`, which is a network call to Supabase Auth on every invocation.
+
 Cross-cutting rules:
 - Server actions live in `lib/actions/<domain>.ts` and are the *only* path that talks to Supabase from the client side. They are also called directly during initial fetch (IDB miss) and via SyncEngine on flush.
 - Read hooks live in `lib/hooks/use<Domain>.ts`. The pattern is: `getXFromIDB()` first; on miss, fall back to the server action. Each hook exports its query key constant (e.g. `DASHBOARD_KEY`, `budgetKey(month, year)`) — reuse these for invalidation.
@@ -90,6 +97,8 @@ Auth uses `@supabase/ssr` with cookie-based sessions:
 - `lib/supabase/middleware.ts` — `updateSession` refreshes tokens and gates routes
 
 **Note**: The Next.js middleware file is named `proxy.ts` (not `middleware.ts`), exports a `proxy` function, and lives at the repo root. Do not rename it without verifying the Next 16 convention — both forms have existed across versions.
+
+**Every matched request pays a Supabase Auth round trip**, so the matcher excludes `/api/*` and static assets, and `skipsAuth()` (`lib/supabase/middleware.ts`) additionally skips server-action POSTs (`Next-Action` header). Both authenticate themselves and — unlike an RSC render — can write the refreshed session cookie, so the middleware pass was pure duplication (a 40-item sync drain made 40 extra auth calls). Keep document/RSC navigations on the auth path: that is where the cookie rotation and the protected-route redirect happen.
 
 Protected paths (redirect to `/auth/login` if no user): `/dashboard`, `/budget`, `/net-worth`, `/debt`, `/onboarding`. `/goals`, `/profile`, `/activity` are *not* in this list — confirm intent before adding new private routes.
 

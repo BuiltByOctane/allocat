@@ -158,16 +158,27 @@ interface ExecOptions {
   failRecordIds?: Set<string>;
   /** recordId → canned result (e.g. a CARRY_SETUP server response) */
   results?: Record<string, unknown>;
+  /** make the whole bulk round trip throw */
+  failBatch?: boolean;
 }
+
+type BatchOutcome = { ok: true; result: unknown } | { ok: false; error: string };
 
 class TestEngine extends (SyncEngine as unknown as {
   new (): {
     processQueue(): Promise<void>;
+    stop(): void;
     setCallbacks(cbs: unknown): void;
     executeItem(item: SyncQueueItem, payload: unknown): Promise<unknown>;
+    executeBatch(
+      items: SyncQueueItem[],
+      payloads: unknown[],
+    ): Promise<BatchOutcome[]>;
     retryDelayMs(retries: number): number;
   };
 }) {
+  /** One entry per bulk round trip: the recordIds it carried. */
+  batchCalls: string[][] = [];
   active = 0;
   maxActive = 0;
   order: string[] = [];
@@ -184,6 +195,26 @@ class TestEngine extends (SyncEngine as unknown as {
   // Small backoff so retry tests don't wait real seconds.
   retryDelayMs(): number {
     return 10;
+  }
+
+  async executeBatch(
+    items: SyncQueueItem[],
+    payloads: unknown[],
+  ): Promise<BatchOutcome[]> {
+    this.batchCalls.push(items.map((i) => i.recordId));
+    await delay(this.opts.latency ?? 20);
+    if (this.opts.failBatch) throw new Error("bulk round trip failed");
+    return items.map((item, i) => {
+      this.resolvedPayloads[item.recordId] = payloads[i];
+      if (this.opts.failRecordIds?.has(item.recordId)) {
+        return { ok: false as const, error: "simulated item failure" };
+      }
+      const realId = item.tempId ? this.opts.realIds?.[item.tempId] : undefined;
+      return {
+        ok: true as const,
+        result: { id: realId ?? item.recordId, resolved: payloads[i] },
+      };
+    });
   }
 
   async executeItem(item: SyncQueueItem, payload: unknown): Promise<unknown> {
@@ -581,5 +612,307 @@ describe("SyncEngine CARRY_SETUP", () => {
     expect(
       (engine.resolvedPayloads["temp_b"] as { budgetTempId: string }).budgetTempId
     ).toBe("temp_b");
+  });
+});
+
+
+// ── Bulk batching (one round trip for many queue items) ────────────────────
+
+function seedSmsInserts(count: number) {
+  for (let i = 0; i < count; i++) {
+    tables.sms_transactions.rows.push({ id: `temp_s${i}`, amount: 100 + i });
+  }
+  seed(
+    Array.from({ length: count }, (_, i) => ({
+      table: "sms_transactions" as const,
+      operation: "INSERT" as const,
+      recordId: `temp_s${i}`,
+      tempId: `temp_s${i}`,
+      payload: { dedupeKey: `k${i}`, amount: 100 + i },
+      createdAt: i,
+    })),
+  );
+}
+
+describe("SyncEngine bulk batching", () => {
+  beforeEach(() => {
+    resetDB();
+    vi.stubGlobal("navigator", { onLine: true });
+  });
+
+  it("collapses many SMS INSERTs into ONE round trip", async () => {
+    seedSmsInserts(6);
+    const engine = new TestEngine({
+      latency: 5,
+      realIds: Object.fromEntries(
+        Array.from({ length: 6 }, (_, i) => [`temp_s${i}`, `real_s${i}`]),
+      ),
+    });
+
+    await engine.processQueue();
+
+    // One bulk call carrying all six — not six single dispatches.
+    expect(engine.batchCalls).toHaveLength(1);
+    expect(engine.batchCalls[0]).toEqual(
+      Array.from({ length: 6 }, (_, i) => `temp_s${i}`),
+    );
+    expect(engine.batchCalls[0]).toHaveLength(6);
+    expect(engine.order).toHaveLength(0); // executeItem never used
+    // Every item drained and mapped temp → real.
+    expect(
+      tables.sync_queue.rows.every((r) => r.status === "done"),
+    ).toBe(true);
+    const mapped = Object.fromEntries(
+      tables.id_map.rows.map((r) => [r.tempId, r.realId]),
+    );
+    expect(mapped.temp_s0).toBe("real_s0");
+    expect(mapped.temp_s5).toBe("real_s5");
+    expect(tables.sms_transactions.rows.map((r) => r.id).sort()).toEqual(
+      Array.from({ length: 6 }, (_, i) => `real_s${i}`).sort(),
+    );
+  });
+
+  it("splits a backlog larger than the batch cap across calls", async () => {
+    seedSmsInserts(30);
+    const engine = new TestEngine({ latency: 1 });
+
+    await engine.processQueue();
+
+    // Split across calls, each within the per-request cap (MAX_BATCH = 10),
+    // and every item still sent exactly once.
+    expect(engine.batchCalls.length).toBeGreaterThan(1);
+    expect(Math.max(...engine.batchCalls.map((c) => c.length))).toBeLessThanOrEqual(10);
+    expect(engine.batchCalls.flat()).toHaveLength(30);
+    expect(new Set(engine.batchCalls.flat()).size).toBe(30);
+  });
+
+  it("retries only the failing item when one entry of a batch fails", async () => {
+    seedSmsInserts(3);
+    const engine = new TestEngine({
+      latency: 1,
+      failRecordIds: new Set(["temp_s1"]),
+    });
+
+    await engine.processQueue();
+
+    const byRecord = Object.fromEntries(
+      tables.sync_queue.rows.map((r) => [r.recordId, r]),
+    );
+    expect(byRecord.temp_s0.status).toBe("done");
+    expect(byRecord.temp_s2.status).toBe("done");
+    // The bad one went back to pending with a backoff, not failed-forever.
+    expect(byRecord.temp_s1.status).toBe("pending");
+    expect(byRecord.temp_s1.retries).toBe(1);
+    engine.stop(); // disarm the backoff wake (shared in-memory DB)
+  });
+
+  it("retries every item when the whole bulk round trip throws", async () => {
+    seedSmsInserts(3);
+    const engine = new TestEngine({ latency: 1, failBatch: true });
+
+    await engine.processQueue();
+
+    expect(
+      tables.sync_queue.rows.every(
+        (r) => r.status === "pending" && r.retries === 1,
+      ),
+    ).toBe(true);
+    engine.stop(); // disarm the backoff wake (shared in-memory DB)
+  });
+
+  it("emits onSynced once per batch, not once per item", async () => {
+    seedSmsInserts(5);
+    const synced: string[] = [];
+    const engine = new TestEngine({ latency: 1 });
+    engine.setCallbacks({
+      onSynced: (item: SyncQueueItem) => synced.push(item.table),
+    });
+
+    await engine.processQueue();
+
+    expect(synced).toEqual(["sms_transactions"]);
+  });
+
+  it("never batches a single item (falls back to the normal path)", async () => {
+    seedSmsInserts(1);
+    const engine = new TestEngine({ latency: 1 });
+
+    await engine.processQueue();
+
+    expect(engine.batchCalls).toHaveLength(0);
+    expect(engine.order).toEqual(["INSERT:temp_s0#1"]);
+  });
+
+  it("fires onDrainEnd once, after the queue is empty", async () => {
+    seedSmsInserts(4);
+    let drainEnds = 0;
+    let pendingAtEnd = -1;
+    const engine = new TestEngine({ latency: 1 });
+    engine.setCallbacks({
+      onDrainEnd: () => {
+        drainEnds++;
+        pendingAtEnd = tables.sync_queue.rows.filter(
+          (r) => r.status === "pending" || r.status === "processing",
+        ).length;
+      },
+    });
+
+    await engine.processQueue();
+
+    expect(drainEnds).toBe(1);
+    expect(pendingAtEnd).toBe(0);
+  });
+});
+
+// ── Superseded-write collapsing ────────────────────────────────────────────
+
+describe("SyncEngine supersede collapsing", () => {
+  beforeEach(() => {
+    resetDB();
+    vi.stubGlobal("navigator", { onLine: true });
+  });
+
+  it("drops older UPDATEs that write the same fields of the same record", async () => {
+    seed([
+      {
+        table: "budgets",
+        operation: "UPDATE",
+        recordId: "b1",
+        payload: { budgetId: "b1", totalAmount: 100 },
+        createdAt: 0,
+      },
+      {
+        table: "budgets",
+        operation: "UPDATE",
+        recordId: "b1",
+        payload: { budgetId: "b1", totalAmount: 200 },
+        createdAt: 1,
+      },
+      {
+        table: "budgets",
+        operation: "UPDATE",
+        recordId: "b1",
+        payload: { budgetId: "b1", totalAmount: 300 },
+        createdAt: 2,
+      },
+    ]);
+    const engine = new TestEngine({ latency: 1 });
+
+    await engine.processQueue();
+
+    // Only the newest write reached the server.
+    expect(engine.order).toEqual(["UPDATE:b1#3"]);
+    expect(
+      (engine.resolvedPayloads["b1"] as { totalAmount: number }).totalAmount,
+    ).toBe(300);
+    // The superseded rows are gone from the queue entirely.
+    expect(tables.sync_queue.rows).toHaveLength(1);
+  });
+
+  it("keeps updates that write DIFFERENT fields", async () => {
+    seed([
+      {
+        table: "categories",
+        operation: "UPDATE",
+        recordId: "c1",
+        payload: { categoryId: "c1", updates: { name: "Food" } },
+        createdAt: 0,
+      },
+      {
+        table: "categories",
+        operation: "UPDATE",
+        recordId: "c1",
+        payload: { categoryId: "c1", updates: { allocated_amount: 5000 } },
+        createdAt: 1,
+      },
+    ]);
+    const engine = new TestEngine({ latency: 1 });
+
+    await engine.processQueue();
+
+    expect(engine.order).toEqual(["UPDATE:c1#1", "UPDATE:c1#2"]);
+  });
+
+  it("never collapses across a different operation on the same record", async () => {
+    seed([
+      {
+        table: "budget_items",
+        operation: "UPDATE",
+        recordId: "i1",
+        payload: { itemId: "i1", updates: { planned_amount: 10 } },
+        createdAt: 0,
+      },
+      {
+        table: "budget_items",
+        operation: "PAYMENT",
+        recordId: "i1",
+        payload: { itemId: "i1", amount: 5 },
+        createdAt: 1,
+      },
+      {
+        table: "budget_items",
+        operation: "UPDATE",
+        recordId: "i1",
+        payload: { itemId: "i1", updates: { planned_amount: 20 } },
+        createdAt: 2,
+      },
+    ]);
+    const engine = new TestEngine({ latency: 1 });
+
+    await engine.processQueue();
+
+    expect(engine.order).toEqual([
+      "UPDATE:i1#1",
+      "PAYMENT:i1#2",
+      "UPDATE:i1#3",
+    ]);
+  });
+
+  it("never collapses a spend-bearing update (actual_amount cascades)", async () => {
+    seed([
+      {
+        table: "budget_items",
+        operation: "UPDATE",
+        recordId: "i2",
+        payload: { itemId: "i2", updates: { actual_amount: 100 } },
+        createdAt: 0,
+      },
+      {
+        table: "budget_items",
+        operation: "UPDATE",
+        recordId: "i2",
+        payload: { itemId: "i2", updates: { actual_amount: 200 } },
+        createdAt: 1,
+      },
+    ]);
+    const engine = new TestEngine({ latency: 1 });
+
+    await engine.processQueue();
+
+    expect(engine.order).toEqual(["UPDATE:i2#1", "UPDATE:i2#2"]);
+  });
+
+  it("never collapses updates on different records", async () => {
+    seed([
+      {
+        table: "assets",
+        operation: "UPDATE",
+        recordId: "a1",
+        payload: { id: "a1", updates: { value: 1 } },
+        createdAt: 0,
+      },
+      {
+        table: "assets",
+        operation: "UPDATE",
+        recordId: "a2",
+        payload: { id: "a2", updates: { value: 2 } },
+        createdAt: 1,
+      },
+    ]);
+    const engine = new TestEngine({ latency: 1 });
+
+    await engine.processQueue();
+
+    expect(engine.order.sort()).toEqual(["UPDATE:a1#1", "UPDATE:a2#2"]);
   });
 });

@@ -1,5 +1,6 @@
 import { getDB, type SyncQueueItem, type SyncTable } from "@/lib/db";
 import { reconcileInsertReplacement } from "@/lib/sync/reconcile";
+import { MAX_BULK_INGEST } from "@/lib/sms/bulkIngest";
 import {
   addBudgetCategory,
   updateBudgetTotal,
@@ -78,6 +79,7 @@ import {
 import { upsertReport, type UpsertReportInput } from "@/lib/actions/reports";
 import {
   ingestSmsTransaction,
+  ingestSmsTransactionsBulk,
   categorizeSmsTransaction,
   ignoreSmsTransaction,
   deleteSmsTransaction,
@@ -96,6 +98,110 @@ const MAX_RETRIES = 3;
 // concurrently up to this many at once. Kept modest to avoid hammering Supabase
 // / server-action limits.
 const MAX_CONCURRENCY = 4;
+
+// Queue items of a batchable (table, operation) travel to the server together,
+// this many per round trip. Must stay ≤ the server action's own cap
+// (MAX_BULK_INGEST) — a larger group is split across successive calls.
+//
+// Kept well under that cap on purpose: the bulk ingest runs its items
+// SEQUENTIALLY server-side (they can touch the same budget item), so the batch
+// size is really a wall-clock budget for one serverless invocation. Ten SMS is
+// a couple of seconds; a 40-message backlog is 4 requests instead of 40.
+const MAX_BATCH = Math.min(10, MAX_BULK_INGEST);
+
+/** Result of one entry inside a bulk round trip. */
+type BatchOutcome = { ok: true; result: unknown } | { ok: false; error: string };
+
+/** Identity of a (table, operation) pair — the batching / collapsing key. */
+function opKey(item: SyncQueueItem): string {
+  return `${item.table}:${item.operation}`;
+}
+
+/**
+ * Tables whose plain `UPDATE` writes an ABSOLUTE field value (not a delta), so
+ * an older queued UPDATE of the same fields is provably overwritten by a newer
+ * one and can be dropped unsent. Delta-bearing operations (PAYMENT, CATEGORIZE,
+ * ACHIEVE, the bulk setups) are never collapsed — only `UPDATE`.
+ */
+const COLLAPSIBLE_UPDATE_TABLES = new Set<string>([
+  "budgets",
+  "categories",
+  "budget_items",
+  "assets",
+  "debts",
+  "asset_categories",
+]);
+
+/**
+ * Fields excluded from collapsing even on a collapsible table.
+ * `actual_amount` cascades server-side into a linked asset/debt and writes an
+ * activity-log entry per call — collapsing would silently rewrite that history.
+ */
+const NON_COLLAPSIBLE_FIELDS = new Set<string>(["actual_amount"]);
+
+/**
+ * Which fields an UPDATE writes, as a stable signature. `null` means "not
+ * collapsible" (unknown shape, or a field we refuse to collapse).
+ *
+ * Payloads come in two shapes: a nested `updates` object (most tables) or flat
+ * arguments (e.g. budgets `{ budgetId, totalAmount }`). Both are absolute
+ * writes, so the signature is just the sorted key list.
+ */
+function updateSignature(item: SyncQueueItem): string | null {
+  if (item.operation !== "UPDATE") return null;
+  if (!COLLAPSIBLE_UPDATE_TABLES.has(item.table)) return null;
+
+  const payload = item.payload as Payload;
+  const nested = payload.updates;
+  const fields =
+    nested && typeof nested === "object" && !Array.isArray(nested)
+      ? Object.keys(nested as Payload)
+      : Object.keys(payload);
+  if (fields.length === 0) return null;
+  if (fields.some((f) => NON_COLLAPSIBLE_FIELDS.has(f))) return null;
+
+  return `${item.table}|${fields.slice().sort().join(",")}`;
+}
+
+/**
+ * Ids of queue items made redundant by a LATER write of the same fields to the
+ * same record — the classic "user dragged the slider five times offline" case,
+ * which used to cost five server round trips to reach one final value.
+ *
+ * Deliberately conservative:
+ *   - only `pending` items (a `processing` item is already in flight);
+ *   - only ADJACENT items per record — any other operation in between (a
+ *     PAYMENT, a DELETE) ends the run, since the later write may depend on what
+ *     that operation did;
+ *   - only an IDENTICAL field signature, so an earlier `{name}` edit is never
+ *     swallowed by a later `{allocated_amount}` one.
+ *
+ * Exported for unit testing.
+ */
+export function selectSupersededIds(items: SyncQueueItem[]): number[] {
+  const byRecord = new Map<string, SyncQueueItem[]>();
+  for (const item of items) {
+    if (item.id === undefined) continue;
+    if (item.status !== "pending") continue;
+    const key = `${item.table}:${item.recordId}`;
+    const list = byRecord.get(key) ?? [];
+    list.push(item);
+    byRecord.set(key, list);
+  }
+
+  const superseded: number[] = [];
+  for (const list of byRecord.values()) {
+    const ordered = list.slice().sort((a, b) => a.createdAt - b.createdAt);
+    for (let i = 0; i < ordered.length - 1; i++) {
+      const sig = updateSignature(ordered[i]);
+      if (sig === null) continue;
+      // Only the IMMEDIATELY following item may supersede this one.
+      if (updateSignature(ordered[i + 1]) !== sig) continue;
+      superseded.push(ordered[i].id as number);
+    }
+  }
+  return superseded;
+}
 
 function extractTempIds(obj: unknown): string[] {
   const ids: string[] = [];
@@ -148,7 +254,18 @@ type Dispatcher = Record<
 interface SyncCallbacks {
   onPendingChange?: (count: number) => void;
   onRollback?: (item: SyncQueueItem, error: string) => void;
+  /**
+   * One successful sync. For a batched group this fires ONCE, with the group's
+   * first item as the representative — the consumer uses it to decide which
+   * tables to re-pull, and re-pulling once per group is the whole point.
+   */
   onSynced?: (item: SyncQueueItem) => void | Promise<void>;
+  /**
+   * The queue reached a resting point (empty, or only backoff-deferred items).
+   * Lets the consumer run its post-sync refresh ONCE for a whole backlog
+   * instead of once per drain pass.
+   */
+  onDrainEnd?: () => void;
 }
 
 export class SyncEngine {
@@ -320,6 +437,23 @@ export class SyncEngine {
   };
 
   /**
+   * (table, operation) pairs that travel to the server in ONE call.
+   *
+   * A device that was closed for a day comes back with a queue full of SMS
+   * INSERTs; sending them one at a time meant one request (and one auth round
+   * trip) per message. The per-item semantics are unchanged — the bulk action
+   * runs the same ingest sequentially server-side and returns one outcome per
+   * input, so a single bad message still retries alone.
+   */
+  private bulkDispatch: Record<
+    string,
+    (payloads: Payload[]) => Promise<BatchOutcome[]>
+  > = {
+    "sms_transactions:INSERT": (payloads) =>
+      ingestSmsTransactionsBulk(payloads as unknown as IngestSmsInput[]),
+  };
+
+  /**
    * Register (or clear) runtime callbacks.
    * Called from the SyncProvider effect — safe to call at any time.
    */
@@ -333,7 +467,9 @@ export class SyncEngine {
   }
 
   stop(): void {
-    window.removeEventListener("online", this.handleOnline);
+    if (typeof window !== "undefined") {
+      window.removeEventListener("online", this.handleOnline);
+    }
     if (this.retryTimer) {
       clearTimeout(this.retryTimer);
       this.retryTimer = null;
@@ -355,6 +491,11 @@ export class SyncEngine {
     if (navigator.onLine && !this.isProcessing) {
       this.processQueue();
     }
+  }
+
+  /** True while a drain pass is running — consumers use it to defer refreshes. */
+  get isDraining(): boolean {
+    return this.isProcessing;
   }
 
   async getPendingCount(): Promise<number> {
@@ -386,14 +527,27 @@ export class SyncEngine {
           .equals("processing")
           .modify({ status: "pending" });
 
-        // Drain in bounded-concurrency batches: each pass selects up to
-        // MAX_CONCURRENCY *independent* ready items (deps resolved, one per record,
-        // backoff elapsed) and runs them together. Dependents simply wait for a
-        // later pass once their producer's INSERT has written id_map.
+        // Drain in passes. Each pass looks at every READY item (deps resolved,
+        // one per record, backoff elapsed) and either:
+        //   - sends a batchable group (e.g. queued SMS INSERTs) in ONE round
+        //     trip, or
+        //   - runs up to MAX_CONCURRENCY independent items in parallel.
+        // Dependents simply wait for a later pass once their producer's INSERT
+        // has written id_map.
         while (true) {
-          const batch = await this.selectBatch();
-          if (batch.length === 0) break;
+          // Redundant writes are dropped before anything is sent.
+          await this.collapseSuperseded();
 
+          const ready = await this.scanReady();
+          if (ready.length === 0) break;
+
+          const group = this.pickBulkGroup(ready);
+          if (group) {
+            await this.processBulkGroup(group);
+            continue;
+          }
+
+          const batch = ready.slice(0, MAX_CONCURRENCY);
           await Promise.all(
             batch.map((item) =>
               db.sync_queue.update(item.id as number, { status: "processing" })
@@ -410,6 +564,8 @@ export class SyncEngine {
 
       // Anything left pending is backoff-deferred — wake once when the soonest is due.
       await this.scheduleRetryWake();
+      // Queue is at rest: one refresh for the whole backlog.
+      this.callbacks.onDrainEnd?.();
     })();
 
     this.activeDrain = drain;
@@ -439,12 +595,112 @@ export class SyncEngine {
   // ─── Private helpers ───────────────────────────────────────────────────────
 
   /**
-   * Choose the next batch of ready items to run concurrently. Preserves ordering:
-   * at most one item per (table, recordId) key per batch (oldest first), so two
-   * ops on the same record never overlap or reorder. Dependency-blocked items are
-   * skipped (and failed if doomed); backoff-deferred items are skipped until due.
+   * Drop queue items that a later write has already made redundant (see
+   * selectSupersededIds). Runs before every pass so writes enqueued DURING a
+   * long drain are collapsed too.
    */
-  private async selectBatch(): Promise<SyncQueueItem[]> {
+  private async collapseSuperseded(): Promise<void> {
+    const db = getDB();
+    const pending = await db.sync_queue
+      .where("status")
+      .equals("pending")
+      .toArray();
+    const ids = selectSupersededIds(pending);
+    if (ids.length === 0) return;
+    for (const id of ids) await db.sync_queue.delete(id);
+    await this.notifyPendingChange();
+  }
+
+  /**
+   * The largest batchable group among the ready items, or null when there isn't
+   * one worth batching. A lone item takes the normal single-dispatch path —
+   * wrapping one message in a bulk call would only obscure its error.
+   *
+   * Records are independent by construction here (scanReady admits at most one
+   * item per record), so grouping never reorders two writes to the same row.
+   */
+  private pickBulkGroup(ready: SyncQueueItem[]): SyncQueueItem[] | null {
+    const groups = new Map<string, SyncQueueItem[]>();
+    for (const item of ready) {
+      const key = opKey(item);
+      if (!this.bulkDispatch[key]) continue;
+      const list = groups.get(key) ?? [];
+      list.push(item);
+      groups.set(key, list);
+    }
+
+    let best: SyncQueueItem[] | null = null;
+    for (const list of groups.values()) {
+      if (list.length < 2) continue;
+      if (!best || list.length > best.length) best = list;
+    }
+    return best ? best.slice(0, MAX_BATCH) : null;
+  }
+
+  /**
+   * Send a batchable group in one round trip, then reconcile each item exactly
+   * as the single path would. A per-item error retries only that item; a failed
+   * round trip retries all of them.
+   */
+  private async processBulkGroup(group: SyncQueueItem[]): Promise<void> {
+    const db = getDB();
+    const payloads = await Promise.all(
+      group.map((item) => this.resolvePayload(item.payload))
+    );
+
+    await Promise.all(
+      group.map((item) =>
+        db.sync_queue.update(item.id as number, { status: "processing" })
+      )
+    );
+    await this.notifyPendingChange();
+
+    let outcomes: BatchOutcome[];
+    try {
+      outcomes = await this.executeBatch(group, payloads);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Bulk sync failed";
+      for (const item of group) await this.applyFailure(item, msg);
+      await this.notifyPendingChange();
+      return;
+    }
+
+    let anySynced = false;
+    for (let i = 0; i < group.length; i++) {
+      const outcome = outcomes?.[i];
+      if (!outcome || outcome.ok !== true) {
+        await this.applyFailure(
+          group[i],
+          outcome && outcome.ok === false
+            ? outcome.error
+            : "Bulk sync returned no result for this item"
+        );
+        continue;
+      }
+      try {
+        await this.applySuccess(group[i], outcome.result);
+        anySynced = true;
+      } catch (err) {
+        await this.applyFailure(
+          group[i],
+          err instanceof Error ? err.message : "Sync failed"
+        );
+      }
+    }
+
+    // ONE onSynced for the group — the consumer re-pulls affected tables from
+    // it, and doing that per item is exactly the storm this batching removes.
+    if (anySynced) this.callbacks.onSynced?.(group[0]);
+    await this.notifyPendingChange();
+  }
+
+  /**
+   * Every item that may run right now, oldest first. Preserves ordering: at most
+   * one item per (table, recordId) key (oldest wins), so two ops on the same
+   * record never overlap or reorder. Dependency-blocked items are skipped (and
+   * failed if doomed); backoff-deferred items are skipped until due.
+   */
+  private async scanReady(limit = MAX_BATCH): Promise<SyncQueueItem[]> {
     const db = getDB();
     const items = await db.sync_queue
       .where("status")
@@ -485,7 +741,9 @@ export class SyncEngine {
       claimedKeys.add(key);
 
       batch.push(candidate);
-      if (batch.length >= MAX_CONCURRENCY) break;
+      // A full bulk group (or a full concurrency slice) is all a pass can use;
+      // scanning the rest of a long backlog every pass is wasted work.
+      if (batch.length >= limit) break;
     }
 
     return batch;
@@ -494,12 +752,34 @@ export class SyncEngine {
   /** Execute one queue item: resolve payload, dispatch, then map ids / retry. */
   private async processItem(item: SyncQueueItem): Promise<void> {
     if (item.id === undefined) return;
-    const db = getDB();
     const resolvedPayload = await this.resolvePayload(item.payload);
 
     try {
       const result = await this.executeItem(item, resolvedPayload);
+      await this.applySuccess(item, result);
+      this.callbacks.onSynced?.(item);
+      await this.notifyPendingChange();
+    } catch (err) {
+      await this.applyFailure(
+        item,
+        err instanceof Error ? err.message : "Sync failed"
+      );
+      await this.notifyPendingChange();
+    }
+  }
 
+  /**
+   * Reconcile ONE successful round trip: temp→real id mapping, nested bulk-setup
+   * results, and marking the item done. Shared by the single and batched paths;
+   * neither `onSynced` nor the pending-count notification happens here, because
+   * a batch emits those once for the whole group.
+   */
+  private async applySuccess(
+    item: SyncQueueItem,
+    result: unknown
+  ): Promise<void> {
+    const db = getDB();
+    {
       if (item.operation === "INSERT" && item.tempId) {
         const realId = (result as Record<string, unknown>)?.id as
           | string
@@ -535,34 +815,40 @@ export class SyncEngine {
       } else if (item.operation === "CARRY_SETUP") {
         await this.applyCarrySetupResult(item, result as CarrySetupResult);
       }
-
-      await db.sync_queue.update(item.id, { status: "done" });
-      this.callbacks.onSynced?.(item);
-      await this.notifyPendingChange();
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : "Sync failed";
-      const nextRetries = item.retries + 1;
-
-      if (nextRetries >= MAX_RETRIES) {
-        await db.sync_queue.update(item.id, {
-          status: "failed",
-          lastError: errMsg,
-        });
-        await this.rollback(item);
-        this.callbacks.onRollback?.(item, errMsg);
-        await this.notifyPendingChange();
-      } else {
-        // Re-queue with a backoff deadline instead of a blocking sleep, so a
-        // failing item never freezes the rest of the queue behind it.
-        await db.sync_queue.update(item.id, {
-          status: "pending",
-          retries: nextRetries,
-          lastError: errMsg,
-          nextAttemptAt: Date.now() + this.retryDelayMs(nextRetries),
-        });
-        await this.notifyPendingChange();
-      }
     }
+
+    await db.sync_queue.update(item.id as number, { status: "done" });
+  }
+
+  /**
+   * Handle ONE failed round trip: retry with backoff, or — out of retries —
+   * fail permanently and roll the optimistic state back.
+   */
+  private async applyFailure(
+    item: SyncQueueItem,
+    errMsg: string
+  ): Promise<void> {
+    const db = getDB();
+    const nextRetries = item.retries + 1;
+
+    if (nextRetries >= MAX_RETRIES) {
+      await db.sync_queue.update(item.id as number, {
+        status: "failed",
+        lastError: errMsg,
+      });
+      await this.rollback(item);
+      this.callbacks.onRollback?.(item, errMsg);
+      return;
+    }
+
+    // Re-queue with a backoff deadline instead of a blocking sleep, so a
+    // failing item never freezes the rest of the queue behind it.
+    await db.sync_queue.update(item.id as number, {
+      status: "pending",
+      retries: nextRetries,
+      lastError: errMsg,
+      nextAttemptAt: Date.now() + this.retryDelayMs(nextRetries),
+    });
   }
 
   /** Backoff before a retry. Overridable in tests. */
@@ -677,6 +963,20 @@ export class SyncEngine {
         `No dispatch for ${item.operation} on ${item.table}`
       );
     return opDispatch(resolvedPayload);
+  }
+
+  /**
+   * Overridable in tests to instrument the bulk round trip. Returns one outcome
+   * per input, in order.
+   */
+  protected async executeBatch(
+    items: SyncQueueItem[],
+    payloads: Payload[]
+  ): Promise<BatchOutcome[]> {
+    const key = opKey(items[0]);
+    const bulk = this.bulkDispatch[key];
+    if (!bulk) throw new Error(`No bulk dispatch registered for ${key}`);
+    return bulk(payloads);
   }
 
   private async applyBulkSetupResult(result: {

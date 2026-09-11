@@ -4,6 +4,38 @@ import { getDB } from "./index";
 const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 const USER_META_KEY = "__userId__";
 
+/**
+ * Bumped by `clearDB()` (logout / account switch). A pull that started before
+ * the wipe carries the old generation; every write phase re-checks it and bails
+ * out, so a slow in-flight hydrate can never resurrect the previous user's rows
+ * into a freshly cleared IDB. There is no request-level abort here on purpose:
+ * the fetch may already be in flight, the guard is about never *writing* stale
+ * data.
+ */
+let dbGeneration = 0;
+
+/** True when the wipe generation moved since `gen` was captured. */
+function isStale(gen: number): boolean {
+  return gen !== dbGeneration;
+}
+
+/**
+ * Current user id WITHOUT a network round trip.
+ *
+ * `auth.getUser()` calls Supabase Auth (`/auth/v1/user`) every time — used per
+ * table refresh it doubled the request count of every reconcile. `getSession()`
+ * reads the persisted session locally (it only hits the network when the token
+ * actually needs refreshing). RLS is what enforces ownership server-side; the
+ * id here only shapes the query, so a locally-read id is sufficient.
+ */
+async function localUserId(): Promise<string | null> {
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  return session?.user?.id ?? null;
+}
+
 /** Returns true if the table has never been synced or was synced more than 5 min ago. */
 export async function isTableStale(table: string): Promise<boolean> {
   const db = getDB();
@@ -203,11 +235,17 @@ export async function canHydrateFromCache(): Promise<boolean> {
  * logged in on the same device), IDB is wiped first before re-hydrating.
  */
 export async function hydrateAllTables(): Promise<void> {
+  // Snapshot the wipe generation: if a logout / account switch clears IDB while
+  // this pull is in flight, every write phase below bails instead of writing the
+  // old user's rows back into the cleared database.
+  const gen = dbGeneration;
+
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return;
+  if (isStale(gen)) return;
 
   const db = getDB();
   const userId = user.id;
@@ -286,6 +324,10 @@ export async function hydrateAllTables(): Promise<void> {
       .limit(100),
   ]);
 
+  // The 15-table pull can take seconds on a cold network. If the session was
+  // torn down meanwhile, drop the payload on the floor.
+  if (isStale(gen)) return;
+
   const now = Date.now();
 
   // Protect optimistic-but-unsynced local rows from being clobbered by the
@@ -341,6 +383,8 @@ export async function hydrateAllTables(): Promise<void> {
       : Promise.resolve(),
     feedback?.length ? db.feedback.bulkPut(feedback) : Promise.resolve(),
   ]);
+
+  if (isStale(gen)) return;
 
   // Propagate server-side deletions: for full-pull tables only, drop local rows
   // no longer present on the server (bulkPut alone can never remove a row).
@@ -416,18 +460,18 @@ export async function refreshTableIfStale(
   const stale = await isTableStale(table);
   if (!stale) return;
 
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
+  const gen = dbGeneration;
+  const userId = await localUserId();
+  if (!userId) return;
 
+  const supabase = createClient();
   const db = getDB();
 
   const protectedPre = (await buildProtectedIds()).get(table);
-  const query = supabase.from(table).select("*").eq("user_id", user.id);
+  const query = supabase.from(table).select("*").eq("user_id", userId);
 
   const { data } = await query;
+  if (isStale(gen)) return;
   // Same protection as hydrateAllTables — never overwrite a row with an
   // in-flight local mutation queued against it (union pre+post fetch snapshots).
   const protectedIds = unionSet(protectedPre, (await buildProtectedIds()).get(table));
@@ -457,15 +501,15 @@ export async function forceRefreshTable(
     | "net_worth_snapshots"
     | "reports"
 ): Promise<void> {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
+  const gen = dbGeneration;
+  const userId = await localUserId();
+  if (!userId) return;
 
+  const supabase = createClient();
   const db = getDB();
   const protectedPre = (await buildProtectedIds()).get(table);
-  const { data } = await supabase.from(table).select("*").eq("user_id", user.id);
+  const { data } = await supabase.from(table).select("*").eq("user_id", userId);
+  if (isStale(gen)) return;
   // Same protection as hydrateAllTables — never overwrite a row with an
   // in-flight local mutation queued against it (union pre+post fetch snapshots).
   const protectedIds = unionSet(protectedPre, (await buildProtectedIds()).get(table));
@@ -480,6 +524,8 @@ export async function forceRefreshTable(
 
 /** Wipes all user data from IDB — also called when a different user logs in. */
 export async function clearDB(): Promise<void> {
+  // Invalidate every pull that is already in flight (see dbGeneration).
+  dbGeneration++;
   const db = getDB();
   await Promise.all([
     db.profiles.clear(),

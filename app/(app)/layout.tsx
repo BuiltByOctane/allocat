@@ -2,9 +2,8 @@ import BottomDock from "@/components/BottomDock";
 import SidebarNav from "@/components/SidebarNav";
 import { SyncProvider } from "@/lib/providers/SyncProvider";
 import { QuickActionProvider } from "@/lib/providers/QuickActionProvider";
-import { SyncStatusBadge } from "@/components/ui/SyncStatusBadge";
 import { InstallPrompt } from "@/components/ui/InstallPrompt";
-import { BadgeUpdater } from "@/components/pwa/BadgeUpdater";
+import { AppBadgeReset } from "@/components/pwa/AppBadgeReset";
 import { PushPermissionPrompt } from "@/components/pwa/PushPermissionPrompt";
 import { SmsBridgeGate } from "@/components/pwa/SmsBridge";
 import { PushRegistration } from "@/components/pwa/PushRegistration";
@@ -34,13 +33,6 @@ export default async function AppLayout({
         className="relative flex flex-col min-h-[100dvh] w-full max-w-[480px] mx-auto md:max-w-full md:flex-row bg-background overflow-x-hidden md:overflow-x-visible"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
-        {/* Sync status indicator — top-right, only visible when offline or syncing */}
-        <div
-          className="fixed right-4 z-50"
-          style={{ top: "calc(0.75rem + env(safe-area-inset-top))" }}
-        >
-          <SyncStatusBadge />
-        </div>
         <SidebarNav />
         {/* Mobile scrolls at the document level (not an inner overflow container)
             so the fixed glass dock's backdrop-filter can actually sample the
@@ -57,7 +49,7 @@ export default async function AppLayout({
         <SheetScrollLock />
         <TourPrompt />
         <NativeSetup />
-        <BadgeUpdater />
+        <AppBadgeReset />
         <SupporterSync />
         <CarryController />
         <BudgetReminderController />

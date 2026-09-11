@@ -18,6 +18,10 @@ import {
   effectiveAmount,
   nextOriginalAmount,
 } from "@/lib/sms/amountDelta";
+import {
+  MAX_BULK_INGEST,
+  type BulkIngestOutcome,
+} from "@/lib/sms/bulkIngest";
 
 /** Notify when a category crosses 90% / 100% of its allocation. */
 const NEAR_LIMIT_RATIO = 0.9;
@@ -117,7 +121,58 @@ export interface IngestSmsInput {
  */
 export async function ingestSmsTransaction(input: IngestSmsInput) {
   const { supabase, user } = await getAuthed();
+  return ingestOne(supabase, user, input);
+}
 
+
+/**
+ * Ingest many captured SMS in ONE round trip.
+ *
+ * Draining a backlog used to cost one server action per message — each with its
+ * own auth round trip and its own request — so a phone that had been closed for
+ * a day fired dozens of sequential requests on open. The per-message work is
+ * unchanged; only the transport is shared.
+ *
+ * Deliberately sequential inside: two SMS can hit the same budget item, and
+ * `quickLogSpend` is a read-modify-write on `actual_amount`. Running them in
+ * parallel here would lose a spend.
+ *
+ * Never throws for a single bad message — each input gets its own outcome, so
+ * one failure retries alone instead of poisoning the whole batch.
+ */
+export async function ingestSmsTransactionsBulk(
+  inputs: IngestSmsInput[],
+): Promise<BulkIngestOutcome[]> {
+  if (!Array.isArray(inputs) || inputs.length === 0) return [];
+  if (inputs.length > MAX_BULK_INGEST) {
+    throw new Error(`Too many transactions in one batch (max ${MAX_BULK_INGEST})`);
+  }
+
+  const { supabase, user } = await getAuthed();
+
+  const outcomes: BulkIngestOutcome[] = [];
+  for (const input of inputs) {
+    try {
+      outcomes.push({ ok: true, result: await ingestOne(supabase, user, input) });
+    } catch (err) {
+      outcomes.push({
+        ok: false,
+        error: err instanceof Error ? err.message : "Ingest failed",
+      });
+    }
+  }
+  return outcomes;
+}
+
+/**
+ * The actual ingest of one message, against an already-authenticated client.
+ * Shared by the single and bulk entry points above.
+ */
+async function ingestOne(
+  supabase: Supa,
+  user: { id: string },
+  input: IngestSmsInput,
+) {
   // 1. Idempotent dedupe — re-delivered SMS or sync retries collapse here.
   // Return the FULL row: the sync engine replaces the IDB record with whatever
   // this returns, so a partial object would wipe status/amount and the txn

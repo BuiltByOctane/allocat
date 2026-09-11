@@ -1,10 +1,31 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+/**
+ * Requests that must NOT pay for an auth round trip.
+ *
+ * `updateSession` runs on every matched request and calls Supabase Auth
+ * (`/auth/v1/user`) — a real network hop. Server actions were paying it twice:
+ * once here and once inside the action's own `getAuthed()`. An action (and a
+ * route handler) can refresh the session cookie itself — unlike an RSC render,
+ * writing cookies there is allowed — so the middleware pass is pure overhead.
+ * Document / RSC navigations keep it: that is the only place the rotated cookie
+ * can be written back, and the only place the redirect below matters.
+ */
+export function skipsAuth(request: NextRequest): boolean {
+  // Server action POST — carries the Next-Action header.
+  if (request.headers.get("next-action")) return true;
+  // Route handlers authenticate themselves (or use the service role).
+  if (request.nextUrl.pathname.startsWith("/api/")) return true;
+  return false;
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
   });
+
+  if (skipsAuth(request)) return supabaseResponse;
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

@@ -13,11 +13,37 @@ import { recordNotification } from "@/lib/notify/history";
  * `push_subscriptions` row can never exist here. This gets an FCM registration
  * token instead and stores it in `fcm_tokens`.
  *
- * The token is device-scoped and rotates, so re-registering on every launch is
- * the intended pattern — the upsert is keyed on the token itself.
+ * The token is device-scoped and rotates. The upsert is keyed on the token
+ * itself, so registration is skipped while the token, app version and day are
+ * all unchanged (see shouldRegisterToken) instead of spending a server action
+ * on an identical write every launch.
  */
 /** Where the device's current FCM token is cached (see clearSession.ts). */
 export const FCM_TOKEN_KEY = "allocat-fcm-token";
+
+/**
+ * Stamp of the last `registerFcmToken` round trip: `<token>|<appVersion>|<day>`.
+ * Account-scoped (cleared on sign-out) so the next account on this device
+ * re-registers even with an unchanged token.
+ */
+const FCM_REGISTERED_KEY = "allocat-fcm-registered";
+
+/**
+ * Should this launch spend a server action on re-registering?
+ *
+ * The upsert is keyed on the token, so re-sending an unchanged token on every
+ * launch wrote the same row over and over. Re-register when the token rotates,
+ * when the app version changes (the row records it), or once a day so a row
+ * deleted server-side heals on its own.
+ */
+export function shouldRegisterToken(
+  stamp: string | null,
+  token: string,
+  version: string,
+  day: string,
+): boolean {
+  return stamp !== `${token}|${version}|${day}`;
+}
 
 type RemoteNotification = {
   id?: string | number;
@@ -119,10 +145,29 @@ export function PushRegistration() {
               /* storage may be blocked; registration still works */
             }
             try {
-              const { registerFcmToken } = await import("@/lib/actions/push");
               const { App } = await import("@capacitor/app");
               const info = await App.getInfo().catch(() => null);
-              await registerFcmToken(t.value, info ? `${info.version} (${info.build})` : undefined);
+              const version = info ? `${info.version} (${info.build})` : "";
+              const day = new Date().toISOString().slice(0, 10);
+
+              let stamp: string | null = null;
+              try {
+                stamp = localStorage.getItem(FCM_REGISTERED_KEY);
+              } catch {
+                /* storage blocked — fall through and register */
+              }
+              if (!shouldRegisterToken(stamp, t.value, version, day)) return;
+
+              const { registerFcmToken } = await import("@/lib/actions/push");
+              await registerFcmToken(t.value, version || undefined);
+              try {
+                localStorage.setItem(
+                  FCM_REGISTERED_KEY,
+                  `${t.value}|${version}|${day}`,
+                );
+              } catch {
+                /* storage blocked — we just re-register next launch */
+              }
             } catch (err) {
               console.warn("[push] token registration failed:", err);
             }

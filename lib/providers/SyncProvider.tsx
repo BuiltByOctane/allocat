@@ -96,7 +96,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   // Coalesce the heavy post-sync refresh. Under the concurrent drain many items
   // finish near-together; firing forceRefreshTable + refetch per item would pull
   // the same tables dozens of times. Accumulate the union of tables/keys and flush
-  // once per ~150ms burst instead. The cheap per-item invalidateQueries stay inline.
+  // ONCE when the queue comes to rest (engine `onDrainEnd`) — a backlog of 40 SMS
+  // used to re-pull budget_items/assets/debts on every wave. Outside a drain (an
+  // isolated mutation) the ~150ms timer below still applies.
+  // The cheap per-item invalidateQueries stay inline.
   const forcedTablesRef = useRef<Set<RefreshTable>>(new Set());
   const refetchKeysRef = useRef<Set<string>>(new Set());
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -120,14 +123,32 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     (tables: RefreshTable[], keys: string[]) => {
       tables.forEach((t) => forcedTablesRef.current.add(t));
       keys.forEach((k) => refetchKeysRef.current.add(k));
+      // Mid-drain: just accumulate. onDrainEnd flushes the union once, so a long
+      // backlog costs one refresh instead of one per wave.
+      if (engine.isDraining) return;
       if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
       flushTimerRef.current = setTimeout(() => {
         flushTimerRef.current = null;
         void flushForcedRefresh();
       }, 150);
     },
-    [flushForcedRefresh]
+    [flushForcedRefresh, engine]
   );
+
+  // Queue at rest → run the accumulated refresh now (nothing else will).
+  const handleDrainEnd = useCallback(() => {
+    if (flushTimerRef.current) {
+      clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
+    if (
+      forcedTablesRef.current.size === 0 &&
+      refetchKeysRef.current.size === 0
+    ) {
+      return;
+    }
+    void flushForcedRefresh();
+  }, [flushForcedRefresh]);
 
   // Clear a pending flush on unmount.
   useEffect(
@@ -254,9 +275,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       onPendingChange: setPendingCount,
       onRollback: handleRollback,
       onSynced: handleSynced,
+      onDrainEnd: handleDrainEnd,
     });
     return () => engine.setCallbacks({});
-  }, [engine, setPendingCount, handleRollback, handleSynced]);
+  }, [engine, setPendingCount, handleRollback, handleSynced, handleDrainEnd]);
 
   useEffect(() => {
     let mounted = true;

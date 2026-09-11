@@ -103,11 +103,12 @@ const MAX_CONCURRENCY = 4;
 // this many per round trip. Must stay ≤ the server action's own cap
 // (MAX_BULK_INGEST) — a larger group is split across successive calls.
 //
-// Kept well under that cap on purpose: the bulk ingest runs its items
-// SEQUENTIALLY server-side (they can touch the same budget item), so the batch
-// size is really a wall-clock budget for one serverless invocation. Ten SMS is
-// a couple of seconds; a 40-message backlog is 4 requests instead of 40.
-const MAX_BATCH = Math.min(10, MAX_BULK_INGEST);
+// The bulk ingest runs its items SEQUENTIALLY server-side (two SMS can touch
+// the same budget item), so this is really a wall-clock budget for one
+// serverless invocation. It was 10 while every nested action re-verified the
+// user over the network; with request-scoped auth (getAuthedUser) that cost is
+// gone, so a 40-message backlog is 2 requests instead of 40.
+const MAX_BATCH = Math.min(25, MAX_BULK_INGEST);
 
 /** Result of one entry inside a bulk round trip. */
 type BatchOutcome = { ok: true; result: unknown } | { ok: false; error: string };

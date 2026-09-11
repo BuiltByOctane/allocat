@@ -10,7 +10,7 @@
  * exact static pool message (pickOverspendMessage) otherwise.
  */
 
-import { createClient } from "@/lib/supabase/server";
+import { getAuthedUser } from "@/lib/supabase/server";
 import { openRouterChat } from "@/lib/server/openrouter";
 import {
   OVERSPEND_SYSTEM,
@@ -41,10 +41,7 @@ export async function generateOverspendMessage(
 ): Promise<NotifMessage | null> {
   try {
     if (!process.env.OPENROUTER_API_KEY) return null;
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getAuthedUser();
     if (!user) return null;
 
     // openRouterChat returns a raw Response (see lib/server/openrouter.ts).

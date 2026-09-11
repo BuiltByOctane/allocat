@@ -1,10 +1,10 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthedUser } from "@/lib/supabase/server";
 
 export async function getAssetCategories() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data, error } = await supabase
@@ -19,7 +19,7 @@ export async function getAssetCategories() {
 
 export async function addAssetCategory(name: string, icon: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data, error } = await supabase
@@ -34,7 +34,7 @@ export async function addAssetCategory(name: string, icon: string) {
 
 export async function updateAssetCategory(id: string, updates: { name?: string; icon?: string }) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data, error } = await supabase
@@ -51,7 +51,7 @@ export async function updateAssetCategory(id: string, updates: { name?: string; 
 
 export async function deleteAssetCategory(id: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { error } = await supabase
@@ -66,7 +66,7 @@ export async function deleteAssetCategory(id: string) {
 
 export async function seedDefaultCategories() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { count } = await supabase

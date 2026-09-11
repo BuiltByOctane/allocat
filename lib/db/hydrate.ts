@@ -228,8 +228,191 @@ export async function canHydrateFromCache(): Promise<boolean> {
 }
 
 /**
- * Fetches ALL tables from Supabase for the current user and bulk-writes into IDB.
- * Called once at app startup (SyncProvider mount). Uses bulkPut for upsert semantics.
+ * Minimal structural view of a PostgREST query builder.
+ *
+ * The table name is dynamic here (one code path pulls all 15), so the generated
+ * per-table types cannot apply. Rows are re-typed on write by Dexie.
+ */
+interface Queryable {
+  select(columns: string): Queryable;
+  eq(column: string, value: unknown): Queryable;
+  gte(column: string, value: unknown): Queryable;
+  order(column: string, opts: { ascending: boolean }): Queryable;
+  limit(count: number): Queryable;
+  then<T>(
+    onfulfilled: (value: {
+      data: Array<Record<string, unknown>> | null;
+    }) => T,
+  ): Promise<T>;
+}
+
+function queryClient(): { from(table: string): Queryable } {
+  return createClient() as unknown as { from(table: string): Queryable };
+}
+
+/** How one table is pulled and reconciled. */
+interface TableSpec {
+  table: string;
+  /** Column carrying the owner id — `profiles` is keyed by `id`. */
+  ownerColumn: "user_id" | "id";
+  /**
+   * Truncation for the FIRST pull only (there is no watermark yet, so the whole
+   * history would come down). Later pulls are deltas and need no cap.
+   */
+  firstPull?: { orderBy: string; ascending: boolean; limit: number };
+  /**
+   * Whether an id sweep can prove a local row was deleted server-side. True only
+   * for tables we pull in full: for a truncated table a missing id usually just
+   * means "older than the cap".
+   */
+  reconcileDeletes: boolean;
+}
+
+const TABLE_SPECS: TableSpec[] = [
+  { table: "profiles", ownerColumn: "id", reconcileDeletes: true },
+  { table: "budgets", ownerColumn: "user_id", reconcileDeletes: true },
+  { table: "categories", ownerColumn: "user_id", reconcileDeletes: true },
+  { table: "budget_items", ownerColumn: "user_id", reconcileDeletes: true },
+  { table: "assets", ownerColumn: "user_id", reconcileDeletes: true },
+  { table: "asset_categories", ownerColumn: "user_id", reconcileDeletes: true },
+  {
+    table: "asset_value_history",
+    ownerColumn: "user_id",
+    firstPull: { orderBy: "entry_date", ascending: false, limit: 500 },
+    reconcileDeletes: false,
+  },
+  { table: "debts", ownerColumn: "user_id", reconcileDeletes: true },
+  { table: "reports", ownerColumn: "user_id", reconcileDeletes: true },
+  {
+    table: "net_worth_snapshots",
+    ownerColumn: "user_id",
+    firstPull: { orderBy: "snapshot_date", ascending: true, limit: 24 },
+    reconcileDeletes: false,
+  },
+  {
+    table: "activity_logs",
+    ownerColumn: "user_id",
+    firstPull: { orderBy: "created_at", ascending: false, limit: 200 },
+    reconcileDeletes: false,
+  },
+  { table: "merchant_rules", ownerColumn: "user_id", reconcileDeletes: true },
+  {
+    table: "sms_transactions",
+    ownerColumn: "user_id",
+    firstPull: { orderBy: "created_at", ascending: false, limit: 200 },
+    reconcileDeletes: false,
+  },
+  { table: "sms_blocklist", ownerColumn: "user_id", reconcileDeletes: true },
+  {
+    table: "feedback",
+    ownerColumn: "user_id",
+    firstPull: { orderBy: "created_at", ascending: false, limit: 100 },
+    reconcileDeletes: false,
+  },
+];
+
+const SPEC_BY_TABLE = new Map(TABLE_SPECS.map((s) => [s.table, s]));
+
+/**
+ * The watermark to store after a pull: the newest server `updated_at` seen,
+ * never older than the one we already had.
+ *
+ * Server values only — a client clock that runs fast would otherwise skip rows
+ * written in between. A row with no usable timestamp (a table that predates the
+ * delta migration) simply leaves the watermark alone, which keeps that table on
+ * full pulls instead of silently pulling nothing. Exported for unit testing.
+ */
+export function selectDeltaWatermark(
+  rows: Array<Record<string, unknown>>,
+  previous: string | undefined,
+): string | undefined {
+  let best = previous;
+  let bestMs = previous ? Date.parse(previous) : Number.NEGATIVE_INFINITY;
+
+  for (const row of rows) {
+    const raw = row.updated_at;
+    if (typeof raw !== "string") continue;
+    const ms = Date.parse(raw);
+    if (Number.isNaN(ms) || ms <= bestMs) continue;
+    best = raw;
+    bestMs = ms;
+  }
+  return best;
+}
+
+/**
+ * Pull one table: the rows changed since its watermark, plus — for full-payload
+ * tables — an id-only sweep so server-side deletions still propagate (a delta
+ * can never mention a row that no longer exists).
+ *
+ * Degrades safely on a database that predates the delta migration: without an
+ * `updated_at` column no watermark is ever stored, so the pull stays exactly as
+ * wide as it was before.
+ */
+async function pullTable(
+  spec: TableSpec,
+  userId: string,
+  gen: number,
+  protectedPre: Map<string, Set<string>>,
+): Promise<void> {
+  const db = getDB();
+  const sb = queryClient();
+
+  const meta = await db.sync_meta.get(spec.table);
+  const watermark = meta?.watermark;
+
+  let rowQuery = sb.from(spec.table).select("*").eq(spec.ownerColumn, userId);
+  if (watermark) {
+    // `gte`, not `gt`: at microsecond resolution a tie would otherwise drop a
+    // row, and re-sending one row costs nothing (bulkPut is idempotent).
+    rowQuery = rowQuery.gte("updated_at", watermark);
+  } else if (spec.firstPull) {
+    rowQuery = rowQuery
+      .order(spec.firstPull.orderBy, { ascending: spec.firstPull.ascending })
+      .limit(spec.firstPull.limit);
+  }
+
+  const sweepQuery = spec.reconcileDeletes
+    ? sb.from(spec.table).select("id").eq(spec.ownerColumn, userId)
+    : null;
+
+  const [rowsRes, sweepRes] = await Promise.all([
+    rowQuery,
+    sweepQuery ?? Promise.resolve({ data: null }),
+  ]);
+  if (isStale(gen)) return;
+
+  const data = rowsRes.data;
+  const protectedIds = unionSet(
+    protectedPre.get(spec.table),
+    (await buildProtectedIds()).get(spec.table),
+  );
+
+  const rows = filterProtected(data as Array<{ id: string }> | null, protectedIds);
+  if (rows.length) {
+    await db.table(spec.table).bulkPut(rows as never);
+  }
+  if (spec.reconcileDeletes) {
+    await reconcileDeletes(
+      spec.table,
+      sweepRes.data as Array<{ id: string }> | null,
+      protectedIds,
+    );
+  }
+
+  await db.sync_meta.put({
+    table: spec.table,
+    lastSynced: Date.now(),
+    watermark: selectDeltaWatermark(data ?? [], watermark),
+  });
+}
+
+/**
+ * Reconciles every table for the current user into IDB. Called at app startup
+ * (SyncProvider mount), on foreground/reconnect, and by pull-to-refresh.
+ *
+ * Each table pulls its own delta (see pullTable), so a quiet reconcile moves
+ * almost no rows — it used to re-download the entire account every time.
  *
  * If the stored user ID in IDB differs from the current user (different person
  * logged in on the same device), IDB is wiped first before re-hydrating.
@@ -260,266 +443,55 @@ export async function hydrateAllTables(): Promise<void> {
   // Store the current user's ID so we can detect account changes on next open
   await db.sync_meta.put({ table: USER_META_KEY, lastSynced: Date.now(), userId });
 
-  // Snapshot in-flight protected ids BEFORE the fetch (union'd with the post-fetch
-  // snapshot below to cover items that drain during the fetch window).
+  // Snapshot in-flight protected ids BEFORE the fetches (union'd per table with
+  // a post-fetch snapshot to cover items that drain during the fetch window).
   const protectedPre = await buildProtectedIds();
 
-  // Parallel fetch every table
-  const [
-    { data: profiles },
-    { data: budgets },
-    { data: categories },
-    { data: budgetItems },
-    { data: assets },
-    { data: assetCategories },
-    { data: assetValueHistory },
-    { data: debts },
-    { data: reports },
-    { data: snapshots },
-    { data: activityLogs },
-    { data: merchantRules },
-    { data: smsTransactions },
-    { data: smsBlocklist },
-    { data: feedback },
-  ] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", userId),
-    supabase.from("budgets").select("*").eq("user_id", userId),
-    supabase.from("categories").select("*").eq("user_id", userId),
-    supabase.from("budget_items").select("*").eq("user_id", userId),
-    supabase.from("assets").select("*").eq("user_id", userId),
-    supabase.from("asset_categories").select("*").eq("user_id", userId),
-    supabase
-      .from("asset_value_history")
-      .select("*")
-      .eq("user_id", userId)
-      .order("entry_date", { ascending: false })
-      .limit(500),
-    supabase.from("debts").select("*").eq("user_id", userId),
-    supabase.from("reports").select("*").eq("user_id", userId),
-    supabase
-      .from("net_worth_snapshots")
-      .select("*")
-      .eq("user_id", userId)
-      .order("snapshot_date", { ascending: true })
-      .limit(24),
-    supabase
-      .from("activity_logs")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(200),
-    supabase.from("merchant_rules").select("*").eq("user_id", userId),
-    supabase
-      .from("sms_transactions")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(200),
-    supabase.from("sms_blocklist").select("*").eq("user_id", userId),
-    supabase
-      .from("feedback")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(100),
-  ]);
-
-  // The 15-table pull can take seconds on a cold network. If the session was
-  // torn down meanwhile, drop the payload on the floor.
-  if (isStale(gen)) return;
-
-  const now = Date.now();
-
-  // Protect optimistic-but-unsynced local rows from being clobbered by the
-  // blanket server pull (see buildProtectedIds). Rows whose id has an in-flight
-  // mutation are filtered OUT of the bulkPut below; the pending sync reconciles
-  // them. (temp_ rows aren't in the server payload, so they survive regardless.)
-  const protectedIds = unionProtected(protectedPre, await buildProtectedIds());
-  const keep = <T extends { id: string }>(
-    table: string,
-    rows: T[] | null | undefined,
-  ): T[] => filterProtected(rows, protectedIds.get(table));
-
-  // Bulk-upsert all tables in parallel
-  await Promise.all([
-    profiles?.length ? db.profiles.bulkPut(profiles) : Promise.resolve(),
-    budgets?.length
-      ? db.budgets.bulkPut(keep("budgets", budgets))
-      : Promise.resolve(),
-    categories?.length
-      ? db.categories.bulkPut(keep("categories", categories))
-      : Promise.resolve(),
-    budgetItems?.length
-      ? db.budget_items.bulkPut(keep("budget_items", budgetItems))
-      : Promise.resolve(),
-    assets?.length
-      ? db.assets.bulkPut(keep("assets", assets))
-      : Promise.resolve(),
-    assetCategories?.length
-      ? db.asset_categories.bulkPut(keep("asset_categories", assetCategories))
-      : Promise.resolve(),
-    assetValueHistory?.length
-      ? db.asset_value_history.bulkPut(
-          keep("asset_value_history", assetValueHistory),
-        )
-      : Promise.resolve(),
-    debts?.length ? db.debts.bulkPut(keep("debts", debts)) : Promise.resolve(),
-    reports?.length ? db.reports.bulkPut(reports) : Promise.resolve(),
-    snapshots?.length
-      ? db.net_worth_snapshots.bulkPut(snapshots)
-      : Promise.resolve(),
-    activityLogs?.length
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ? db.activity_logs.bulkPut(activityLogs as any)
-      : Promise.resolve(),
-    merchantRules?.length
-      ? db.merchant_rules.bulkPut(keep("merchant_rules", merchantRules))
-      : Promise.resolve(),
-    smsTransactions?.length
-      ? db.sms_transactions.bulkPut(keep("sms_transactions", smsTransactions))
-      : Promise.resolve(),
-    smsBlocklist?.length
-      ? db.sms_blocklist.bulkPut(keep("sms_blocklist", smsBlocklist))
-      : Promise.resolve(),
-    feedback?.length ? db.feedback.bulkPut(feedback) : Promise.resolve(),
-  ]);
-
-  if (isStale(gen)) return;
-
-  // Propagate server-side deletions: for full-pull tables only, drop local rows
-  // no longer present on the server (bulkPut alone can never remove a row).
-  await Promise.all([
-    reconcileDeletes("profiles", profiles, protectedIds.get("profiles")),
-    reconcileDeletes("budgets", budgets, protectedIds.get("budgets")),
-    reconcileDeletes("categories", categories, protectedIds.get("categories")),
-    reconcileDeletes(
-      "budget_items",
-      budgetItems,
-      protectedIds.get("budget_items"),
+  await Promise.all(
+    TABLE_SPECS.map((spec) =>
+      pullTable(spec, userId, gen, protectedPre).catch((err) => {
+        // One failing table must not abort the rest: its watermark stays put, so
+        // the next reconcile simply re-asks for the same window.
+        console.warn(`[hydrate] ${spec.table} pull failed:`, err);
+      }),
     ),
-    reconcileDeletes("assets", assets, protectedIds.get("assets")),
-    reconcileDeletes(
-      "asset_categories",
-      assetCategories,
-      protectedIds.get("asset_categories"),
-    ),
-    reconcileDeletes("debts", debts, protectedIds.get("debts")),
-    reconcileDeletes("reports", reports, protectedIds.get("reports")),
-    reconcileDeletes(
-      "merchant_rules",
-      merchantRules,
-      protectedIds.get("merchant_rules"),
-    ),
-    reconcileDeletes(
-      "sms_blocklist",
-      smsBlocklist,
-      protectedIds.get("sms_blocklist"),
-    ),
-  ]);
-
-  // Stamp sync_meta for all tables
-  const DATA_TABLES = [
-    "profiles",
-    "budgets",
-    "categories",
-    "budget_items",
-    "assets",
-    "asset_categories",
-    "asset_value_history",
-    "debts",
-    "reports",
-    "net_worth_snapshots",
-    "activity_logs",
-    "merchant_rules",
-    "sms_transactions",
-    "sms_blocklist",
-    "feedback",
-  ] as const;
-
-  await db.sync_meta.bulkPut(
-    DATA_TABLES.map((table) => ({ table, lastSynced: now }))
   );
 }
 
-/**
- * Only re-fetches a single table from Supabase if it's considered stale (>5 min old).
- * After fetch, upserts records into IDB and updates sync_meta.
- */
-export async function refreshTableIfStale(
-  table:
-    | "budgets"
-    | "categories"
-    | "budget_items"
-    | "assets"
-    | "asset_categories"
-    | "asset_value_history"
-    | "debts"
-    | "net_worth_snapshots"
-    | "reports"
-): Promise<void> {
-  const stale = await isTableStale(table);
-  if (!stale) return;
+/** Tables the single-table refresh helpers accept. */
+type RefreshableTable =
+  | "budgets"
+  | "categories"
+  | "budget_items"
+  | "assets"
+  | "asset_categories"
+  | "asset_value_history"
+  | "debts"
+  | "net_worth_snapshots"
+  | "reports";
+
+/** Pull one table by name, on behalf of the two exported helpers below. */
+async function refreshOne(table: RefreshableTable): Promise<void> {
+  const spec = SPEC_BY_TABLE.get(table);
+  if (!spec) return;
 
   const gen = dbGeneration;
   const userId = await localUserId();
   if (!userId) return;
 
-  const supabase = createClient();
-  const db = getDB();
-
-  const protectedPre = (await buildProtectedIds()).get(table);
-  const query = supabase.from(table).select("*").eq("user_id", userId);
-
-  const { data } = await query;
-  if (isStale(gen)) return;
-  // Same protection as hydrateAllTables — never overwrite a row with an
-  // in-flight local mutation queued against it (union pre+post fetch snapshots).
-  const protectedIds = unionSet(protectedPre, (await buildProtectedIds()).get(table));
-  if (data?.length) {
-    await db.table(table).bulkPut(filterProtected(data, protectedIds));
-  }
-  if (RECONCILE_DELETE_TABLES.has(table)) {
-    await reconcileDeletes(table, data, protectedIds);
-  }
-  await db.sync_meta.put({ table, lastSynced: Date.now() });
+  await pullTable(spec, userId, gen, await buildProtectedIds());
 }
 
 /**
- * Force-refresh a single table from Supabase regardless of staleness.
+ * Force-refresh a single table regardless of staleness.
  * Use after a sync that may have triggered server-side cascades (e.g. a
- * budget_items UPDATE that cascaded into assets / debts).
+ * budget_items UPDATE that cascaded into assets / debts) — the cascade bumps
+ * `updated_at`, so the delta picks the changed rows up.
  */
 export async function forceRefreshTable(
-  table:
-    | "budgets"
-    | "categories"
-    | "budget_items"
-    | "assets"
-    | "asset_categories"
-    | "asset_value_history"
-    | "debts"
-    | "net_worth_snapshots"
-    | "reports"
+  table: RefreshableTable,
 ): Promise<void> {
-  const gen = dbGeneration;
-  const userId = await localUserId();
-  if (!userId) return;
-
-  const supabase = createClient();
-  const db = getDB();
-  const protectedPre = (await buildProtectedIds()).get(table);
-  const { data } = await supabase.from(table).select("*").eq("user_id", userId);
-  if (isStale(gen)) return;
-  // Same protection as hydrateAllTables — never overwrite a row with an
-  // in-flight local mutation queued against it (union pre+post fetch snapshots).
-  const protectedIds = unionSet(protectedPre, (await buildProtectedIds()).get(table));
-  if (data?.length) {
-    await db.table(table).bulkPut(filterProtected(data, protectedIds));
-  }
-  if (RECONCILE_DELETE_TABLES.has(table)) {
-    await reconcileDeletes(table, data, protectedIds);
-  }
-  await db.sync_meta.put({ table, lastSynced: Date.now() });
+  await refreshOne(table);
 }
 
 /** Wipes all user data from IDB — also called when a different user logs in. */

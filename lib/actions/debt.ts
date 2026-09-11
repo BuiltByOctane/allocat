@@ -1,13 +1,13 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthedUser } from "@/lib/supabase/server";
 import { logActivity, fmt, getUserCurrency } from "@/lib/server/activity-logger";
 import { calcTotalRepayable } from "@/lib/utils/debt-calc";
 import { upsertTodaySnapshot } from "@/lib/actions/asset-history";
 
 export async function getDebtData() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data: debts, error } = await supabase
@@ -47,7 +47,7 @@ export async function addDebt(
   loanTenureMonths?: number | null
 ) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const totalRepayable = calcTotalRepayable(principal, interestRate, loanTenureMonths ?? null, interestType);
@@ -101,7 +101,7 @@ type DebtUpdate = Partial<{
 
 export async function updateDebt(id: string, updates: DebtUpdate) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   // Recalculate total_repayable if any relevant field changed
@@ -202,7 +202,7 @@ export async function updateDebt(id: string, updates: DebtUpdate) {
 
 export async function deleteDebt(id: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data: debt } = await supabase
@@ -233,7 +233,7 @@ export async function deleteDebt(id: string) {
 
 export async function updateDebtIcon(id: string, icon: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data, error } = await supabase
@@ -250,7 +250,7 @@ export async function updateDebtIcon(id: string, icon: string) {
 
 export async function makePayment(id: string, amount: number, options?: { suppressLog?: boolean }) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data: debt } = await supabase
@@ -298,7 +298,7 @@ export async function makePayment(id: string, amount: number, options?: { suppre
 /** Inverse of makePayment — refunds a payment (e.g. when reversing an SMS spend). */
 export async function reverseDebtPayment(id: string, amount: number, options?: { suppressLog?: boolean }) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data: debt } = await supabase
@@ -346,7 +346,7 @@ export async function reverseDebtPayment(id: string, amount: number, options?: {
 
 export async function getDebtPaymentTrend() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const thirtyDaysAgo = new Date();

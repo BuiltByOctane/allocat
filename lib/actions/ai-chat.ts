@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthedUser } from "@/lib/supabase/server";
 import type { FinanceTopic } from "@/lib/ai-utils";
 import { fmt as fmtCurrency, getUserCurrency } from "@/lib/server/activity-logger";
 
@@ -15,7 +15,7 @@ interface Ctx {
 
 async function makeCtx(): Promise<Ctx> {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
   const cur = await getUserCurrency(supabase, user.id);
   return {

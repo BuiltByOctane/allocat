@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthedUser } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { isKnownAvatar } from "@/lib/profile/avatars";
 
@@ -26,7 +26,7 @@ async function recordActiveDay(supabase: DbClient, userId: string) {
 export async function markUserAsOnboarded() {
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
 
   if (!user) {
     return { error: "Not authenticated" };
@@ -57,7 +57,7 @@ export async function markUserAsOnboarded() {
 export async function updateUserCurrency(code: string) {
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) {
     return { error: "Not authenticated" };
   }
@@ -82,7 +82,7 @@ export async function updateUserAvatar(avatarId: string) {
 
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) {
     return { error: "Not authenticated" };
   }
@@ -117,7 +117,7 @@ export async function updateUserAvatar(avatarId: string) {
 export async function touchLastSeen(mode?: "web" | "android") {
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) {
     return { error: "Not authenticated" };
   }

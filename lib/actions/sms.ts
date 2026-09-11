@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthedUser } from "@/lib/supabase/server";
 import { quickLogSpend, reverseSpend } from "@/lib/actions/budget";
 import { notifyUser } from "@/lib/server/push-notify";
 import { logActivity, getUserCurrency, fmt } from "@/lib/server/activity-logger";
@@ -28,9 +28,7 @@ const NEAR_LIMIT_RATIO = 0.9;
 
 async function getAuthed() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
   return { supabase, user };
 }

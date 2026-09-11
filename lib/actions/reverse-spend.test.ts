@@ -72,6 +72,7 @@ const supabaseStub = {
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => supabaseStub,
+  getAuthedUser: async () => USER,
 }));
 vi.mock("@/lib/server/activity-logger", () => ({
   logActivity: vi.fn(async () => {}),

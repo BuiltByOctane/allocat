@@ -1,6 +1,6 @@
 # Delta sync + request-scoped auth — design
 
-**Status:** proposed
+**Status:** implemented
 **Follows:** `d042409` (batched SMS ingest, superseded-write collapsing, drain-end refresh, middleware auth skip)
 
 ## Problem

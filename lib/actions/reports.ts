@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthedUser } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types/database";
 
 export interface UpsertReportInput {
@@ -17,9 +17,7 @@ export interface UpsertReportInput {
  */
 export async function upsertReport(input: UpsertReportInput) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { budgetId, month, year, notes, summaryData } = input;
@@ -48,9 +46,7 @@ export async function upsertReport(input: UpsertReportInput) {
 /** Read the monthly report for the current user (null if none saved yet). */
 export async function getReport(month: number, year: number) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data, error } = await supabase

@@ -678,10 +678,10 @@ describe("SyncEngine bulk batching", () => {
 
     await engine.processQueue();
 
-    // Split across calls, each within the per-request cap (MAX_BATCH = 10),
+    // Split across calls, each within the per-request cap (MAX_BATCH = 25),
     // and every item still sent exactly once.
     expect(engine.batchCalls.length).toBeGreaterThan(1);
-    expect(Math.max(...engine.batchCalls.map((c) => c.length))).toBeLessThanOrEqual(10);
+    expect(Math.max(...engine.batchCalls.map((c) => c.length))).toBeLessThanOrEqual(25);
     expect(engine.batchCalls.flat()).toHaveLength(30);
     expect(new Set(engine.batchCalls.flat()).size).toBe(30);
   });

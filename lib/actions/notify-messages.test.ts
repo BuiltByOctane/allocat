@@ -11,6 +11,9 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser: async () => ({ data: { user: { id: "u1" } } }) },
   }),
+  // Request-scoped auth: actions read the user through this, not through a
+  // fresh getUser() of their own.
+  getAuthedUser: async () => ({ id: "u1" }),
 }));
 
 const ORIGINAL_KEY = process.env.OPENROUTER_API_KEY;

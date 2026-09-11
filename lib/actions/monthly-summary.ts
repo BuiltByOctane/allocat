@@ -11,7 +11,7 @@
  * button is hidden once Notes is filled), so it is not counted against the
  * daily AI message quota.
  */
-import { createClient } from "@/lib/supabase/server";
+import { getAuthedUser } from "@/lib/supabase/server";
 import { openRouterChat } from "@/lib/server/openrouter";
 import {
   MONTHLY_SUMMARY_SYSTEM,
@@ -26,10 +26,7 @@ export async function generateMonthlySummary(
   try {
     if (!process.env.OPENROUTER_API_KEY) return null;
 
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getAuthedUser();
     if (!user) return null;
 
     const res = await openRouterChat({

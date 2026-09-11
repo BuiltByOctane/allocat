@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthedUser } from "@/lib/supabase/server";
 import type { BudgetTemplate, TemplateCategory } from "@/lib/budget-templates";
 
 /** Shape accepted when saving a custom template (savedAt assigned by DB). */
@@ -50,7 +50,7 @@ function rowToTemplate(row: {
 /** All custom templates for the current user, newest first. */
 export async function getBudgetTemplates(): Promise<BudgetTemplate[]> {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data, error } = await supabase
@@ -73,7 +73,7 @@ export async function saveBudgetTemplate(
   id?: string | null
 ): Promise<BudgetTemplate> {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const name = input.name.trim();
@@ -102,7 +102,7 @@ export async function updateBudgetTemplate(
   input: SaveTemplateInput
 ): Promise<BudgetTemplate> {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const name = input.name.trim();
@@ -148,7 +148,7 @@ export async function stampBudgetTemplateIdentity(
   input: StampTemplateInput
 ): Promise<void> {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { error: budgetError } = await supabase
@@ -178,7 +178,7 @@ export async function stampBudgetTemplateIdentity(
 /** Delete a custom template by id (RLS scopes to the owner). */
 export async function deleteBudgetTemplate(id: string): Promise<void> {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { error } = await supabase

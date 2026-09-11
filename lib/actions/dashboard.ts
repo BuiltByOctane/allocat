@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthedUser } from "@/lib/supabase/server";
 import type { Database } from "@/lib/types/database";
 
 type CategoryRow = Database["public"]["Tables"]["categories"]["Row"];
@@ -9,7 +9,7 @@ type CategoryWithItems = CategoryRow & { budget_items: BudgetItemRow[] | null };
 
 export async function getDashboardData() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const now = new Date();

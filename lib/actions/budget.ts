@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthedUser } from "@/lib/supabase/server";
 import type { Database } from "@/lib/types/database";
 import { logActivity, fmt, getUserCurrency } from "@/lib/server/activity-logger";
 import { notifyUser } from "@/lib/server/push-notify";
@@ -171,7 +171,7 @@ function validateItemAllocationChange(
 
 export async function getBudgetForPeriod(month: number, year: number) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   let { data: budget } = await supabase
@@ -241,7 +241,7 @@ async function formatBudget(
  */
 export async function getBudgetView(month: number, year: number) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data: budget } = await supabase
@@ -266,7 +266,7 @@ export async function ensureBudgetRow(
   year: number
 ): Promise<BudgetRow> {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data: existing } = await supabase
@@ -297,7 +297,7 @@ export async function addBudgetCategory(
   icon: string | null = null
 ) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const trimmedName = name.trim();
@@ -331,7 +331,7 @@ export async function addBudgetCategory(
 
 export async function updateBudgetTotal(budgetId: string, totalAmount: number) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   if (totalAmount < 0) {
@@ -381,7 +381,7 @@ export async function updateBudgetTotal(budgetId: string, totalAmount: number) {
 
 export async function updateCategoryAllocation(categoryId: string, allocatedAmount: number) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   if (allocatedAmount < 0) throw new Error("Allocation must be 0 or more.");
@@ -413,7 +413,7 @@ export async function updateCategoryAllocation(categoryId: string, allocatedAmou
 
 export async function updateCategoryIcon(categoryId: string, icon: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data, error } = await supabase
@@ -430,7 +430,7 @@ export async function updateCategoryIcon(categoryId: string, icon: string) {
 
 export async function updateCategoryColor(categoryId: string, color: string | null) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data, error } = await supabase
@@ -447,7 +447,7 @@ export async function updateCategoryColor(categoryId: string, color: string | nu
 
 export async function updateCategoryName(categoryId: string, name: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data, error } = await supabase
@@ -473,7 +473,7 @@ export async function updateCategoryName(categoryId: string, name: string) {
 
 export async function deleteCategory(categoryId: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data: cat } = await supabase
@@ -511,7 +511,7 @@ export async function addBudgetItem(
   template?: { template_id: string | null; template_item_id: string | null } | null
 ) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const trimmedName = name.trim();
@@ -583,7 +583,7 @@ export async function updateBudgetItem(
   }
 ) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data: existingItem, error: existingItemError } = await supabase
@@ -733,7 +733,7 @@ export async function updateBudgetItem(
 
 export async function deleteBudgetItem(itemId: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data: item } = await supabase
@@ -764,7 +764,7 @@ export async function deleteBudgetItem(itemId: string) {
 
 export async function getCategoryItems(categoryId: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data, error } = await supabase
@@ -789,7 +789,7 @@ export async function quickLogSpend(
   source?: { kind: "sms"; merchant?: string | null },
 ) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   // Item fetch and the user's currency are independent reads — run together.
@@ -950,7 +950,7 @@ export async function reverseSpend(
   source?: { kind: "sms"; merchant?: string | null },
 ) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data: item } = await supabase
@@ -1075,7 +1075,7 @@ export async function setupBudgetFromTemplate(
   templateId: string | null = null
 ) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   if (totalBudget < 0) throw new Error("Total budget must be 0 or more.");
@@ -1283,7 +1283,7 @@ export async function carryBudgetForward(input: CarryPayload): Promise<{
   itemIdMap: Array<{ tempId: string; realId: string; record: BudgetItemRow }>;
 }> {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   // 1. Ensure the target budget row exists (insert-or-reselect on unique race).
@@ -1525,7 +1525,7 @@ export async function undoCarriedBudget(
   budgetId: string
 ): Promise<{ blocked: boolean }> {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data: categories, error: catErr } = await supabase
@@ -1581,7 +1581,7 @@ export async function undoCarriedBudget(
 
 export async function getCategoryData(categoryId: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) return null;
 
   const { data: category } = await supabase

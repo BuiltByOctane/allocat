@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthedUser } from "@/lib/supabase/server";
 import { upsertTodaySnapshot } from "./asset-history";
 import { computeMonthlyHistory } from "@/lib/utils/netWorthHistory";
 import { logActivity, fmt, getUserCurrency } from "@/lib/server/activity-logger";
@@ -29,7 +29,7 @@ function normalizeAsset(raw: any) {
 
 export async function getNetWorthData() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   // Net worth list excludes achieved goal-assets (kept for archive only).
@@ -75,7 +75,7 @@ export async function addAsset(
   options?: { isGoal?: boolean; targetAmount?: number | null }
 ) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const isGoal = Boolean(options?.isGoal);
@@ -160,7 +160,7 @@ export async function updateAsset(
   }
 ) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   // Toggling is_goal off clears goal-only fields
@@ -231,7 +231,7 @@ export async function updateAsset(
  */
 export async function achieveGoalAsset(assetId: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data: asset, error: fetchErr } = await supabase
@@ -306,7 +306,7 @@ export async function achieveGoalAsset(assetId: string) {
 
 export async function updateAssetIcon(id: string, icon: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data, error } = await supabase
@@ -323,7 +323,7 @@ export async function updateAssetIcon(id: string, icon: string) {
 
 export async function deleteAsset(id: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data: asset } = await supabase

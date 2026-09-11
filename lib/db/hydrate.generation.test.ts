@@ -74,12 +74,16 @@ vi.mock("@/lib/supabase/client", () => ({
       },
     },
     from: () => ({
-      select: () => ({
+      // A pull now issues TWO calls per full-payload table: the row delta and
+      // the id-only delete sweep. Only the row fetch is gated on the test.
+      select: (columns: string) => ({
         eq: () =>
-          new Promise((resolve) => {
-            releaseFetch = () =>
-              resolve({ data: [{ id: "row-1", user_id: "user-1" }] });
-          }),
+          columns === "id"
+            ? Promise.resolve({ data: [{ id: "row-1" }] })
+            : new Promise((resolve) => {
+                releaseFetch = () =>
+                  resolve({ data: [{ id: "row-1", user_id: "user-1" }] });
+              }),
       }),
     }),
   }),

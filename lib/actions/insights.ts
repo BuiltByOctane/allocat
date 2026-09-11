@@ -7,7 +7,7 @@
  * back to the offline template. Does not touch the DB — the stats arrive from
  * IDB on the client; the auth check only gates use of the OpenRouter key.
  */
-import { createClient } from "@/lib/supabase/server";
+import { getAuthedUser } from "@/lib/supabase/server";
 import { openRouterChat } from "@/lib/server/openrouter";
 import {
   INSIGHT_SYSTEM,
@@ -22,10 +22,7 @@ export async function generateWeeklyInsight(
   try {
     if (!process.env.OPENROUTER_API_KEY) return null;
 
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getAuthedUser();
     if (!user) return null;
 
     const res = await openRouterChat({

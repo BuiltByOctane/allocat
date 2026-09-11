@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthedUser } from "@/lib/supabase/server";
 import { logActivity, fmt, getUserCurrency } from "@/lib/server/activity-logger";
 
 type EntryType = "initial" | "add_funds" | "withdraw" | "update_value";
@@ -14,7 +14,7 @@ export async function addAssetEntry(
   options?: { suppressLog?: boolean }
 ) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   // Get current asset value and name
@@ -114,7 +114,7 @@ export async function addAssetEntry(
 
 export async function getAssetHistory(assetId: string, limit = 10) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
   const { data, error } = await supabase
@@ -132,7 +132,7 @@ export async function getAssetHistory(assetId: string, limit = 10) {
 
 export async function upsertTodaySnapshot() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) return;
 
   const today = new Date().toISOString().split("T")[0];

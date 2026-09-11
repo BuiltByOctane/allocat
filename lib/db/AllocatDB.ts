@@ -109,6 +109,13 @@ export interface IdMapEntry {
 export interface SyncMetaEntry {
   table: string; // primary key — also used for the special "__userId__" entry
   lastSynced: number;
+  /**
+   * Newest server `updated_at` this table has pulled — the delta watermark.
+   * Absent means "never pulled a row carrying one", which keeps the table on
+   * full pulls (see lib/db/hydrate.ts). Not indexed, so it needs no schema
+   * version bump.
+   */
+  watermark?: string;
   /** Only populated on the __userId__ entry to detect account changes. */
   userId?: string;
   /** Only populated on `__carry__<year>-<month>` entries (see lib/budget/carry.ts). */

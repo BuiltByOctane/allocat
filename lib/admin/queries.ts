@@ -123,10 +123,41 @@ export async function getDailySeries(days = 30): Promise<DailyPoint[]> {
   return (data ?? []) as DailyPoint[];
 }
 
-export async function searchUsers(q: string, limit = 30): Promise<AdminUserRow[]> {
-  const { data, error } = await rpc("admin_user_search", { p_q: q, p_limit: limit });
+/** Columns the admin user table may be ordered by (mirrors the SQL whitelist). */
+export const ADMIN_USER_SORTS = [
+  "email",
+  "full_name",
+  "created_at",
+  "last_seen_at",
+  "last_app_mode",
+  "is_supporter",
+  "is_onboarded",
+  "currency",
+] as const;
+export type AdminUserSort = (typeof ADMIN_USER_SORTS)[number];
+export type SortDir = "asc" | "desc";
+
+export interface AdminUserPage {
+  rows: AdminUserRow[];
+  /** Total matching the query, ignoring limit/offset — drives the pager. */
+  total: number;
+}
+
+export async function searchUsers(
+  q: string,
+  opts: { limit?: number; offset?: number; sort?: AdminUserSort; dir?: SortDir } = {},
+): Promise<AdminUserPage> {
+  const { limit = 30, offset = 0, sort = "created_at", dir = "desc" } = opts;
+  const { data, error } = await rpc("admin_user_search", {
+    p_q: q,
+    p_limit: limit,
+    p_offset: offset,
+    p_sort: sort,
+    p_dir: dir,
+  });
   if (error) throw new Error(`admin_user_search: ${error.message}`);
-  return (data ?? []) as AdminUserRow[];
+  const payload = (data ?? {}) as { rows?: AdminUserRow[]; total?: number };
+  return { rows: payload.rows ?? [], total: Number(payload.total ?? 0) };
 }
 
 export async function getUserDetail(userId: string): Promise<AdminUserDetail> {

@@ -325,7 +325,7 @@ export function BudgetQuickSetup({
   const sliderStep = Math.max(1, Math.round(totalNum / 200));
 
   return (
-    <Drawer.Root
+    <Drawer.Root repositionInputs={false}
       open={isOpen}
       onOpenChange={(open) => {
         if (!open) onClose();

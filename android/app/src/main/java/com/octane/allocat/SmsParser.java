@@ -37,6 +37,12 @@ final class SmsParser {
     // Credit-card spend phrasing ("...made using your ... Card at X") has no debit keyword.
     private static final Pattern CARD_SPEND =
         Pattern.compile("\\busing\\s+your\\b[\\s\\S]*?\\bcard\\b", Pattern.CASE_INSENSITIVE);
+    // The account itself is the subject of a credit verb ("Account XXXX693 is
+    // credited with INR 71") — unambiguous money-in, outranks every debit cue so
+    // a stray debit token elsewhere in the body can't flip it.
+    private static final Pattern ACCOUNT_CREDIT = Pattern.compile(
+        "\\b(?:a/c|ac|acct|account)\\b[^.]{0,40}?\\b(?:is|was|has\\s+been|stands)\\s+credited\\b",
+        Pattern.CASE_INSENSITIVE);
     // Balance clauses report the post-txn balance, not the spend — strip first.
     private static final Pattern BALANCE = Pattern.compile(
         "(?:avl\\.?\\s*bal(?:ance)?|available\\s+bal(?:ance)?|a/c\\s+bal(?:ance)?|bal(?:ance)?)\\s*:?\\s*(?:₹|Rs\\.?|INR)?\\s*[\\d,]+(?:\\.\\d{1,2})?",
@@ -66,10 +72,12 @@ final class SmsParser {
         String t = body.replaceAll("\\s+", " ").trim();
 
         if (CURRENCY.matcher(t).find()) p.currency = "INR";
-        // 1. Strong debit wins. 2. Card spend (its "Credit Card" wording must
+        // 0. The account being the subject of "is credited" wins outright.
+        // 1. Strong debit next. 2. Card spend (its "Credit Card" wording must
         // beat CREDIT). 3. Credit beats the weak/ambiguous tokens. 4. Weak debit
         // (txn/transferred/sent) last.
-        if (STRONG_DEBIT.matcher(t).find()) p.direction = "debit";
+        if (ACCOUNT_CREDIT.matcher(t).find()) p.direction = "credit";
+        else if (STRONG_DEBIT.matcher(t).find()) p.direction = "debit";
         else if (CARD_SPEND.matcher(t).find()) p.direction = "debit";
         else if (CREDIT.matcher(t).find()) p.direction = "credit";
         else if (WEAK_DEBIT.matcher(t).find()) p.direction = "debit";

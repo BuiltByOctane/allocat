@@ -126,7 +126,7 @@ export function AddAssetSheet({ open, defaultCategoryId, onClose }: AddAssetShee
 
   return (
     <>
-      <Drawer.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <Drawer.Root repositionInputs={false} open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
         <Drawer.Portal>
           <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
           <Drawer.Content

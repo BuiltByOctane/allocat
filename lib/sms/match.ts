@@ -125,17 +125,40 @@ export function smsTemplateKey(p: { sender?: string | null; raw: string }): stri
   return hash53(`${sender}|${skeleton}`);
 }
 
-/** Mask the variable parts of an SMS body, leaving the structural skeleton. */
+/**
+ * Mask the variable parts of an SMS body, leaving the structural skeleton.
+ *
+ * Every token that carries a digit is masked WHOLE — not just its number run.
+ * The payer identity in a UPI alert is the variable part that changes most and
+ * it arrives in three shapes for the same bank template ("from nandanapnair159",
+ * "from nandanapnair 159", "from 6238271344@mbkn"); masking only the digits left
+ * three different skeletons, so blocking one instance blocked nothing. A token
+ * such as `625519683688-Kerala` (ref number glued to the bank name) collapses
+ * for the same reason. Alphabetic words with no digit survive, so a credit
+ * template still never collides with the same bank's debit template.
+ */
 function smsSkeleton(raw: string): string {
-  return raw
-    .toLowerCase()
-    .replace(/\b[\w.\-]+@[\w.\-]+\b/g, "@") // UPI / VPA handles
-    .replace(/[*x]{1,}\d+/g, "#") // masked account tails: **1234, xx12
-    .replace(/[\d,]*\d/g, "#") // any number run (amounts, dates, refs)
-    .replace(/#(?:[.\-/:]#)+/g, "#") // collapse number groups like #-#-# (dates)
-    .replace(/#+/g, "#")
-    .replace(/\s+/g, " ")
-    .trim();
+  return (
+    raw
+      .toLowerCase()
+      // UPI / VPA handles and any token carrying a digit — masked WHOLE, but
+      // never swallowing the trailing sentence punctuation (that punctuation is
+      // part of the template's structure, and eating it in one variant and not
+      // another is what split these keys in the first place).
+      .replace(/\S*@[^\s.,;:!?]*/g, "#")
+      .replace(/\S*\d[^\s.,;:!?]*/g, "#")
+      // The payer identity: a name in front of its digits ("nandanapnair 159")
+      // is the SAME variable field as the glued form ("nandanapnair159") and the
+      // handle form ("6238271344@mbkn"). Fold the words leading up to the mask
+      // into it. `at <merchant>` is deliberately NOT folded — a card/merchant
+      // spend's payee is what distinguishes one debit template from another.
+      .replace(/\b(from|by|vpa)\s+(?:[a-z][a-z&.\-]*\s+){0,2}#/g, "$1 #")
+      .replace(/#(?:[.\-/:]#)+/g, "#") // collapse number groups like #-#-# (dates)
+      .replace(/#(?:\s+#)+/g, "#") // collapse space-separated masks: "# #" → "#"
+      .replace(/#+/g, "#")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
 }
 
 /**

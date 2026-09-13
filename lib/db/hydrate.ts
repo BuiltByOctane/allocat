@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { getDB } from "./index";
+import { hasDeviceFields, keepDeviceFields } from "@/lib/sync/deviceFields";
 
 const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 const USER_META_KEY = "__userId__";
@@ -98,6 +99,27 @@ function filterProtected<T extends { id: string }>(
   if (!rows) return [];
   if (!protectedIds || protectedIds.size === 0) return rows;
   return rows.filter((r) => !protectedIds.has(r.id));
+}
+
+/**
+ * Carry device-only columns from the rows already in IDB onto the server rows
+ * about to overwrite them. An SMS's `raw_text`/`sender` are never uploaded, so
+ * every server row has them as null — putting that row verbatim erased the only
+ * copy the app had (and with it the ability to re-derive the row's template
+ * signature). One `bulkGet` per affected table, skipped entirely for the tables
+ * that have no such columns.
+ */
+async function mergeDeviceFields<T extends { id: string }>(
+  table: string,
+  rows: T[],
+): Promise<T[]> {
+  if (!hasDeviceFields(table)) return rows;
+  const existing = await getDB()
+    .table(table)
+    .bulkGet(rows.map((r) => r.id));
+  return rows.map((row, i) =>
+    keepDeviceFields(table, existing[i] as Record<string, unknown> | undefined, row),
+  );
 }
 
 /**
@@ -390,7 +412,7 @@ async function pullTable(
 
   const rows = filterProtected(data as Array<{ id: string }> | null, protectedIds);
   if (rows.length) {
-    await db.table(spec.table).bulkPut(rows as never);
+    await db.table(spec.table).bulkPut((await mergeDeviceFields(spec.table, rows)) as never);
   }
   if (spec.reconcileDeletes) {
     await reconcileDeletes(

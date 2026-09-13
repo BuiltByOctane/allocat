@@ -459,6 +459,13 @@ export function useDeleteSms() {
  * kind are skipped at ingest), then refund + delete the wrongly-captured txn.
  * mutate takes a single txnId. The raw SMS body stays on-device — only the
  * one-way template hash is synced.
+ *
+ * The key comes from the row's stored `template_key` (written at ingest). It used
+ * to be recomputed here from `raw_text`, which the sync reconcile had already
+ * replaced with the server row's null — so every report hashed an empty string
+ * and produced the same key, blocking nothing. Rows captured before the column
+ * existed can still be reported: the txn is refunded and deleted, and
+ * `blocked: false` tells the caller the template itself could not be recorded.
  */
 export function useReportSmsMistake() {
   const qc = useQueryClient();
@@ -467,25 +474,30 @@ export function useReportSmsMistake() {
     mutationFn: async (txnId: string) => {
       const db = getDB();
       const { txnId: resolvedId, txn } = await resolveTxn(db, txnId);
-      if (!txn) return { ok: true };
+      if (!txn) return { ok: true, blocked: false };
 
-      const templateKey = smsTemplateKey({
-        sender: txn.sender,
-        raw: txn.raw_text ?? "",
-      });
+      // Stored key first; fall back to recomputing only while the raw body is
+      // still on the device (an un-synced row, or a legacy row on this phone).
+      const templateKey =
+        txn.template_key ??
+        (txn.raw_text
+          ? smsTemplateKey({ sender: txn.sender, raw: txn.raw_text })
+          : null);
       const sampleLabel = txn.merchant_raw ?? null;
       const now = new Date().toISOString();
       const blocklistTempId = `temp_${randomUUID()}`;
 
       // Optimistic: record the blocklist row so the next matching SMS is skipped
       // locally before the server confirms.
-      await db.sms_blocklist.add({
-        id: blocklistTempId,
-        user_id: "__pending__",
-        template_key: templateKey,
-        sample_label: sampleLabel,
-        created_at: now,
-      });
+      if (templateKey) {
+        await db.sms_blocklist.add({
+          id: blocklistTempId,
+          user_id: "__pending__",
+          template_key: templateKey,
+          sample_label: sampleLabel,
+          created_at: now,
+        });
+      }
 
       // Refund the spend optimistically (categorized only), then drop the txn.
       if (
@@ -502,6 +514,18 @@ export function useReportSmsMistake() {
       }
       await db.sms_transactions.delete(resolvedId);
 
+      if (!templateKey) {
+        // No signature to block — still drop the transaction itself, and enqueue
+        // the delete so the server agrees.
+        await enqueue({
+          table: "sms_transactions",
+          operation: "DELETE",
+          recordId: resolvedId,
+          payload: { txnId: resolvedId },
+        });
+        return { ok: true, blocked: false };
+      }
+
       await enqueue({
         table: "sms_blocklist",
         operation: "INSERT",
@@ -510,7 +534,7 @@ export function useReportSmsMistake() {
         payload: { txnId: resolvedId, templateKey, sampleLabel },
       });
 
-      return { ok: true };
+      return { ok: true, blocked: true };
     },
     onSuccess: () => invalidateSmsCaches(qc),
   });
@@ -701,6 +725,8 @@ export async function writeManualTransaction(
     direction: "debit",
     occurred_at: now,
     dedupe_key: dedupeKey,
+    // A manual spend has no SMS behind it, so there is no template to block.
+    template_key: null,
     status: "categorized",
     matched_rule_id: null,
     budget_item_id: input.budgetItemId,

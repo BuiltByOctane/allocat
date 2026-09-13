@@ -87,6 +87,42 @@ describe("smsTemplateKey", () => {
     expect(a).toBe(b);
   });
 
+  it("collapses one bank template across the three shapes a UPI payer arrives in", () => {
+    // Kerala Grameena Bank credit alerts: the payer is a name glued to digits, a
+    // name plus digits, or a bare UPI handle. Masking only the digit RUNS left
+    // three distinct skeletons, so reporting one instance blocked none of them.
+    const keys = [
+      "Dear Customer, Account XXXX693 is credited with INR 71 on 11-09-2026 19:51:59 from nandanapnair159. UPI Ref. no. 625419410968-Kerala Grameena Bank",
+      "Dear Customer, Account XXXX693 is credited with INR 125 on 12-09-2026 19:38:47 from nandanapnair 159. UPI Ref. no. 625519683688-Kerala Grameena Bank",
+      "Dear Customer, Account XXXX693 is credited with INR 106 on 12-09-2026 19:37:01 from 6238271344@mbkn. UPI Ref. no. 625519679183-Kerala Grameena Bank",
+    ].map((raw) => smsTemplateKey({ sender: "KERALAGB", raw }));
+
+    expect(new Set(keys).size).toBe(1);
+  });
+
+  it("matches the Java port byte-for-byte (SmsSignature.java fixtures)", () => {
+    // The closed-app receiver computes this key in Java and matches it against
+    // the blocklist pushed from here, so the two implementations must agree
+    // exactly. Values below were produced by SmsSignature.templateKey().
+    const cases: Array<[string, string]> = [
+      [
+        "Dear Customer, Account XXXX693 is credited with INR 71 on 11-09-2026 19:51:59 from nandanapnair159. UPI Ref. no. 625419410968-Kerala Grameena Bank",
+        "1e54cc4bed4280",
+      ],
+      [
+        "ICICI Bank Acct XX829 debited for Rs 250.00 on 02-Jun-26 & SWIGGY credited. UPI:401234567890.",
+        "0d30aa7e009a07",
+      ],
+      [
+        "A transaction of Rs.1500 was made using your HDFC Credit Card at AMAZON",
+        "00774afdb01c41",
+      ],
+    ];
+    for (const [raw, key] of cases) {
+      expect(smsTemplateKey({ sender: "KERALAGB", raw })).toBe(key);
+    }
+  });
+
   it("gives a debit and a credit of the same bank/format different keys", () => {
     const credit = smsTemplateKey({
       sender: "HDFCBK",

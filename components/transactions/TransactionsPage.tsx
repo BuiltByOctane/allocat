@@ -336,7 +336,7 @@ export default function TransactionsPage() {
       <div className="h-28 md:h-12" />
 
       {/* Detail drawer */}
-      <Drawer.Root
+      <Drawer.Root repositionInputs={false}
         open={!!selected}
         onOpenChange={(open) => {
           if (!open) setSelected(null);

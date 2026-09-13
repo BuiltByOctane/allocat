@@ -1,3 +1,5 @@
+import { keepDeviceFields } from "@/lib/sync/deviceFields";
+
 /**
  * Build the IDB record to write when an INSERT syncs and its optimistic
  * `temp_` row is replaced by the server's record.
@@ -17,7 +19,12 @@ export function reconcileInsertReplacement(
   serverRecord: Record<string, unknown>,
   realId: string
 ): Record<string, unknown> {
-  const record: Record<string, unknown> = { ...serverRecord, id: realId };
+  // Device-only columns (an SMS's raw body/sender) are null on every server row
+  // by design — carry the local values across instead of erasing them.
+  const record: Record<string, unknown> = keepDeviceFields(table, local, {
+    ...serverRecord,
+    id: realId,
+  });
 
   if (
     table === "sms_transactions" &&

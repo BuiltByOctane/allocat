@@ -262,7 +262,7 @@ export function ItemDetailSheet({
 
   return (
     <>
-    <Drawer.Root
+    <Drawer.Root repositionInputs={false}
       open={!!item}
       onOpenChange={(open) => {
         if (!open) onClose();

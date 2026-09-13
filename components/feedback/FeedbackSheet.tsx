@@ -32,7 +32,7 @@ const PLACEHOLDERS: Record<FeedbackKind, string> = {
 
 export function FeedbackSheet({ isOpen, onClose, initialKind = "feedback" }: FeedbackSheetProps) {
   return (
-    <Drawer.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Drawer.Root repositionInputs={false} open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 bg-black/60 z-40" />
         <Drawer.Content className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card px-5 pt-3 pb-safe focus:outline-none max-w-[480px] mx-auto">

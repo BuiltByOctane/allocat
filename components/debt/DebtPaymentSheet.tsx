@@ -60,7 +60,7 @@ export function DebtPaymentSheet({ open, onClose, debts }: DebtPaymentSheetProps
   const sel = debts.find((d) => d.id === paymentDebtId);
 
   return (
-    <Drawer.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Drawer.Root repositionInputs={false} open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
         <Drawer.Content

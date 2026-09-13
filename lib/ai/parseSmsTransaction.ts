@@ -48,6 +48,15 @@ const CREDIT_RE = /\b(credited|credit|received|deposited|refund(?:ed)?)\b/i;
 // Credit-card spend phrasing carries no debit keyword: "A transaction of Rs.X was
 // made using your HDFC ... Credit Card at <merchant>". Treat as a debit.
 const CARD_SPEND_RE = /\busing\s+your\b[\s\S]*?\bcard\b/i;
+// The account itself is the subject of a credit verb: "Account XXXX693 is
+// credited with INR 71", "A/c XX12 has been credited". This is unambiguous —
+// money came IN — so it outranks every debit cue, which protects the direction
+// from a stray debit token elsewhere in the message (a concatenated multi-part
+// delivery, a "not you? report unauthorised debit" footer, a mini-statement
+// tail). Deliberately high precision: it needs the linking verb, so a real debit
+// SMS's "<payee> credited" clause can never match it.
+const ACCOUNT_CREDIT_RE =
+  /\b(?:a\/c|ac|acct|account)\b[^.]{0,40}?\b(?:is|was|has\s+been|stands)\s+credited\b/i;
 
 // Balance clauses report the post-transaction balance, NOT the spend. Strip them
 // before amount extraction so "...spent Rs.200, Avl Bal Rs.5,000" reads 200.
@@ -60,6 +69,9 @@ function extractCurrency(text: string): string | null {
 }
 
 function extractDirection(text: string): TxnDirection | null {
+  // 0. The user's own account is the subject of a credit verb → credit, full
+  //    stop. Nothing downstream can override it.
+  if (ACCOUNT_CREDIT_RE.test(text)) return "credit";
   // 1. Strong debit word wins outright: "A/C debited ... payee credited" → debit
   //    (the account is the subject; a payee being credited doesn't change that).
   if (STRONG_DEBIT_RE.test(text)) return "debit";

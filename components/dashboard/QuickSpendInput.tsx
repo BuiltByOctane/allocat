@@ -339,7 +339,7 @@ export default function QuickSpendInput({ categories }: QuickSpendInputProps) {
       </div>
 
       {/* Single sliding target picker: category → item in one drawer */}
-      <Drawer.Root open={pickerOpen} onOpenChange={setPickerOpen}>
+      <Drawer.Root repositionInputs={false} open={pickerOpen} onOpenChange={setPickerOpen}>
         <Drawer.Portal>
           <Drawer.Overlay className="fixed inset-0 bg-black/60 z-40" />
           <Drawer.Content

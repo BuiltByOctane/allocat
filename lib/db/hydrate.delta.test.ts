@@ -94,6 +94,9 @@ function makeTable(pk = "id") {
     async get(id: unknown) {
       return rows.find((r) => r[pk] === id);
     },
+    async bulkGet(ids: unknown[]) {
+      return ids.map((id) => rows.find((r) => r[pk] === id));
+    },
     async toArray() {
       return [...rows];
     },

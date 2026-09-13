@@ -337,7 +337,16 @@ export default function SmsPage() {
     if (!window.confirm("Stop tracking this kind of SMS?")) return;
     setAllocError(null);
     try {
-      await report.mutateAsync(txn.id);
+      const res = await report.mutateAsync(txn.id);
+      // Rows captured before the template signature was stored have nothing left
+      // to key a block on (the SMS body is device-only and is gone once the row
+      // synced). The transaction is removed either way — say so rather than
+      // implying future ones are blocked.
+      if (!res.blocked) {
+        setAllocError(
+          "Removed this transaction, but this one is too old to block by kind. The next SMS like it can be reported and will stick.",
+        );
+      }
     } catch (err) {
       console.error("[SmsPage] report failed:", err);
       setAllocError(err instanceof Error ? err.message : "Couldn't update. Try again.");

@@ -115,7 +115,7 @@ export function LentDetailSheet({
     "block mb-1.5 text-[9px] font-bold uppercase tracking-wide text-muted-foreground";
 
   return (
-    <Drawer.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Drawer.Root repositionInputs={false} open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
         <Drawer.Content
@@ -278,7 +278,7 @@ export function PaymentSheet({
   }
 
   return (
-    <Drawer.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Drawer.Root repositionInputs={false} open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
         <Drawer.Content

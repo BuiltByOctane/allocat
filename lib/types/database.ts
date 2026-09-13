@@ -536,6 +536,12 @@ export type Database = {
           direction: "debit" | "credit" | null
           occurred_at: string | null
           dedupe_key: string
+          /**
+           * One-way hash of the SMS *template* (sender + masked skeleton).
+           * Stored at ingest so "Not a transaction" can blocklist the template
+           * without needing the raw body (which never leaves the device).
+           */
+          template_key: string | null
           status: "pending" | "categorized" | "ignored" | "duplicate"
           matched_rule_id: string | null
           budget_item_id: string | null
@@ -556,6 +562,7 @@ export type Database = {
           direction?: "debit" | "credit" | null
           occurred_at?: string | null
           dedupe_key: string
+          template_key?: string | null
           status?: "pending" | "categorized" | "ignored" | "duplicate"
           matched_rule_id?: string | null
           budget_item_id?: string | null
@@ -566,6 +573,7 @@ export type Database = {
         }
         Update: {
           status?: "pending" | "categorized" | "ignored" | "duplicate"
+          template_key?: string | null
           matched_rule_id?: string | null
           budget_item_id?: string | null
           merchant_normalized?: string | null

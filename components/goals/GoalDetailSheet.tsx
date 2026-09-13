@@ -146,7 +146,7 @@ export function GoalDetailSheet({
 
   return (
     <>
-      <Drawer.Root
+      <Drawer.Root repositionInputs={false}
         open={open}
         onOpenChange={(o) => { if (!o) onClose(); }}
       >

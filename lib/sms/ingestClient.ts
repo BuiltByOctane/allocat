@@ -218,6 +218,11 @@ export async function ingestSmsClient(
           direction,
           occurred_at: occurredAt,
           dedupe_key: dedupeKey,
+          // Stored at ingest so "Not a transaction" can blocklist this template
+          // later: the raw body is device-only and is overwritten as soon as the
+          // INSERT syncs (the server row carries none), which used to leave the
+          // report hashing an empty string.
+          template_key: templateKey,
           status,
           matched_rule_id: autoApplied ? (rule?.id ?? null) : null,
           budget_item_id: autoApplied ? resolvedItemId : null,

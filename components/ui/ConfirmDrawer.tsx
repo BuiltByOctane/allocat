@@ -25,7 +25,7 @@ export function ConfirmDrawer({
   const haptic = useHaptic();
 
   return (
-    <Drawer.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Drawer.Root repositionInputs={false} open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 bg-black/60 z-40" />
         <Drawer.Content

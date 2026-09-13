@@ -42,9 +42,26 @@ export default function EmojiPickerModal({ isOpen, onClose, onSelect, container 
     onClose();
   };
 
+  // When the picker is portaled into a vaul Drawer.Content (the `container`
+  // prop), `position: fixed` does NOT resolve against the viewport: vaul puts an
+  // inline `transform` on that node, which makes it the containing block for
+  // every fixed descendant. The picker therefore inherited the drawer's own
+  // keyboard displacement and then added `.sheet-3q`'s lift on top of it, which
+  // is how it ended up hovering a keyboard's height above the keyboard with its
+  // header clipped off the screen.
+  //
+  // Inside a drawer the right answer is to own no keyboard math at all: the
+  // drawer is already sized to the space above the keyboard, so the picker just
+  // fills it (`absolute inset-0`). The standalone (body-portal) path keeps the
+  // fixed bottom-sheet behaviour, where `.sheet-3q` is resolved against the real
+  // viewport and is correct.
+  const inDrawer = !!container;
+
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm animate-in fade-in duration-200 sm:flex sm:items-center sm:justify-center"
+      className={`${
+        inDrawer ? 'absolute' : 'fixed'
+      } inset-0 z-[100] flex flex-col justify-end bg-black/40 backdrop-blur-sm animate-in fade-in duration-200 sm:justify-center sm:items-center`}
       style={{ pointerEvents: 'auto' }}
       onPointerDown={(e) => e.stopPropagation()}
       onPointerDownCapture={(e) => e.stopPropagation()}
@@ -52,11 +69,13 @@ export default function EmojiPickerModal({ isOpen, onClose, onSelect, container 
       onTouchStart={(e) => e.stopPropagation()}
     >
       <div
-        // Positioned (fixed bottom) so `.sheet-3q`'s `bottom: var(--keyboard-inset)`
-        // lift actually applies — as a static flex child the `bottom` was ignored
-        // and the picker slid under the on-screen keyboard. Reverts to a centered
-        // card on desktop (sm:).
-        className="bg-card w-full max-w-md mx-auto rounded-t-sheet sm:rounded-card p-4 shadow-xl animate-in slide-in-from-bottom flex flex-col sheet-3q border border-border fixed inset-x-0 bottom-0 z-[101] sm:static sm:h-auto sm:max-h-[80vh]"
+        className={`bg-card w-full max-w-md mx-auto rounded-t-sheet sm:rounded-card p-4 shadow-xl animate-in slide-in-from-bottom flex flex-col border border-border z-[101] sm:h-auto sm:max-h-[80vh] ${
+          inDrawer
+            ? // Fill the drawer, which is already keyboard-aware.
+              'relative min-h-0 flex-1'
+            : // Standalone: a real fixed bottom sheet against the viewport.
+              'sheet-3q fixed inset-x-0 bottom-0 sm:static'
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-3 px-2">

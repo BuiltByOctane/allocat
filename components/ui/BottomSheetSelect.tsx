@@ -44,7 +44,7 @@ export function BottomSheetSelect<T extends string = string>({
   const selectedHasNumericText = selected ? hasNumericText(selected.label) : false;
 
   return (
-    <Drawer.Root open={open} onOpenChange={setOpen}>
+    <Drawer.Root repositionInputs={false} open={open} onOpenChange={setOpen}>
       {/* Trigger */}
       <Drawer.Trigger asChild>
         <button

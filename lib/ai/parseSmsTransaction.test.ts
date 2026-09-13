@@ -72,6 +72,24 @@ describe("parseTransactionSms — direction", () => {
     expect(r.direction).toBe("debit");
   });
 
+  it("reads 'Account XXXX is credited with INR n' as a credit", () => {
+    const sms =
+      "Dear Customer, Account XXXX693 is credited with INR 71 on 11-09-2026 19:51:59 from nandanapnair159. UPI Ref. no. 625419410968-Kerala Grameena Bank";
+    const r = parseTransactionSms(sms, "KERALAGB");
+    expect(r.direction).toBe("credit");
+    expect(r.amount).toBe(71);
+  });
+
+  it("keeps an account-credited SMS a credit even when a debit token follows", () => {
+    // A multi-part delivery, a mini-statement tail or an "unauthorised debit"
+    // footer can drop a debit token into the same body; the account being the
+    // subject of "is credited" must still win.
+    const sms =
+      "Account XXXX693 is credited with INR 125 on 12-09-2026 from nandanapnair 159. Not you? Report unauthorised debit at 1800-123.";
+    const r = parseTransactionSms(sms, "KERALAGB");
+    expect(r.direction).toBe("credit");
+  });
+
   it("treats a credit-card spend phrasing as a debit", () => {
     const sms =
       "A transaction of Rs.1500 was made using your HDFC Credit Card at AMAZON";

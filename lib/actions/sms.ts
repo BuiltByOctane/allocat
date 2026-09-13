@@ -230,7 +230,10 @@ async function ingestOne(
   const merchantNormalized = input.merchantRaw
     ? normalizeMerchant(input.merchantRaw)
     : null;
-  const isDebit = input.direction !== "credit";
+  // Require an EXPLICIT debit. A missing direction used to count as a spend,
+  // which meant any payload without one (a stale cached client, a body the
+  // parser read no cue from) logged money the user never spent.
+  const isDebit = input.direction === "debit";
   const actionable = isDebit && typeof input.amount === "number" && input.amount > 0;
 
   // 2. Server-authoritative rule match (rules may have changed since capture).
@@ -264,6 +267,9 @@ async function ingestOne(
       direction: input.direction ?? null,
       occurred_at: input.occurredAt ?? null,
       dedupe_key: input.dedupeKey,
+      // Persist the template signature so "Not a transaction" can blocklist this
+      // kind of SMS without the raw body (which never leaves the device).
+      template_key: input.templateKey ?? null,
       status: initialStatus,
     })
     .select()

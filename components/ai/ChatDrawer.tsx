@@ -131,7 +131,7 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
   };
 
   return (
-    <Drawer.Root open={open} onClose={handleClose} shouldScaleBackground>
+    <Drawer.Root repositionInputs={false} open={open} onClose={handleClose} shouldScaleBackground>
       <Drawer.Portal>
         <Drawer.Overlay
           className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"

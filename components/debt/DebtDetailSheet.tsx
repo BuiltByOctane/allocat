@@ -196,7 +196,7 @@ export function DebtDetailSheet({
     "block mb-1.5 text-[9px] font-bold uppercase tracking-wide text-muted-foreground";
 
   return (
-    <Drawer.Root
+    <Drawer.Root repositionInputs={false}
       open={open}
       onOpenChange={(o) => { if (!o) onClose(); }}
     >

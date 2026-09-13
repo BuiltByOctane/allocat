@@ -26,15 +26,18 @@ final class SmsSignature {
     private static String skeleton(String raw) {
         return raw
             .toLowerCase(Locale.ROOT)
-            // UPI / VPA handles: /\b[\w.\-]+@[\w.\-]+\b/g → "@"
-            // JS \w == [A-Za-z0-9_]; keep ASCII-only via (?U not set).
-            .replaceAll("\\b[\\w.\\-]+@[\\w.\\-]+\\b", "@")
-            // masked account tails (**1234, xx12): /[*x]{1,}\d+/g → "#"
-            .replaceAll("[*x]{1,}\\d+", "#")
-            // any number run (amounts, dates, refs): /[\d,]*\d/g → "#"
-            .replaceAll("[\\d,]*\\d", "#")
+            // UPI / VPA handles, then any token carrying a digit — masked WHOLE
+            // but never eating the trailing sentence punctuation:
+            //   /\S*@[^\s.,;:!?]*/g → "#"   /\S*\d[^\s.,;:!?]*/g → "#"
+            .replaceAll("\\S*@[^\\s.,;:!?]*", "#")
+            .replaceAll("\\S*\\d[^\\s.,;:!?]*", "#")
+            // payer identity words in front of their digits:
+            // /\b(from|by|vpa)\s+(?:[a-z][a-z&.\-]*\s+){0,2}#/g → "$1 #"
+            .replaceAll("\\b(from|by|vpa)\\s+(?:[a-z][a-z&.\\-]*\\s+){0,2}#", "$1 #")
             // collapse number groups like #-#-# (dates): /#(?:[.\-/:]#)+/g → "#"
             .replaceAll("#(?:[.\\-/:]#)+", "#")
+            // collapse space-separated masks: /#(?:\s+#)+/g → "#"
+            .replaceAll("#(?:\\s+#)+", "#")
             // /#+/g → "#"
             .replaceAll("#+", "#")
             // /\s+/g → " "

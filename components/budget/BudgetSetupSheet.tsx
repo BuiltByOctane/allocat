@@ -974,7 +974,7 @@ export function BudgetSetupSheet({
   }
 
   return (
-    <Drawer.Root
+    <Drawer.Root repositionInputs={false}
       open={isOpen}
       onOpenChange={(open) => {
         if (!open) onClose();

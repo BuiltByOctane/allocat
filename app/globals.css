@@ -265,38 +265,38 @@ input[type="date"] {
    fallback); stays 0 on web/SSR so layout is unchanged. */
 :root { --keyboard-inset: 0px; }
 
-/* Stable full viewport height, in px — immune to soft-keyboard resize. Set at
-   runtime by components/pwa/KeyboardInset.tsx from the FULL window height,
-   captured on mount (before any keyboard) and only refreshed on genuine
-   orientation/resize events (never while a keyboard is open). Unset on
-   web/SSR, where the `100dvh` fallback below applies. This is the
-   belt-and-suspenders against a WebView that lets `dvh` shrink (and stay
-   shrunk) when the keyboard toggles. */
+/* Stable full viewport height, in px — immune to soft-keyboard resize. Set by
+   components/pwa/KeyboardInset.tsx from `window.innerHeight`, and only ever
+   while NO keyboard is covering anything, so a WebView that shrinks on keyboard
+   show can never write a shrunken value here. Unset on web/SSR, where the
+   `100dvh` fallback applies. Used for the sheet's constant top line — not for
+   its height. */
 
-/* Uniform 3/4-screen height for all content bottom sheets — FIXED, never
-   shrinks. `--app-vh` (a stable px height set by KeyboardInset.tsx) is used
-   when available, falling back to `dvh` on web/SSR. With Keyboard resize:"none"
-   + windowSoftInputMode="adjustNothing", the WebView viewport stays full-screen
-   when the keyboard opens, so the height stays a true 3/4 across keyboard
-   open/close. The keyboard never resizes the sheet; it only slides up (see
-   DrawerContent `bottom`). The `- var(--keyboard-inset)` term is a safety cap so
-   a sheet can never extend behind an open keyboard. vh first as a legacy
-   WebView fallback. */
+/* Uniform ~90%-screen bottom sheet, positioned by its EDGES, never by a height
+   calculation. `top` pins the sheet's top edge at a constant 10% line (the top
+   of the screen never moves when a soft keyboard opens, so the STABLE --app-vh
+   is the right basis for it); `bottom` is the RESIDUAL keyboard occlusion — the
+   part of the live layout viewport the keyboard still covers after whatever the
+   native layer already removed (see components/pwa/KeyboardInset.tsx). Height is
+   derived from the two edges.
+
+   Why edges and not `height: calc(...)`: every previous revision computed a
+   height from --app-vh and subtracted the keyboard, which assumed the WebView
+   viewport never shrinks. Since Capacitor 8, `SystemBars` pads the WebView's
+   parent by the IME inset (Android 15+, or any device on WebView >= 140 with
+   viewport-fit=cover), so on those devices the viewport DOES shrink and the
+   subtraction was applied twice — the sheet lifted a whole keyboard height off
+   the keyboard and its top ran off-screen. With edges there is nothing to
+   double-count: a shrunken viewport simply makes the derived height smaller,
+   and a stale value can never leave the sheet stuck at the wrong size. */
 .sheet-3q {
-  /* Tall content sheet whose TOP edge stays fixed at the 90% line — a constant
-     10% gap at the top whether or not the keyboard is open. Height is based on
-     the STABLE --app-vh (set once by KeyboardInset, immune to keyboard resize),
-     so it can never get stuck small after the keyboard closes.
-       top edge = bottom + height = keyboard + (0.9*appvh - keyboard) = 0.9*appvh
-     Keyboard closed (inset 0): a 90% sheet at the bottom. Keyboard open: the
-     bottom lifts to sit on the keyboard and the sheet shrinks by exactly the
-     keyboard height, so the top never moves and never reaches the screen top,
-     while the action buttons at the sheet's bottom float just above the keyboard.
-     Falls back to 100dvh on web/SSR. */
-  height: calc(var(--app-vh, 100dvh) * 0.9 - var(--keyboard-inset, 0px));
-  max-height: calc(var(--app-vh, 100dvh) * 0.9 - var(--keyboard-inset, 0px));
+  top: calc(var(--app-vh, 100dvh) * 0.1);
   bottom: var(--keyboard-inset, 0px);
-  transition: bottom 0.2s ease, height 0.2s ease;
+  height: auto;
+  /* DrawerContent ships `mt-24`; with both edges pinned that margin would eat
+     into the derived height. */
+  margin-top: 0;
+  transition: bottom 0.2s ease;
 }
 
 /* While any bottom sheet is open, SheetScrollLock sets data-sheet-open on <html>.

@@ -525,7 +525,7 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
         }}
       />
 
-      <Drawer.Root
+      <Drawer.Root repositionInputs={false}
         open={isAddCategoryOpen}
         onOpenChange={(open) => {
           setIsAddCategoryOpen(open);
@@ -601,7 +601,7 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
       </Drawer.Root>
 
       {/* Quick-log expense sheet (opened from the dock button) */}
-      <Drawer.Root open={spendOpen} onOpenChange={setSpendOpen}>
+      <Drawer.Root repositionInputs={false} open={spendOpen} onOpenChange={setSpendOpen}>
         <Drawer.Portal>
           <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
           <Drawer.Content
@@ -725,7 +725,7 @@ function TemplateControl({
         />
       </button>
 
-      <Drawer.Root open={driftedOpen} onOpenChange={setDriftedOpen}>
+      <Drawer.Root repositionInputs={false} open={driftedOpen} onOpenChange={setDriftedOpen}>
         <Drawer.Portal>
           <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
           <Drawer.Content

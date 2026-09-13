@@ -9,6 +9,14 @@ const Drawer = ({
 }: React.ComponentProps<typeof DrawerPrimitive.Root>) => (
   <DrawerPrimitive.Root
     shouldScaleBackground={shouldScaleBackground}
+    // vaul's own keyboard handling is off across this app: it writes inline
+    // `height`/`bottom` onto the content on every visualViewport resize, and it
+    // captures its "initial" height inside that same handler — which only ever
+    // runs once the viewport has ALREADY shrunk for the keyboard. On close it
+    // then "restores" that shrunken height, as an inline style that outranks
+    // `.sheet-3q`, and the sheet stays stuck at ~half height (vaul#538). We do
+    // the keyboard math ourselves in KeyboardInset.tsx + `.sheet-3q`.
+    repositionInputs={false}
     {...props}
   />
 );
@@ -39,10 +47,10 @@ const DrawerContent = React.forwardRef<
     <DrawerPrimitive.Content
       ref={ref}
       className={`fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-sheet bg-card ${className ?? ""}`}
-      // No keyboard lift/resize here anymore. Sheets that need to survive the
-      // keyboard use the `.sheet-3q` class, which is full-screen and stable via
-      // --app-vh; the keyboard overlays and the focused field scrolls into view
-      // (see components/pwa/KeyboardInset.tsx).
+      // No keyboard lift/resize here. Sheets that need to survive the keyboard
+      // use the `.sheet-3q` class, which pins its top and bottom edges against
+      // --app-vh / --keyboard-inset and derives its height from them (see
+      // components/pwa/KeyboardInset.tsx).
       {...props}
     >
       <div className="mx-auto mt-3 h-1 w-9 rounded-full bg-border" />

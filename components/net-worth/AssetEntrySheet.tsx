@@ -99,7 +99,7 @@ export function AssetEntrySheet({ open, entryType, currentValue, onClose, onSave
   }
 
   return (
-    <Drawer.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Drawer.Root repositionInputs={false} open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 bg-black/50 z-50" />
         <Drawer.Content

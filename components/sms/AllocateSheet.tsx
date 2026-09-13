@@ -97,7 +97,7 @@ export function AllocateSheet({
     amountValid && parsedAmount !== amount ? parsedAmount : undefined;
 
   return (
-    <Drawer.Root
+    <Drawer.Root repositionInputs={false}
       open={!!txn}
       onOpenChange={(open) => {
         if (!open) onClose();

@@ -1,7 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/supabase/session";
+import { createClient, getAuthedUser } from "@/lib/supabase/server";
 
 export type FeedbackKind = "bug" | "feature" | "feedback";
 
@@ -26,7 +25,7 @@ export async function submitFeedback(
   }
 
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getAuthedUser();
   if (!user) {
     return { error: "You need to be signed in to send feedback." };
   }

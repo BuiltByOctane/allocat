@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/supabase/session";
+import { getAuthedUser } from "@/lib/supabase/server";
 
 export const metadata = {
   title: "AlloCat - Personal Finance, Budgeting & Net Worth Tracker",
@@ -10,8 +9,7 @@ export const metadata = {
 };
 
 export default async function RootPage() {
-  const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getAuthedUser();
 
   if (user) redirect("/dashboard");
   redirect("https://grow.allocat.xyz");

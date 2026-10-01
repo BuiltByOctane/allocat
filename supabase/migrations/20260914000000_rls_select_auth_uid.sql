@@ -47,3 +47,32 @@ create policy "feedback_insert_own" on public.feedback
 drop policy if exists "feedback_delete_own" on public.feedback;
 create policy "feedback_delete_own" on public.feedback
   for delete using ((select auth.uid()) = user_id);
+
+-- fcm_tokens and user_active_days landed after this migration was first written
+-- and do not follow the "%s_<op>_own" naming convention, so the loop above
+-- cannot reach them. Both are write-only to the user (no SELECT policy by
+-- design — one user must never enumerate another's devices or activity).
+drop policy if exists "own fcm token insert" on public.fcm_tokens;
+create policy "own fcm token insert"
+  on public.fcm_tokens for insert
+  to authenticated
+  with check ((select auth.uid()) = user_id);
+
+drop policy if exists "own fcm token update" on public.fcm_tokens;
+create policy "own fcm token update"
+  on public.fcm_tokens for update
+  to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+
+drop policy if exists "own fcm token delete" on public.fcm_tokens;
+create policy "own fcm token delete"
+  on public.fcm_tokens for delete
+  to authenticated
+  using ((select auth.uid()) = user_id);
+
+drop policy if exists "own active day insert" on public.user_active_days;
+create policy "own active day insert"
+  on public.user_active_days for insert
+  to authenticated
+  with check ((select auth.uid()) = user_id);

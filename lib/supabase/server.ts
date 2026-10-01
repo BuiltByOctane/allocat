@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { cache } from "react";
 import type { Database } from "../types/database";
+import { getSessionUser } from "./session";
 
 /**
  * Supabase client for this request.
@@ -40,19 +41,23 @@ export const createClient = cache(async () => {
 /**
  * The authenticated user for this request, verified ONCE.
  *
- * `auth.getUser()` is a network call to Supabase Auth. Every action used to make
- * its own, so a single bulk SMS ingest paid roughly twenty of them inside one
- * invocation (ingest → quickLogSpend → addAssetEntry / makePayment → notify).
- * `cache()` collapses those to one per request; it never spans requests, so two
- * users can never share a result.
+ * Two savings compose here:
+ *
+ * 1. `cache()` collapses the verification to one per request. Every action used
+ *    to make its own, so a single bulk SMS ingest paid roughly twenty inside one
+ *    invocation (ingest → quickLogSpend → addAssetEntry / makePayment → notify).
+ *    `cache()` never spans requests, so two users can never share a result.
+ * 2. `getSessionUser()` prefers local JWT verification against the cached JWKS
+ *    over a round trip to Supabase Auth, where the installed auth-js supports it
+ *    (see lib/supabase/session.ts — it falls back to `getUser()` otherwise, so
+ *    behaviour is identical either way).
  *
  * Returns `null` when signed out — callers keep their own "Unauthorized"
- * handling.
+ * handling. Admin access deliberately does NOT come through here:
+ * `requireAdmin()` calls `auth.getUser()` itself because it also needs
+ * `email_confirmed_at`.
  */
 export const getAuthedUser = cache(async () => {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user;
+  return getSessionUser(supabase);
 });

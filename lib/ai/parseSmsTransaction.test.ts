@@ -236,3 +236,35 @@ describe("parseTransactionSms — on-device coverage (post-LLM-removal)", () => 
     expect(r.confidence).toBeGreaterThanOrEqual(0.6);
   });
 });
+
+describe("parseTransactionSms — Dr./Cr. abbreviation banks (Canara)", () => {
+  const CANARA_DEBIT =
+    "Dear Customer, Acct XXXX2511 Dr. INR 1.00 on 01/10/26 to Ashwin K V; UPI: 130554786809; Bal INR 18,575.44.Not you?SMS BLOCKUPI to 9901771222-CanaraBank";
+
+  it("reads 'Acct XXXX Dr. INR n' as a debit", () => {
+    const p = parseTransactionSms(CANARA_DEBIT);
+    expect(p.direction).toBe("debit");
+    expect(p.amount).toBe(1);
+    expect(p.currency).toBe("INR");
+    expect(p.occurredAt).toBe("2026-10-01");
+  });
+
+  it("takes the payee before the ';' clause, not the footer shortcode", () => {
+    expect(parseTransactionSms(CANARA_DEBIT).merchant).toBe("Ashwin K V");
+  });
+
+  it("reads 'Acct XXXX Cr. INR n' as a credit", () => {
+    const p = parseTransactionSms(
+      "Dear Customer, Acct XXXX2511 Cr. INR 500.00 on 01/10/26 by ASHWIN K V; UPI: 130554786810; Bal INR 19,075.44-CanaraBank",
+    );
+    expect(p.direction).toBe("credit");
+    expect(p.amount).toBe(500);
+  });
+
+  it("does not read a 'Dr.' honorific in a payee name as a debit cue", () => {
+    const p = parseTransactionSms(
+      "Your a/c XX2511 is credited with INR 2,000.00 from Dr. Mehta Clinic on 01/10/26",
+    );
+    expect(p.direction).toBe("credit");
+  });
+});

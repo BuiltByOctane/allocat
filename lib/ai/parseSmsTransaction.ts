@@ -57,6 +57,14 @@ const CARD_SPEND_RE = /\busing\s+your\b[\s\S]*?\bcard\b/i;
 // SMS's "<payee> credited" clause can never match it.
 const ACCOUNT_CREDIT_RE =
   /\b(?:a\/c|ac|acct|account)\b[^.]{0,40}?\b(?:is|was|has\s+been|stands)\s+credited\b/i;
+// Some banks (Canara, Union, several co-ops) state the direction only as the
+// ledger abbreviation: "Acct XXXX2511 Dr. INR 1.00 on 01/10/26 to NAME". No
+// debit/credit word appears anywhere, so without these the SMS parses with
+// direction null and the ingest drops it as "no-debit". Precision comes from
+// requiring a currency token + digits immediately after, which a "Dr. Mehta"
+// honorific or a "Cr" in free text can never satisfy.
+const DEBIT_ABBR_RE = /\bDr\.?\s*(?:₹|Rs\.?|INR)\s*[\d,]/i;
+const CREDIT_ABBR_RE = /\bCr\.?\s*(?:₹|Rs\.?|INR)\s*[\d,]/i;
 
 // Balance clauses report the post-transaction balance, NOT the spend. Strip them
 // before amount extraction so "...spent Rs.200, Avl Bal Rs.5,000" reads 200.
@@ -72,9 +80,14 @@ function extractDirection(text: string): TxnDirection | null {
   // 0. The user's own account is the subject of a credit verb → credit, full
   //    stop. Nothing downstream can override it.
   if (ACCOUNT_CREDIT_RE.test(text)) return "credit";
+  // 0b. Ledger abbreviation against the amount ("Cr. INR 500") — as unambiguous
+  //     as the clause above and the only direction cue those banks send.
+  if (CREDIT_ABBR_RE.test(text)) return "credit";
   // 1. Strong debit word wins outright: "A/C debited ... payee credited" → debit
   //    (the account is the subject; a payee being credited doesn't change that).
   if (STRONG_DEBIT_RE.test(text)) return "debit";
+  // 1b. "Dr. INR 1.00" — same abbreviation, debit side.
+  if (DEBIT_ABBR_RE.test(text)) return "debit";
   // 2. Card spends ("...made using your ... Card at X") have no debit keyword and
   //    the phrasing contains "Credit Card" — match before CREDIT_RE so that word
   //    doesn't mis-read a spend as a credit.
@@ -139,8 +152,11 @@ function extractDate(text: string): string | null {
   return null;
 }
 
-// Stop the greedy merchant capture at the next clause boundary keyword.
-const STOP = "(?=\\s+(?:on|ref|refno|ref no|upi|avl|a\\/c|info|not|via|dt|your|bal|txn|using|cr|dr|\\.|,)|$)";
+// Stop the greedy merchant capture at the next clause boundary keyword, or at a
+// ';'/':' punctuation boundary — "to Ashwin K V; UPI: 130…" has no whitespace
+// before the ';', so a keyword-only lookahead failed the whole pattern there and
+// the leftmost match fell through to the footer ("…BLOCKUPI to 99017-CanaraBank").
+const STOP = "(?=\\s*[;:]|\\s+(?:on|ref|refno|ref no|upi|avl|a\\/c|info|not|via|dt|your|bal|txn|using|cr|dr|\\.|,)|$)";
 const MERCHANT_PATTERNS: RegExp[] = [
   // VPA / UPI handle: "to VPA amazon@ybl", "by VPA john@oksbi" → take name before @
   /(?:to|from|by|at)\s+VPA\s+([\w.\-]+)@[\w.\-]+/i,

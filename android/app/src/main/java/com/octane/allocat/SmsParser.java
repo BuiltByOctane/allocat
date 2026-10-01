@@ -21,7 +21,7 @@ final class SmsParser {
 
     // Keep these patterns in sync with lib/ai/parseSmsTransaction.ts.
     private static final String STOP =
-        "(?=\\s+(?:on|ref|refno|ref no|upi|avl|a/c|info|not|via|dt|your|bal|txn|using|cr|dr|\\.|,)|$)";
+        "(?=\\s*[;:]|\\s+(?:on|ref|refno|ref no|upi|avl|a/c|info|not|via|dt|your|bal|txn|using|cr|dr|\\.|,)|$)";
 
     private static final Pattern CURRENCY =
         Pattern.compile("₹|\\bRs\\.?\\b|\\bINR\\b", Pattern.CASE_INSENSITIVE);
@@ -43,6 +43,14 @@ final class SmsParser {
     private static final Pattern ACCOUNT_CREDIT = Pattern.compile(
         "\\b(?:a/c|ac|acct|account)\\b[^.]{0,40}?\\b(?:is|was|has\\s+been|stands)\\s+credited\\b",
         Pattern.CASE_INSENSITIVE);
+    // Canara/Union/co-op banks state the direction only as the ledger
+    // abbreviation: "Acct XXXX2511 Dr. INR 1.00 on 01/10/26 to NAME". Precision
+    // comes from the currency token + digits right after, which a "Dr. Mehta"
+    // honorific can never satisfy.
+    private static final Pattern DEBIT_ABBR =
+        Pattern.compile("\\bDr\\.?\\s*(?:₹|Rs\\.?|INR)\\s*[\\d,]", Pattern.CASE_INSENSITIVE);
+    private static final Pattern CREDIT_ABBR =
+        Pattern.compile("\\bCr\\.?\\s*(?:₹|Rs\\.?|INR)\\s*[\\d,]", Pattern.CASE_INSENSITIVE);
     // Balance clauses report the post-txn balance, not the spend — strip first.
     private static final Pattern BALANCE = Pattern.compile(
         "(?:avl\\.?\\s*bal(?:ance)?|available\\s+bal(?:ance)?|a/c\\s+bal(?:ance)?|bal(?:ance)?)\\s*:?\\s*(?:₹|Rs\\.?|INR)?\\s*[\\d,]+(?:\\.\\d{1,2})?",
@@ -77,7 +85,9 @@ final class SmsParser {
         // beat CREDIT). 3. Credit beats the weak/ambiguous tokens. 4. Weak debit
         // (txn/transferred/sent) last.
         if (ACCOUNT_CREDIT.matcher(t).find()) p.direction = "credit";
+        else if (CREDIT_ABBR.matcher(t).find()) p.direction = "credit";
         else if (STRONG_DEBIT.matcher(t).find()) p.direction = "debit";
+        else if (DEBIT_ABBR.matcher(t).find()) p.direction = "debit";
         else if (CARD_SPEND.matcher(t).find()) p.direction = "debit";
         else if (CREDIT.matcher(t).find()) p.direction = "credit";
         else if (WEAK_DEBIT.matcher(t).find()) p.direction = "debit";

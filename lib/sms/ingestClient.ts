@@ -368,6 +368,12 @@ let reapplyRunning = false;
  * Idempotent: each row is advanced inside a readwrite transaction that re-checks
  * the row is still `pending` before touching it, so a re-run (or an overlapping
  * call) never increments a budget item twice.
+ *
+ * `status === "pending"` is NOT on its own a licence to auto-apply: a row the
+ * user explicitly UNALLOCATED is pending by choice. Those rows carry the
+ * device-only `auto_apply_optout` flag and are skipped — otherwise a learned
+ * rule dragged the transaction back into the Allocated tab (and re-logged its
+ * spend) on the very next drain, which is every app open and every refresh.
  */
 export async function reapplyRulesToPending(deps: {
   enqueue: EnqueueFn;
@@ -386,6 +392,8 @@ export async function reapplyRulesToPending(deps: {
 
     let applied = 0;
     for (const row of pending) {
+      // The user unallocated this row on purpose — never re-apply a rule to it.
+      if (row.auto_apply_optout) continue;
       if (!row.merchant_raw && !row.merchant_normalized) continue;
       if (typeof row.amount !== "number" || row.amount <= 0) continue;
       const candidates = matchMerchantRules(
@@ -411,6 +419,9 @@ export async function reapplyRulesToPending(deps: {
         async (): Promise<boolean> => {
           const fresh = await db.sms_transactions.get(row.id);
           if (!fresh || fresh.status !== "pending") return false;
+          // Re-check inside the transaction: an unallocate may have landed
+          // between the scan above and here.
+          if (fresh.auto_apply_optout) return false;
           await db.sms_transactions.update(row.id, {
             status: "categorized",
             budget_item_id: resolvedItemId,

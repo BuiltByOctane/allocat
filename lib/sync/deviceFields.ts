@@ -12,9 +12,19 @@
  *
  * `template_key` is synced (it is a one-way hash), but rows captured before that
  * column existed only have it locally — same merge rule applies.
+ *
+ * `auto_apply_optout` records that the user deliberately unallocated a row, so
+ * `reapplyRulesToPending` stops re-applying a learned rule to it. It has no
+ * server column at all, so without this merge every hydrate erased the opt-out
+ * and the next drain re-allocated the transaction.
  */
 const DEVICE_ONLY_FIELDS: Record<string, readonly string[]> = {
-  sms_transactions: ["raw_text", "sender", "template_key"],
+  sms_transactions: [
+    "raw_text",
+    "sender",
+    "template_key",
+    "auto_apply_optout",
+  ],
 };
 
 /**

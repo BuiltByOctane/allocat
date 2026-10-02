@@ -67,3 +67,9 @@ service-account*.json
 
 # SDD scratch (superpowers)
 .superpowers/
+
+# brag / promo video scratch output (local only)
+brag-ideas.md
+brag-output/
+brag-output-*/
+supabase/.temp/

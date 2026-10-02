@@ -16,7 +16,17 @@ export type SnapshotRow =
 export type ActivityLogRow = Database["public"]["Tables"]["activity_logs"]["Row"];
 export type MerchantRuleRow = Database["public"]["Tables"]["merchant_rules"]["Row"];
 export type SmsTransactionRow =
-  Database["public"]["Tables"]["sms_transactions"]["Row"];
+  Database["public"]["Tables"]["sms_transactions"]["Row"] & {
+    /**
+     * Device-only. Set when the user explicitly UNALLOCATES a transaction:
+     * the row is then pending by choice, not because merchant rules hadn't
+     * hydrated yet, so `reapplyRulesToPending` must leave it alone. Without
+     * it, a learned auto-apply rule dragged the row straight back into the
+     * Allocated tab (and re-logged the spend) on the next drain / refresh.
+     * Never synced — see lib/sync/deviceFields.ts.
+     */
+    auto_apply_optout?: boolean | null;
+  };
 export type SmsBlocklistRow =
   Database["public"]["Tables"]["sms_blocklist"]["Row"];
 export type FeedbackRow = Database["public"]["Tables"]["feedback"]["Row"];

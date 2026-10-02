@@ -127,7 +127,7 @@ vi.mock("@/lib/db", () => ({
 // { silent: true } so the notify branch is never reached.
 vi.mock("@/lib/native/notify", () => ({ notifyLocal: vi.fn() }));
 
-import { ingestSmsClient } from "./ingestClient";
+import { ingestSmsClient, reapplyRulesToPending } from "./ingestClient";
 
 const SMS = {
   raw: "Rs.1,500.00 debited from a/c **1234 on 02-06-26 to VPA amazon@ybl. Avl Bal Rs.10,000.00",
@@ -307,5 +307,84 @@ describe("ingestSmsClient — overspend_count increment (Task 6)", () => {
 
     const item = tables.budget_items.rows.find((r) => r.id === "item1");
     expect(item?.overspend_count).toBe(1);
+  });
+});
+
+describe("reapplyRulesToPending — respects a deliberate unallocation", () => {
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+
+  /** Budget + item + auto-apply rule that the pending row below matches. */
+  function seedBudgetAndRule() {
+    tables.budgets.rows.push({ id: "budget1", month, year, template_id: null });
+    tables.categories.rows.push({ id: "cat1", budget_id: "budget1" });
+    tables.budget_items.rows.push({
+      id: "item1",
+      category_id: "cat1",
+      planned_amount: 1000,
+      actual_amount: 0,
+      overspend_count: 0,
+      template_id: null,
+      template_item_id: null,
+    });
+    tables.merchant_rules.rows.push({
+      id: "rule1",
+      pattern: "amazon",
+      match_type: "exact",
+      auto_apply: true,
+      budget_item_id: "item1",
+      template_id: null,
+      template_item_id: null,
+    });
+  }
+
+  function pendingRow(extra: Record<string, unknown> = {}) {
+    return {
+      id: "txn1",
+      status: "pending",
+      amount: 100,
+      merchant_raw: "amazon",
+      merchant_normalized: "amazon",
+      budget_item_id: null,
+      matched_rule_id: null,
+      occurred_at: now.toISOString(),
+      created_at: now.toISOString(),
+      dedupe_key: "k1",
+      ...extra,
+    };
+  }
+
+  beforeEach(() => {
+    freshTables();
+  });
+
+  it("re-applies a row that merely landed pending before rules hydrated", async () => {
+    seedBudgetAndRule();
+    tables.sms_transactions.rows.push(pendingRow());
+    const enqueue = vi.fn().mockResolvedValue(undefined);
+
+    const { applied } = await reapplyRulesToPending({ enqueue });
+
+    expect(applied).toBe(1);
+    expect(tables.sms_transactions.rows[0].status).toBe("categorized");
+    expect(tables.budget_items.rows[0].actual_amount).toBe(100);
+  });
+
+  it("leaves a user-unallocated row pending (no re-apply, no double spend)", async () => {
+    seedBudgetAndRule();
+    // The user explicitly unallocated this row: it is pending BY CHOICE, not
+    // because rules were missing. Re-applying it put the txn straight back in
+    // the Allocated tab on every app open / refresh and re-logged the spend.
+    tables.sms_transactions.rows.push(pendingRow({ auto_apply_optout: true }));
+    const enqueue = vi.fn().mockResolvedValue(undefined);
+
+    const { applied } = await reapplyRulesToPending({ enqueue });
+
+    expect(applied).toBe(0);
+    expect(tables.sms_transactions.rows[0].status).toBe("pending");
+    expect(tables.sms_transactions.rows[0].budget_item_id).toBeNull();
+    expect(tables.budget_items.rows[0].actual_amount).toBe(0);
+    expect(enqueue).not.toHaveBeenCalled();
   });
 });

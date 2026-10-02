@@ -591,6 +591,11 @@ export function useUnallocateSms() {
         status: "pending",
         budget_item_id: null,
         matched_rule_id: null,
+        // Device-only: this row is pending BY CHOICE. Without it,
+        // reapplyRulesToPending (every drain → every app open / refresh) saw a
+        // pending row with a learned auto-apply rule and put it straight back
+        // in the Allocated tab, re-logging the spend. See lib/sync/deviceFields.ts.
+        auto_apply_optout: true,
       });
       await enqueue({
         table: "sms_transactions",

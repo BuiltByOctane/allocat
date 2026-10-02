@@ -20,8 +20,15 @@ final class SmsParser {
     }
 
     // Keep these patterns in sync with lib/ai/parseSmsTransaction.ts.
+    //
+    // Colons inside [...] are ESCAPED on purpose. Android's regex engine is ICU,
+    // not OpenJDK: ICU reads "[:" as the start of a POSIX class ("[:alpha:]") and
+    // scans ahead for ":]". The info pattern's "[:\\-]" plus STOP's "[;:]" gave it
+    // exactly that, so ICU threw while this class loaded and the receiver crashed
+    // on every SMS (no queue, no notification) — desktop Java accepted it, which
+    // is why only devices broke. See lib/sms/nativeRegex.test.ts.
     private static final String STOP =
-        "(?=\\s*[;:]|\\s+(?:on|ref|refno|ref no|upi|avl|a/c|info|not|via|dt|your|bal|txn|using|cr|dr|\\.|,)|$)";
+        "(?=\\s*[;\\:]|\\s+(?:on|ref|refno|ref no|upi|avl|a/c|info|not|via|dt|your|bal|txn|using|cr|dr|\\.|,)|$)";
 
     private static final Pattern CURRENCY =
         Pattern.compile("₹|\\bRs\\.?\\b|\\bINR\\b", Pattern.CASE_INSENSITIVE);
@@ -69,7 +76,7 @@ final class SmsParser {
             Pattern.CASE_INSENSITIVE),
         Pattern.compile("\\bat\\s+([A-Za-z0-9][A-Za-z0-9 &._\\-]*?)" + STOP, Pattern.CASE_INSENSITIVE),
         Pattern.compile("(?:&|and)\\s+([A-Za-z0-9][A-Za-z0-9 &._\\-]*?)\\s+credited", Pattern.CASE_INSENSITIVE),
-        Pattern.compile("\\binfo[:\\-]?\\s*([A-Za-z0-9][A-Za-z0-9 &._\\-]*?)" + STOP, Pattern.CASE_INSENSITIVE),
+        Pattern.compile("\\binfo[\\:\\-]?\\s*([A-Za-z0-9][A-Za-z0-9 &._\\-]*?)" + STOP, Pattern.CASE_INSENSITIVE),
         Pattern.compile("\\bfrom\\s+([A-Za-z0-9][A-Za-z0-9 &._\\-]*?)" + STOP, Pattern.CASE_INSENSITIVE),
     };
 

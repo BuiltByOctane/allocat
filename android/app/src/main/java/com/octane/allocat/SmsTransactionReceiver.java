@@ -47,7 +47,19 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
             return;
         }
 
-        SmsParser.Parsed parsed = SmsParser.parse(text);
+        SmsParser.Parsed parsed;
+        try {
+            parsed = SmsParser.parse(text);
+        } catch (Throwable t) {
+            // A parser bug must never cost the user a transaction. Queue the SMS
+            // so the web layer (authoritative parser + debit gate) ingests it on
+            // open; skip the native notification since we can't describe it.
+            log("parser failed — queued for web ingest");
+            long ts = System.currentTimeMillis();
+            SmsQueue.add(context, from, text, ts);
+            if (SmsReaderPlugin.isWebViewAlive()) SmsReaderPlugin.emitIfAlive(from, text, ts);
+            return;
+        }
         // Only track CONFIRMED debits (spends). Credits and ambiguous messages
         // with no debit cue are ignored — mirrors the require-debit gate in
         // lib/sms/ingestClient.ts so the closed-app path can't log phantoms.
@@ -59,7 +71,12 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
         // User-reported template blocklist: skip whole "kinds" of SMS the user
         // flagged as mistakes (same key the web layer computes). Blocked
         // templates neither notify nor queue.
-        String tkey = SmsSignature.templateKey(from, text);
+        String tkey;
+        try {
+            tkey = SmsSignature.templateKey(from, text);
+        } catch (Throwable t) {
+            tkey = null; // can't key it → treat as not blocked; web re-checks on ingest
+        }
         if (SmsBlocklist.contains(context, tkey)) {
             log("blocked kind — ignored");
             return;

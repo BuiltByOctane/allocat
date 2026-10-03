@@ -40,17 +40,15 @@ Requires Android Studio JBR (JDK 21). Open `android/` in Android Studio to build
 ```
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=
-SUPABASE_SERVICE_ROLE_KEY=   # push, AI daily counter, Ko-fi supporter ledger, /admin
+SUPABASE_SERVICE_ROLE_KEY=   # push, AI daily counter, founding-member ledger, /admin
 OPENROUTER_API_KEY=          # used by app/api/ai/chat
-KOFI_VERIFICATION_TOKEN=     # app/api/kofi/webhook (503s without it)
-NEXT_PUBLIC_KOFI_URL=        # where the support CTA points
 ADMIN_EMAILS=                # comma-separated allowlist for /admin; unset ⇒ 404
 CRON_SECRET=                 # bearer token for /api/admin/cron/play-sync
 PLAY_SA_JSON_B64=            # base64 service-account JSON for Play install stats
 PLAY_BUCKET=                 # pubsite_prod_<id>
 ```
 
-See `.env.example` for the full list (web push, `NEXT_PUBLIC_SUPPORT_CTA_NATIVE`).
+See `.env.example` for the full list (web push, FCM, PostHog).
 
 ## Architecture
 
@@ -93,7 +91,6 @@ Cross-cutting rules:
 - `app/onboarding/page.tsx` — post-signup flow.
 - `app/share-target/` — PWA Web Share Target landing (manifest `share_target` posts here); shared text is parsed by `lib/ai/parseSpend.ts`.
 - `app/api/ai/chat/route.ts` — streaming AI chat. Hard off-topic regex guard runs *before* the model call; topic detection in `lib/ai-utils.ts` decides which slice of `buildFinancialContext` to attach. AI is free for everyone; the only ceiling is `DAILY_AI_MESSAGES` (30/day/account) counted via the `increment_ai_usage` RPC, plus the per-instance burst limiter in `lib/server/rateLimit.ts`.
-- `app/api/kofi/webhook/route.ts` — Ko-fi donation webhook (see *Monetization* below).
 - `app/api/app-config/route.ts` — public force-update fields + runtime `flags`.
 - `app/api/track/route.ts` — anonymous landing-site beacon (no IP/UA/cookie stored).
 - `app/api/admin/*` — broadcast push + the Play install cron.
@@ -111,17 +108,17 @@ Auth uses `@supabase/ssr` with cookie-based sessions:
 
 Protected paths (redirect to `/auth/login` if no user): `/dashboard`, `/budget`, `/net-worth`, `/debt`, `/onboarding`. `/goals`, `/profile`, `/activity` are *not* in this list — confirm intent before adding new private routes.
 
-### Monetization: there isn't any
+### Monetization: free now, founding-member waitlist
 
-AlloCat is **free for everyone** — no tiers, no trial, no caps, no paywall. The old Adapty/Play-Billing subscription system was removed entirely; if you find a reference to entitlement, premium, trial or paywall anywhere, it's stale and should go.
+AlloCat is **free for everyone** — no tiers, no trial, no caps, no paywall, no billing. A Premium tier is planned for later, decided from analytics; until then the only money surface is a **founding-member waitlist** (claim now, get "exclusive founding-member pricing" at launch). The old Adapty/Play-Billing subscription and the Ko-fi donation flow were both removed; any reference to entitlement, premium gating, trial, paywall or Ko-fi in app code is stale.
 
-The only money surface is **optional support**:
-- `app/(app)/support/` + `components/support/SupportPage.tsx` — the "Why AlloCat is free" page. Links out to Ko-fi (`lib/support/links.ts`); on native it opens the **system browser**, never an in-app checkout. The `support_cta_native` runtime flag hides that button on Android (Play-review escape hatch); `NEXT_PUBLIC_SUPPORT_CTA_NATIVE=false` is only its build-time default.
-- `app/api/kofi/webhook/route.ts` — verifies Ko-fi's `verification_token`, banks the donation in `supporters` (idempotent on `last_message_id`), and flips `profiles.is_supporter`.
-- `lib/actions/support.ts` `syncSupporterStatus()` — reconciles a donation made before signup; called once per session by `components/support/SupporterSync.tsx`.
-- `useIsSupporter()` (`lib/hooks/useSupporter.ts`) — reads `profiles.is_supporter`. **Cosmetic only** (a `CrownBadge`). Never gate a feature on it: doing so would turn an off-Play donation into a purchase of digital content.
+- `founding_members` table (user_id, email snapshot, source `app`|`kofi`, platform, claimed_at) — service-role only, zero RLS policies. This is the list honoured at Premium launch. Past Ko-fi donors were back-filled (`source='kofi'`); `supporters` / `profiles.is_supporter` are kept as historical data, unread by the app.
+- `profiles.founding_member_since` mirrors membership so the offline-first app knows it from the hydrated profile. `useIsFoundingMember()` (`lib/hooks/useFoundingMember.ts`) — **cosmetic only** (the `CrownBadge`). Never gate a feature on it.
+- `claimFoundingSpot()` (`lib/actions/founding.ts`) — called directly, **not** via the sync queue (a queued claim could land after the offer closed); enforces `founding_offer_open` server-side; idempotent.
+- UI: `components/founding/FoundingBanner.tsx` (slim, dismissible dashboard row) + the offer section in `components/support/SupportPage.tsx` ("Why AlloCat is free").
+- Admin: two runtime flags in `/admin/config` (`founding_offer_open`, `founding_banner_visible`), the list at `/admin/support?tab=founding`, and a `founding` broadcast segment.
 
-Migration: `docs/migrations/2026-07-29-supporters.sql`.
+Migration: `supabase/migrations/20261005000000_founding_members.sql`.
 
 ### Admin portal (`/admin`)
 
@@ -129,15 +126,15 @@ Internal-only insights + operations. Plain RSC + server actions — **no React Q
 
 - **Access**: `lib/admin/guard.ts` → `requireAdmin()`. Email allowlist from the server-only `ADMIN_EMAILS`; a non-admin gets `notFound()` (404, not 403 — `/admin` should not advertise itself). Call it at the top of **every** page, server action and route handler; a layout check does not protect an independently addressable server action. `/admin` is also in the protected-prefix list in `lib/supabase/middleware.ts`.
 - **Reads**: `lib/admin/queries.ts` (`server-only`) via `createServiceClient()` — RLS is uniformly "own row", so cross-user reads have no other path. Aggregates are Postgres functions (`admin_overview`, `admin_daily_series`, `admin_user_search`, `admin_user_detail`, `admin_feature_usage`) in `supabase/migrations/20260908000000_admin_portal.sql`, all `security definer` with EXECUTE revoked from `public, anon, authenticated`. supabase-js has no GROUP BY / COUNT DISTINCT — that is why they exist.
-- **Writes**: `lib/admin/actions.ts`. New tables (`landing_events`, `play_install_stats`, `push_campaigns`) have RLS on with **zero policies**, i.e. service-role only, matching `supporters`.
-- Pages: overview, growth (funnel + Play installs), users (+ detail, delete/force-signout/test-push), support (feedback inbox + Ko-fi ledger), broadcast, config.
+- **Writes**: `lib/admin/actions.ts`. New tables (`landing_events`, `play_install_stats`, `push_campaigns`) have RLS on with **zero policies**, i.e. service-role only, matching `supporters` and `founding_members`.
+- Pages: overview, growth (funnel + Play installs), users (+ detail, delete/force-signout/test-push), support (feedback inbox + founding members), broadcast, config.
 - Charts are two inline-SVG components in `components/admin/charts/` — do not add a charting library.
 
 **Active-user signal**: `activity_logs` records mutations only, so a user who opens the app daily just to read is invisible there. `touchLastSeen()` (`lib/actions/profile.ts`), called once per UTC day from `SyncProvider` and gated on a `localStorage` day key, writes two things: `profiles.last_seen_at` (for display on a user's detail page) and a row in **`user_active_days` (user_id, day)** — the actual DAU history. All DAU/WAU/MAU counts and the daily series read `user_active_days`; `last_seen_at` is a single overwritten column and **cannot** answer "how many were active on day X" (past buckets drain as users return). `activity_logs` distinct-users stays as the separate "engaged" number. Caveat: `SyncProvider` only mounts under `app/(app)/*`, so `/onboarding`, `/auth` and `/legal` do not count as activity.
 
 **Platform (`profiles.last_app_mode`)**: written by that same daily `touchLastSeen()` call, from `Capacitor.isNativePlatform()`. It **must** be stamped client-side — the native shell is a Capacitor WebView of this same app, so `login()` and `/auth/callback` see an identical server request from both platforms and cannot distinguish them. Both previously hardcoded `'web'`, which made the column meaningless; that code and the old `updateAppMode()` action are gone. Do not reintroduce a server-side platform guess.
 
-**Runtime flags** (`lib/config/flags.ts`, stored in `app_config.flags` jsonb): `ai_enabled`, `sms_enabled`, `support_cta_native`, `daily_ai_messages`. These exist because every `NEXT_PUBLIC_*` switch is inlined at build time and the thing needing a kill switch is usually an already-shipped Android build. Read server-side via `getServerFlags()` (60s memo, fails open) and client-side via `useAppFlags()`. `NEXT_PUBLIC_SUPPORT_CTA_NATIVE` is now only the *default* for `support_cta_native`.
+**Runtime flags** (`lib/config/flags.ts`, stored in `app_config.flags` jsonb): `ai_enabled`, `sms_enabled`, `daily_ai_messages`, `analytics_enabled`, `founding_offer_open`, `founding_banner_visible`. These exist because every `NEXT_PUBLIC_*` switch is inlined at build time and the thing needing a kill switch is usually an already-shipped Android build. Read server-side via `getServerFlags()` (60s memo, fails open) and client-side via `useAppFlags()`.
 
 **Play install stats**: Play exposes no REST API for installs — the numbers come from the bulk-report CSVs in the developer account's GCS bucket. `lib/play/installs.ts` signs its own JWT (no `google-auth-library` dependency) and `lib/play/csv.ts` parses. **Those CSVs are UTF-16LE with a BOM**; decoding as UTF-8 silently breaks every column lookup. Nightly via `vercel.json` cron → `/api/admin/cron/play-sync` (CRON_SECRET bearer), plus a manual "Sync now" button.
 

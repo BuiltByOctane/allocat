@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/Button";
 import {
   sendTestPushTo,
   forceSignOutUser,
-  setSupporterFlag,
   deleteUserAccount,
 } from "@/lib/admin/actions";
 
@@ -19,11 +18,9 @@ import {
 export function UserActions({
   userId,
   email,
-  isSupporter,
 }: {
   userId: string;
   email: string;
-  isSupporter: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -47,14 +44,6 @@ export function UserActions({
         </Button>
         <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => forceSignOutUser(userId), "Sessions revoked")}>
           Force sign-out
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={pending}
-          onClick={() => run(() => setSupporterFlag(userId, !isSupporter), isSupporter ? "Badge removed" : "Badge granted")}
-        >
-          {isSupporter ? "Remove supporter badge" : "Grant supporter badge"}
         </Button>
       </div>
 

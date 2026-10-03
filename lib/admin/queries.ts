@@ -212,25 +212,39 @@ export async function listFeedback(includeResolved = false): Promise<FeedbackRow
   return (data ?? []) as FeedbackRow[];
 }
 
-export interface SupporterRow {
+export interface FoundingMemberRow {
+  user_id: string;
   email: string;
-  user_id: string | null;
-  first_supported_at: string;
-  last_supported_at: string;
-  total_amount: number;
-  currency: string | null;
-  source: string;
+  source: "app" | "kofi";
+  platform: "web" | "pwa" | "android" | null;
+  claimed_at: string;
 }
 
-export async function listSupporters(): Promise<SupporterRow[]> {
+export interface FoundingMembersSummary {
+  total: number;
+  rows: FoundingMemberRow[];
+}
+
+/** Exact founding-member count (head-only, no rows). */
+export async function countFoundingMembers(): Promise<number> {
   const client = createServiceClient();
-  const { data, error } = await client
-    .from("supporters")
-    .select("email, user_id, first_supported_at, last_supported_at, total_amount, currency, source")
-    .order("last_supported_at", { ascending: false })
-    .limit(200);
-  if (error) throw new Error(`listSupporters: ${error.message}`);
-  return (data ?? []) as SupporterRow[];
+  const { count, error } = await client
+    .from("founding_members")
+    .select("user_id", { count: "exact", head: true });
+  if (error) throw new Error(`countFoundingMembers: ${error.message}`);
+  return count ?? 0;
+}
+
+/** Founding-member claims, newest first. `total` is exact; `rows` is capped. */
+export async function listFoundingMembers(): Promise<FoundingMembersSummary> {
+  const client = createServiceClient();
+  const { data, error, count } = await client
+    .from("founding_members")
+    .select("user_id, email, source, platform, claimed_at", { count: "exact" })
+    .order("claimed_at", { ascending: false })
+    .limit(500);
+  if (error) throw new Error(`listFoundingMembers: ${error.message}`);
+  return { total: count ?? data?.length ?? 0, rows: (data ?? []) as FoundingMemberRow[] };
 }
 
 export interface AppConfigRow {

@@ -17,15 +17,15 @@ export interface CrownBadgeProps {
 }
 
 /**
- * Animated crown (public/lottie/crown.lottie) — the thank-you mark for people
- * who've supported AlloCat on Ko-fi. Purely decorative: it does no check of its
- * own, so callers gate on `useIsSupporter()`. Autoplays on a loop, subtle and
+ * Animated crown (public/lottie/crown.lottie) — the founding-member mark.
+ * Purely decorative: it does no check of its own, so callers gate on
+ * `useIsFoundingMember()`. Autoplays on a loop, subtle and
  * inline. Nothing in the app is ever gated on this being visible.
  */
 export function CrownBadge({
   size = 24,
   className = "",
-  "aria-label": ariaLabel = "Supporter",
+  "aria-label": ariaLabel = "Founding member",
 }: CrownBadgeProps) {
   return (
     <span

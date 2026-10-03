@@ -13,7 +13,6 @@ import { NativeSetup } from "@/components/pwa/NativeSetup";
 import { TourPrompt } from "@/components/tour/TourPrompt";
 import { TourProvider } from "@/lib/tour/TourContext";
 import { CurrencyProvider } from "@/lib/providers/CurrencyProvider";
-import { SupporterSync } from "@/components/support/SupporterSync";
 import { CarryController } from "@/components/budget/CarryController";
 import { BudgetReminderController } from "@/components/budget/BudgetReminderController";
 import { PullToRefresh } from "@/components/PullToRefresh";
@@ -50,7 +49,6 @@ export default async function AppLayout({
         <TourPrompt />
         <NativeSetup />
         <AppBadgeReset />
-        <SupporterSync />
         <CarryController />
         <BudgetReminderController />
         <BottomDock />

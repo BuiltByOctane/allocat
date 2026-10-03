@@ -19,6 +19,7 @@ export type Database = {
           avatar: string | null
           is_supporter: boolean
           supporter_since: string | null
+          founding_member_since: string | null
           last_app_mode: "web" | "android" | null
           last_seen_at: string | null
           created_at: string
@@ -33,6 +34,7 @@ export type Database = {
           avatar?: string | null
           is_supporter?: boolean
           supporter_since?: string | null
+          founding_member_since?: string | null
           last_app_mode?: "web" | "android" | null
           last_seen_at?: string | null
           created_at?: string
@@ -46,6 +48,7 @@ export type Database = {
           avatar?: string | null
           is_supporter?: boolean
           supporter_since?: string | null
+          founding_member_since?: string | null
           last_app_mode?: "web" | "android" | null
           last_seen_at?: string | null
           updated_at?: string
@@ -657,6 +660,27 @@ export type Database = {
           min_android_version_code?: number
           update_message?: string | null
           flags?: Json
+        }
+        Relationships: []
+      }
+      founding_members: {
+        Row: {
+          user_id: string
+          email: string
+          source: "app" | "kofi"
+          platform: "web" | "pwa" | "android" | null
+          claimed_at: string
+        }
+        Insert: {
+          user_id: string
+          email: string
+          source?: "app" | "kofi"
+          platform?: "web" | "pwa" | "android" | null
+          claimed_at?: string
+        }
+        Update: {
+          email?: string
+          platform?: "web" | "pwa" | "android" | null
         }
         Relationships: []
       }

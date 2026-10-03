@@ -28,7 +28,7 @@ import {
 } from "@/lib/sms/notifPrefs";
 import { scheduleWeeklyRecap } from "@/lib/sms/recap";
 import { SmsReader } from "@/lib/native/SmsReader";
-import { useIsSupporter } from "@/lib/hooks/useSupporter";
+import { useIsFoundingMember } from "@/lib/hooks/useFoundingMember";
 import { CrownBadge } from "@/components/ui/CrownBadge";
 import { FeedbackSheet } from "@/components/feedback/FeedbackSheet";
 import NotificationBell from "@/components/notifications/NotificationBell";
@@ -38,7 +38,7 @@ export default function ProfilePage() {
   const { data: profile } = useProfile();
   const { engine } = useSyncContext();
   const tour = useTour();
-  const isSupporter = useIsSupporter();
+  const isFoundingMember = useIsFoundingMember();
   const { resolvedTheme, setTheme } = useTheme();
 
   // Quick-action dock on /profile = light/dark toggle. Icon reflects the
@@ -127,8 +127,8 @@ export default function ProfilePage() {
             {profile?.email || ""}
           </div>
         </div>
-        {isSupporter && (
-          <CrownBadge size={44} className="self-center -mr-0.5" aria-label="AlloCat supporter" />
+        {isFoundingMember && (
+          <CrownBadge size={44} className="self-center -mr-0.5" aria-label="Founding member" />
         )}
       </div>
 

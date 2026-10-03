@@ -155,19 +155,18 @@ export default function PrivacyPolicyPage() {
         </p>
       </Section>
 
-      <Section title="Payments and donations">
+      <Section title="Payments and founding members">
         <p>
           AlloCat is free. There is no subscription, no paid tier, and no in-app
           purchase - every feature is available to every account.
         </p>
         <p>
-          If you choose to support development, donations are handled entirely by{" "}
-          <strong>Ko-fi</strong> on their own website, under their privacy policy.
-          Your payment details never reach AlloCat. Ko-fi tells us only the email
-          address, amount and currency of the donation, which we store so we can
-          show a thank-you badge on the matching account. That badge is cosmetic:
-          it unlocks nothing, and donating changes nothing about how the app works
-          for you.
+          If you claim a <strong>founding-member</strong> spot, we record your
+          account&apos;s email address, the date and the platform you claimed on
+          (web, installed app or Android). We use this only to tell you when
+          Premium launches and to apply founding-member pricing to your account.
+          Claiming costs nothing and changes nothing about how the app works.
+          The record is deleted with your account.
         </p>
       </Section>
 

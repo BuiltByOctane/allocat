@@ -86,7 +86,7 @@ export default async function AdminUserDetailPage({
       <section>
         <h3 className="t-label text-muted-foreground mb-2.5">Actions</h3>
         <div className="rounded-card bg-card p-5">
-          <UserActions userId={profile.id} email={profile.email} isSupporter={profile.is_supporter} />
+          <UserActions userId={profile.id} email={profile.email} />
         </div>
       </section>
 

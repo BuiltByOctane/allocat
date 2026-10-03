@@ -25,13 +25,13 @@ import { sendToTokens, isFcmConfigured } from "@/lib/server/fcm";
  * would double-notify every native user. Broadcasts have no such on-device twin.
  */
 
-export type Segment = "all" | "android" | "web" | "supporters" | "inactive_7d";
+export type Segment = "all" | "android" | "web" | "founding" | "inactive_7d";
 
 export const SEGMENTS: Array<{ id: Segment; label: string; hint: string }> = [
   { id: "all", label: "Everyone", hint: "Every subscribed device" },
   { id: "android", label: "Android", hint: "Last opened the native shell" },
   { id: "web", label: "Web / PWA", hint: "Never opened the native shell" },
-  { id: "supporters", label: "Supporters", hint: "Donated via Ko-fi" },
+  { id: "founding", label: "Founding members", hint: "Claimed founding-member pricing" },
   { id: "inactive_7d", label: "Inactive 7d", hint: "Not seen in the last week" },
 ];
 
@@ -61,7 +61,7 @@ async function resolveUserIds(service: Service, segment: Segment): Promise<strin
   // `neq` alone would drop NULLs, but a user who has never opened the native
   // shell has last_app_mode NULL — they are exactly who "web" means.
   if (segment === "web") q = q.or("last_app_mode.is.null,last_app_mode.neq.android");
-  if (segment === "supporters") q = q.eq("is_supporter", true);
+  if (segment === "founding") q = q.not("founding_member_since", "is", null);
   if (segment === "inactive_7d") {
     // Deliberately excludes NULL last_seen_at. Before the stamp rolls out
     // everyone is NULL, and treating "unknown" as "inactive" would turn this

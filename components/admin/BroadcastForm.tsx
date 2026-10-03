@@ -8,7 +8,7 @@ const SEGMENTS = [
   { id: "all", label: "Everyone", hint: "Every subscribed device" },
   { id: "android", label: "Android", hint: "Last opened the native shell" },
   { id: "web", label: "Web / PWA", hint: "Never opened the native shell" },
-  { id: "supporters", label: "Supporters", hint: "Donated via Ko-fi" },
+  { id: "founding", label: "Founding members", hint: "Claimed founding-member pricing" },
   { id: "inactive_7d", label: "Inactive 7d", hint: "Not seen in the last week" },
 ];
 

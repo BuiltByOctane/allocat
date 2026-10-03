@@ -15,9 +15,13 @@ const FLAG_COPY: Record<keyof AppFlags, { label: string; hint: string }> = {
     label: "SMS tracking",
     hint: "Off unmounts the SMS bridge: no live ingest, no queue drain, no rule mirror.",
   },
-  support_cta_native: {
-    label: "Ko-fi button on Android",
-    hint: "Off hides the donate button inside the native shell (Play-review escape hatch).",
+  founding_offer_open: {
+    label: "Founding offer open",
+    hint: "Off stops new founding-member claims; Support page shows \"spots closed\". Existing members keep their crown.",
+  },
+  founding_banner_visible: {
+    label: "Founding banner on dashboard",
+    hint: "Off hides the slim dashboard banner. The offer stays claimable on the Support page while open.",
   },
   daily_ai_messages: {
     label: "Daily AI messages",

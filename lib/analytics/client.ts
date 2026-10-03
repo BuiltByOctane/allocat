@@ -36,9 +36,10 @@ export type AnalyticsEvent =
   | "accent_changed"
   | "theme_changed"
   | "currency_changed"
-  | "kofi_clicked";
+  | "founding_banner_dismissed"
+  | "founding_claimed";
 
-function platform(): "android" | "pwa" | "web" {
+export function platform(): "android" | "pwa" | "web" {
   if (Capacitor.isNativePlatform()) return "android";
   try {
     if (window.matchMedia("(display-mode: standalone)").matches) return "pwa";

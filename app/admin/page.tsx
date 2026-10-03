@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin/guard";
-import { getOverview, getDailySeries, getPushReach } from "@/lib/admin/queries";
+import { getOverview, getDailySeries, getPushReach, countFoundingMembers } from "@/lib/admin/queries";
 import { Tile } from "@/components/admin/Tile";
 import { Sparkline } from "@/components/admin/charts/Sparkline";
 import { num, pct, ago } from "@/lib/admin/format";
@@ -8,10 +8,11 @@ import { num, pct, ago } from "@/lib/admin/format";
 export default async function AdminOverviewPage() {
   await requireAdmin();
 
-  const [o, series, reach] = await Promise.all([
+  const [o, series, reach, founding] = await Promise.all([
     getOverview(),
     getDailySeries(30),
     getPushReach().catch(() => null),
+    countFoundingMembers().catch(() => null),
   ]);
 
   const signups = series.map((d) => d.signups);
@@ -125,11 +126,9 @@ export default async function AdminOverviewPage() {
       <section>
         <h2 className="t-label text-muted-foreground mb-2.5">Support</h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-          <Tile
-            label="Supporters"
-            value={num(o.supporters.count)}
-            sub={`${o.supporters.total_amount ? o.supporters.total_amount.toLocaleString("en-US") : 0} donated`}
-          />
+          <Link href="/admin/support?tab=founding">
+            <Tile label="Founding members" value={founding === null ? "—" : num(founding)} sub="claimed spots" />
+          </Link>
           <Tile
             label="Open feedback"
             value={num(o.feedback.unresolved)}

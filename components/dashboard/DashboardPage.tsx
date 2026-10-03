@@ -10,8 +10,8 @@ import { StatCard } from "@/components/ui/StatCard";
 import { Chip } from "@/components/ui/Chip";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { useProfile } from "@/lib/hooks/useProfile";
-import { useIsSupporter } from "@/lib/hooks/useSupporter";
-import { SupportNudge } from "@/components/support/SupportNudge";
+import { useIsFoundingMember } from "@/lib/hooks/useFoundingMember";
+import { FoundingBanner } from "@/components/founding/FoundingBanner";
 import { CrownBadge } from "@/components/ui/CrownBadge";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import { getTimeGreeting } from "@/lib/utils/greeting";
@@ -70,7 +70,7 @@ function daysLeftLabel(daysLeft: number): string {
 export default function DashboardPage({ data }: DashboardProps) {
   const haptic = useHaptic();
   const { data: profile } = useProfile();
-  const isSupporter = useIsSupporter();
+  const isFoundingMember = useIsFoundingMember();
   const firstName = profile?.full_name?.trim().split(/\s+/)[0] ?? "";
 
   // Server (and first client render) get null to match SSR markup; after
@@ -166,7 +166,7 @@ export default function DashboardPage({ data }: DashboardProps) {
                     {statusChip.label}
                   </Chip>
                 </div>
-                {isSupporter && <CrownBadge size={60} className="absolute top-9" />}
+                {isFoundingMember && <CrownBadge size={60} className="absolute top-9" />}
               </div>
             </div>
             <div className="figure text-[44px] leading-[0.92] my-2.5" style={{ color: "var(--accent-ink)" }}>
@@ -284,7 +284,7 @@ export default function DashboardPage({ data }: DashboardProps) {
       {/* Manual spend — one button; the amount → item flow lives in a sheet */}
       {data.budget && data.categories.length > 0 && <ManualSpendButton />}
 
-      <SupportNudge />
+      <FoundingBanner />
     </div>
   );
 }

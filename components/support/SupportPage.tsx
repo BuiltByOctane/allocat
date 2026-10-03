@@ -1,25 +1,14 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { Capacitor } from "@capacitor/core";
-import { Browser } from "@capacitor/browser";
-import { ChevronLeft, Heart, Server, Sparkles, ShieldCheck, Store } from "lucide-react";
+import { ChevronLeft, Crown, Server, Sparkles, ShieldCheck, Store } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { CrownBadge } from "@/components/ui/CrownBadge";
 import { useHaptic } from "@/lib/hooks/useHaptic";
-import { useIsSupporter, useSupporterSince } from "@/lib/hooks/useSupporter";
-import { syncSupporterStatus } from "@/lib/actions/support";
-import { markSupporterLocally } from "@/lib/support/local";
-import { PROFILE_KEY } from "@/lib/hooks/useProfile";
-import { useQueryClient } from "@tanstack/react-query";
-import {
-  KOFI_URL,
-  SUPPORT_WEB_URL,
-  SUPPORT_CONTACT_EMAIL,
-} from "@/lib/support/links";
 import { useAppFlags } from "@/lib/hooks/useAppFlags";
-import { track } from "@/lib/analytics/client";
+import { useProfile } from "@/lib/hooks/useProfile";
+import { useClaimFounding, useIsFoundingMember } from "@/lib/hooks/useFoundingMember";
+import { FOUNDING_CONFIRMATION, claimErrorCopy } from "@/components/founding/copy";
 
 const COSTS = [
   {
@@ -47,49 +36,18 @@ function formatSince(iso: string | null): string | null {
 }
 
 export default function SupportPage() {
-  const isSupporter = useIsSupporter();
-  const since = formatSince(useSupporterSince());
+  const isMember = useIsFoundingMember();
+  const { data: profile } = useProfile();
+  const since = formatSince(profile?.founding_member_since ?? null);
   const haptic = useHaptic();
-  const qc = useQueryClient();
-
-  const [claiming, setClaiming] = useState(false);
-  const [claimResult, setClaimResult] = useState<"none" | "found" | "missing">("none");
-
-  // DB-backed so the button can be pulled from an already-shipped Android build
-  // during a Play review, without a redeploy. Defaults to the build-time env.
   const flags = useAppFlags();
-  const isNative = Capacitor.isNativePlatform();
-  const showKofiButton = !isNative || flags.support_cta_native;
+  const { state, claim } = useClaimFounding("support");
+  const error = claimErrorCopy(state);
 
-  async function openKofi() {
+  const onClaim = () => {
     haptic.light();
-    track("kofi_clicked");
-    // Native opens the system browser — payment never happens inside the app.
-    if (isNative) {
-      await Browser.open({ url: KOFI_URL });
-      return;
-    }
-    window.open(KOFI_URL, "_blank", "noopener,noreferrer");
-  }
-
-  async function claim() {
-    haptic.light();
-    setClaiming(true);
-    try {
-      const { isSupporter: found } = await syncSupporterStatus();
-      if (found) {
-        await markSupporterLocally();
-        qc.invalidateQueries({ queryKey: PROFILE_KEY });
-        setClaimResult("found");
-      } else {
-        setClaimResult("missing");
-      }
-    } catch {
-      setClaimResult("missing");
-    } finally {
-      setClaiming(false);
-    }
-  }
+    void claim();
+  };
 
   return (
     <div className="px-4 pt-4 pb-6 flex flex-col gap-3">
@@ -115,13 +73,13 @@ export default function SupportPage() {
       {/* The story */}
       <div className="wordmark-watermark relative overflow-hidden rounded-card bg-accent p-[18px] text-[var(--accent-ink)]">
         <p className="font-display text-[20px] font-bold leading-tight tracking-[-0.02em]">
-          Everything in AlloCat is free. All of it. Forever.
+          Everything in AlloCat is free today. All of it.
         </p>
         <p className="text-[12.5px] font-medium leading-relaxed mt-2 opacity-85">
-          No plans, no trial, no locked features, no &ldquo;upgrade to
-          continue&rdquo;. I built AlloCat because I wanted a money app that
-          didn&apos;t nag me, and charging for it would have made it exactly the
-          thing I was trying to avoid.
+          No locked features, no &ldquo;upgrade to continue&rdquo;. I built
+          AlloCat because I wanted a money app that didn&apos;t nag me. What you
+          use now stays free — Premium, when it comes, adds new things on top
+          instead of taking anything away.
         </p>
       </div>
 
@@ -165,87 +123,57 @@ export default function SupportPage() {
         </Card>
       ))}
 
-      {/* Supporter state, or the ask */}
-      {isSupporter ? (
-        <Card className="flex flex-col items-center text-center gap-1.5 mt-1">
+      {/* Founding-member offer */}
+      <p className="t-label text-muted-foreground mt-1 ml-1">Premium is coming</p>
+      {isMember || state === "claimed" ? (
+        <Card className="flex flex-col items-center text-center gap-1.5">
           <CrownBadge size={64} />
           <div className="font-display text-[19px] font-bold text-foreground leading-tight">
-            Thank you, genuinely
+            You&apos;re a founding member
           </div>
           <p className="text-[12px] font-medium text-muted-foreground leading-relaxed">
-            {since
-              ? `You've been supporting AlloCat since ${since}.`
-              : "You're one of the people keeping AlloCat running."}{" "}
-            You didn&apos;t buy anything — the app was always going to be free.
-            You just made it easier to keep going.
+            {state === "claimed"
+              ? FOUNDING_CONFIRMATION
+              : `${since ? `Claimed ${since}. ` : ""}We'll let you know as soon as Premium launches — your founding-member pricing is locked.`}
           </p>
         </Card>
       ) : (
-        <>
-          <p className="t-label text-muted-foreground mt-1 ml-1">If you want to chip in</p>
-          <Card className="flex flex-col gap-3">
-            <div className="flex items-start gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-accent/15 text-accent">
-                <Heart size={18} strokeWidth={1.7} />
-              </div>
-              <div className="min-w-0">
-                <div className="text-[13.5px] font-bold text-foreground">
-                  Only if you want to
-                </div>
-                <p className="text-[11.5px] font-medium text-muted-foreground leading-relaxed mt-1">
-                  If AlloCat has been useful and you feel like covering a bit of
-                  the bill, you can leave a tip on Ko-fi — once, or monthly,
-                  whatever suits. It changes nothing about your app: no extra
-                  features, no higher limits. Everyone gets the same AlloCat.
-                </p>
-              </div>
+        <Card className="flex flex-col gap-3">
+          <div className="flex items-start gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-accent/15 text-accent">
+              <Crown size={18} strokeWidth={1.7} />
             </div>
-
-            {showKofiButton ? (
-              <button
-                type="button"
-                onClick={openKofi}
-                className="w-full rounded-pill bg-accent text-accent-ink text-[13px] font-bold py-3 active:scale-[0.98] transition-transform"
-              >
-                Support on Ko-fi
-              </button>
-            ) : (
-              <p className="text-[11.5px] font-medium text-muted-foreground text-center leading-relaxed">
-                You can leave a tip at{" "}
-                <span className="font-bold text-foreground">{SUPPORT_WEB_URL}</span>
+            <div className="min-w-0">
+              <div className="text-[13.5px] font-bold text-foreground">
+                Exclusive founding-member pricing
+              </div>
+              <p className="text-[11.5px] font-medium text-muted-foreground leading-relaxed mt-1">
+                Keeping AlloCat running costs real money, so a Premium tier will
+                arrive eventually. Early users get exclusive founding-member
+                pricing on it. Claiming is free, costs nothing now and changes
+                nothing in your app — we&apos;ll just tell you when it&apos;s live.
               </p>
-            )}
-          </Card>
+            </div>
+          </div>
 
-          {/* Already donated — reconcile by email. */}
-          <button
-            type="button"
-            onClick={claim}
-            disabled={claiming}
-            className="w-full text-center text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground underline underline-offset-4 hover:text-foreground transition-colors py-1 disabled:opacity-50"
-          >
-            {claiming ? "Checking…" : "I already supported"}
-          </button>
-
-          {claimResult === "missing" && (
-            <p className="text-[11px] font-medium text-muted-foreground text-center leading-relaxed px-2">
-              Nothing found for this account&apos;s email yet. Ko-fi can take a
-              minute — or if you used a different email, mail me at{" "}
-              <a
-                href={`mailto:${SUPPORT_CONTACT_EMAIL}`}
-                className="font-bold text-foreground underline underline-offset-2"
-              >
-                {SUPPORT_CONTACT_EMAIL}
-              </a>
-              .
+          {flags.founding_offer_open && state !== "closed" ? (
+            <button
+              type="button"
+              onClick={onClaim}
+              disabled={state === "claiming"}
+              className="w-full rounded-pill bg-accent text-accent-ink text-[13px] font-bold py-3 active:scale-[0.98] transition-transform disabled:opacity-60"
+            >
+              {state === "claiming" ? "Claiming…" : "Claim my founding spot"}
+            </button>
+          ) : (
+            <p className="text-[11.5px] font-bold text-muted-foreground text-center">
+              Founding spots are closed.
             </p>
           )}
-          {claimResult === "found" && (
-            <p className="text-[11px] font-medium text-accent text-center">
-              Found it — thank you! 💚
-            </p>
+          {error && state !== "closed" && (
+            <p className="text-[11px] font-medium text-muted-foreground text-center">{error}</p>
           )}
-        </>
+        </Card>
       )}
     </div>
   );

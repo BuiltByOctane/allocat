@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin/guard";
-import { listFeedback, listSupporters } from "@/lib/admin/queries";
+import { listFeedback, listFoundingMembers } from "@/lib/admin/queries";
 import { FeedbackList } from "@/components/admin/FeedbackList";
-import { SupporterList } from "@/components/admin/SupporterList";
+import { FoundingMemberList } from "@/components/admin/FoundingMemberList";
 
 export default async function AdminSupportPage({
   searchParams,
@@ -11,12 +11,12 @@ export default async function AdminSupportPage({
 }) {
   await requireAdmin();
   const { tab = "feedback", resolved } = await searchParams;
-  const showSupporters = tab === "supporters";
+  const showFounding = tab === "founding";
   const includeResolved = resolved === "1";
 
-  const [feedback, supporters] = await Promise.all([
-    showSupporters ? Promise.resolve([]) : listFeedback(includeResolved),
-    showSupporters ? listSupporters() : Promise.resolve([]),
+  const [feedback, founding] = await Promise.all([
+    showFounding ? Promise.resolve([]) : listFeedback(includeResolved),
+    showFounding ? listFoundingMembers() : Promise.resolve(null),
   ]);
 
   const tabClass = (active: boolean) =>
@@ -28,13 +28,13 @@ export default async function AdminSupportPage({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Link href="/admin/support" className={tabClass(!showSupporters)}>
+        <Link href="/admin/support" className={tabClass(!showFounding)}>
           Feedback
         </Link>
-        <Link href="/admin/support?tab=supporters" className={tabClass(showSupporters)}>
-          Supporters
+        <Link href="/admin/support?tab=founding" className={tabClass(showFounding)}>
+          Founding members
         </Link>
-        {!showSupporters && (
+        {!showFounding && (
           <Link
             href={includeResolved ? "/admin/support" : "/admin/support?resolved=1"}
             className="ml-auto t-body-sm text-muted-foreground hover:text-foreground underline underline-offset-4"
@@ -44,7 +44,7 @@ export default async function AdminSupportPage({
         )}
       </div>
 
-      {showSupporters ? <SupporterList rows={supporters} /> : <FeedbackList rows={feedback} />}
+      {founding ? <FoundingMemberList data={founding} /> : <FeedbackList rows={feedback} />}
     </div>
   );
 }

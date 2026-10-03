@@ -12,8 +12,10 @@
 export interface AppFlags {
   ai_enabled: boolean;
   sms_enabled: boolean;
-  /** Show the Ko-fi button inside the Android shell (Play-review escape hatch). */
-  support_cta_native: boolean;
+  /** Founding-member offer accepting claims (Support page + banner). Off = "spots closed". */
+  founding_offer_open: boolean;
+  /** Show the slim founding-offer banner on the dashboard. */
+  founding_banner_visible: boolean;
   /** Daily AI message ceiling per account. */
   daily_ai_messages: number;
   /** PostHog product analytics + session replay (lib/analytics/client.ts). */
@@ -23,9 +25,8 @@ export interface AppFlags {
 export const DEFAULT_FLAGS: AppFlags = {
   ai_enabled: true,
   sms_enabled: true,
-  // Falls back to the build-time env so existing deploys keep their behaviour
-  // until someone sets the flag explicitly.
-  support_cta_native: process.env.NEXT_PUBLIC_SUPPORT_CTA_NATIVE !== "false",
+  founding_offer_open: true,
+  founding_banner_visible: true,
   daily_ai_messages: 30,
   analytics_enabled: true,
 };

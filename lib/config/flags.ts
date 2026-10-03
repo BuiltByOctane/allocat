@@ -16,6 +16,8 @@ export interface AppFlags {
   support_cta_native: boolean;
   /** Daily AI message ceiling per account. */
   daily_ai_messages: number;
+  /** PostHog product analytics + session replay (lib/analytics/client.ts). */
+  analytics_enabled: boolean;
 }
 
 export const DEFAULT_FLAGS: AppFlags = {
@@ -25,6 +27,7 @@ export const DEFAULT_FLAGS: AppFlags = {
   // until someone sets the flag explicitly.
   support_cta_native: process.env.NEXT_PUBLIC_SUPPORT_CTA_NATIVE !== "false",
   daily_ai_messages: 30,
+  analytics_enabled: true,
 };
 
 export const FLAG_KEYS = Object.keys(DEFAULT_FLAGS) as Array<keyof AppFlags>;

@@ -1,5 +1,6 @@
 import { clearDB } from "@/lib/db/hydrate";
 import { FCM_TOKEN_KEY } from "@/components/pwa/PushRegistration";
+import { resetAnalytics } from "@/lib/analytics/client";
 
 /**
  * localStorage keys holding per-account / personal state. Cleared on logout and
@@ -66,6 +67,13 @@ export async function clearClientSession(): Promise<void> {
   }
   try {
     if (typeof window !== "undefined") clearAccountLocalStorage(window.localStorage);
+  } catch {
+    /* best effort */
+  }
+  // Fresh anonymous id so the next account on this device is not linked to
+  // this one in analytics.
+  try {
+    resetAnalytics();
   } catch {
     /* best effort */
   }

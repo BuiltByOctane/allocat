@@ -9,6 +9,7 @@ import RegisterPWA from "@/components/ui/RegisterPWA";
 import { NativeShell } from "@/components/pwa/NativeShell";
 import { AndroidWebGate } from "@/components/pwa/AndroidWebGate";
 import { ForceUpdateGate } from "@/components/pwa/ForceUpdateGate";
+import { AnalyticsProvider } from "@/components/analytics/AnalyticsProvider";
 
 const hankenGrotesque = Hanken_Grotesk({
   subsets: ["latin"],
@@ -212,7 +213,10 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <AccentProvider>
-            <QueryProvider>{children}</QueryProvider>
+            <QueryProvider>
+              <AnalyticsProvider />
+              {children}
+            </QueryProvider>
           </AccentProvider>
           <RegisterPWA />
           <NativeShell />

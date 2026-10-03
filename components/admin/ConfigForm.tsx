@@ -23,6 +23,10 @@ const FLAG_COPY: Record<keyof AppFlags, { label: string; hint: string }> = {
     label: "Daily AI messages",
     hint: "Per-account ceiling, counted in Postgres.",
   },
+  analytics_enabled: {
+    label: "Product analytics",
+    hint: "Off stops PostHog capture + session replay on every client after its next flag fetch.",
+  },
 };
 
 export function ConfigForm({

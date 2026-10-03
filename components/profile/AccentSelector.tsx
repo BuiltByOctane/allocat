@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { useAccent } from "@/lib/providers/AccentProvider";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { ACCENTS, accentLabel } from "@/lib/theme/accents";
+import { track } from "@/lib/analytics/client";
 
 export default function AccentSelector() {
   const { accent, setAccent, hydrated } = useAccent();
@@ -33,6 +34,7 @@ export default function AccentSelector() {
               onClick={() => {
                 haptic.selection();
                 setAccent(a.id);
+                track("accent_changed", { accent: a.id });
               }}
               aria-label={a.label}
               aria-pressed={active}

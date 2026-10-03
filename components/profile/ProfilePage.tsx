@@ -32,6 +32,7 @@ import { useIsSupporter } from "@/lib/hooks/useSupporter";
 import { CrownBadge } from "@/components/ui/CrownBadge";
 import { FeedbackSheet } from "@/components/feedback/FeedbackSheet";
 import NotificationBell from "@/components/notifications/NotificationBell";
+import { track } from "@/lib/analytics/client";
 
 export default function ProfilePage() {
   const { data: profile } = useProfile();
@@ -43,7 +44,9 @@ export default function ProfilePage() {
   // Quick-action dock on /profile = light/dark toggle. Icon reflects the
   // theme you'd switch TO; re-registers when the theme changes.
   const toggleTheme = useCallback(() => {
-    setTheme(resolvedTheme === "dark" ? "light" : "dark");
+    const next = resolvedTheme === "dark" ? "light" : "dark";
+    setTheme(next);
+    track("theme_changed", { theme: next });
   }, [resolvedTheme, setTheme]);
   useRegisterQuickAction({
     id: "profile",

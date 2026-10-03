@@ -7,7 +7,7 @@ export const metadata = {
   alternates: { canonical: "https://allocat.xyz/legal/privacy-policy" },
 };
 
-const UPDATED = "8 September 2026";
+const UPDATED = "3 October 2026";
 
 export default function PrivacyPolicyPage() {
   return (
@@ -102,20 +102,42 @@ export default function PrivacyPolicyPage() {
         </p>
       </Section>
 
-      <Section title="Website analytics">
+      <Section title="Analytics">
         <p>
           Our marketing site (grow.allocat.xyz) counts page views and clicks on
           the download, sign-in and donate buttons so we can tell whether the page
           is doing its job. These counts are <strong>anonymous</strong>: we record
           the event name, a coarse device type (Android, iOS or desktop), the page
-          path, and the hostname of the site you arrived from. We do{" "}
-          <strong>not</strong> set cookies, use any third-party analytics service,
-          or store your IP address, and nothing recorded can be linked back to you
-          or to an AlloCat account.
+          path, and the hostname of the site you arrived from. The marketing site
+          does <strong>not</strong> set cookies, use any third-party analytics
+          service, or store your IP address, and nothing recorded there can be
+          linked back to you or to an AlloCat account.
         </p>
         <p>
-          The AlloCat app itself contains no analytics or tracking SDKs of any
-          kind.
+          Inside the app (on the web and in the Android app) we use{" "}
+          <strong>PostHog</strong> to understand how AlloCat is used, so we can
+          tell which features help people and where they get stuck. We record
+          which screens you open, which features you use (for example
+          &ldquo;added a budget item&rdquo; or &ldquo;made a debt payment&rdquo;),
+          how long a session lasts, and a coarse device type (web, installed app
+          or Android).
+        </p>
+        <p>
+          These analytics are <strong>anonymous</strong>. They are tied to a
+          random identifier stored on your device, not to your AlloCat account,
+          email or name, and that identifier is replaced when you sign out. We do{" "}
+          <strong>not</strong> send amounts, balances, merchant or category names,
+          notes, or any SMS content.
+        </p>
+        <p>
+          We also record some sessions (session replay) to find confusing screens
+          and bugs. In these recordings every piece of text, every input field
+          and every image is masked on your device before anything is sent, so
+          they show the layout and taps but none of your financial details.
+        </p>
+        <p>
+          PostHog processes this data on our behalf. It is not used for
+          advertising, not shared with advertisers or data brokers, and not sold.
         </p>
       </Section>
 

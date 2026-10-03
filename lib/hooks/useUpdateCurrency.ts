@@ -5,6 +5,7 @@ import { getDB } from "@/lib/db";
 import { updateUserCurrency } from "@/lib/actions/profile";
 import { PROFILE_KEY } from "@/lib/hooks/useProfile";
 import { isKnownCurrency } from "@/lib/currency/catalog";
+import { track } from "@/lib/analytics/client";
 
 export function useUpdateCurrency() {
   const qc = useQueryClient();
@@ -31,7 +32,8 @@ export function useUpdateCurrency() {
       }
       return code;
     },
-    onSuccess: () => {
+    onSuccess: (code) => {
+      track("currency_changed", { currency: code.toLowerCase() });
       qc.invalidateQueries({ queryKey: PROFILE_KEY });
     },
   });

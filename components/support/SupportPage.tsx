@@ -19,6 +19,7 @@ import {
   SUPPORT_CONTACT_EMAIL,
 } from "@/lib/support/links";
 import { useAppFlags } from "@/lib/hooks/useAppFlags";
+import { track } from "@/lib/analytics/client";
 
 const COSTS = [
   {
@@ -62,6 +63,7 @@ export default function SupportPage() {
 
   async function openKofi() {
     haptic.light();
+    track("kofi_clicked");
     // Native opens the system browser — payment never happens inside the app.
     if (isNative) {
       await Browser.open({ url: KOFI_URL });

@@ -6,6 +6,17 @@ const nextConfig: NextConfig = {
   // http://<mac-ip>:3000), so /_next/* requests arrive cross-origin. Whitelist
   // private-LAN ranges so Next's dev cross-origin guard doesn't block them.
   allowedDevOrigins: ["10.168.3.228", "192.168.1.20", "192.168.1.3"],
+  // PostHog is proxied first-party (lib/analytics/client.ts api_host) so
+  // ad-blockers don't drop it. Required by PostHog's trailing-slash endpoints.
+  skipTrailingSlashRedirect: true,
+  async rewrites() {
+    const host = process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com";
+    const assets = host.replace("://us.i.", "://us-assets.i.").replace("://eu.i.", "://eu-assets.i.");
+    return [
+      { source: "/ingest/static/:path*", destination: `${assets}/static/:path*` },
+      { source: "/ingest/:path*", destination: `${host}/:path*` },
+    ];
+  },
   async headers() {
     return [
       {

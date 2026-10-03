@@ -3,7 +3,7 @@
 /// <reference lib="webworker" />
 import { defaultCache } from "@serwist/next/worker";
 import type { PrecacheEntry, RuntimeCaching, SerwistGlobalConfig } from "serwist";
-import { ExpirationPlugin, NetworkFirst, Serwist, StaleWhileRevalidate } from "serwist";
+import { ExpirationPlugin, NetworkFirst, NetworkOnly, Serwist, StaleWhileRevalidate } from "serwist";
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
@@ -29,6 +29,11 @@ declare const self: ServiceWorkerGlobalScope;
 // navigations ("pages") stay NetworkFirst so a cold app launch gets a fresh
 // shell.
 const swrPageCache: RuntimeCaching[] = [
+  // PostHog analytics proxy (next.config.ts rewrites) — never cache.
+  {
+    matcher: ({ url: { pathname }, sameOrigin }) => sameOrigin && pathname.startsWith("/ingest/"),
+    handler: new NetworkOnly(),
+  },
   // Full-document navigations (the cold/warm app launch in the Capacitor WebView
   // load the deployed shell). defaultCache serves these NetworkFirst with NO
   // timeout, so on a slow mobile connection the launch blocks on a full origin

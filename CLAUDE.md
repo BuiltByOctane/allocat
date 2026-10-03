@@ -149,6 +149,16 @@ Native push needs `android/app/google-services.json` (committed; not a secret, i
 
 **Landing funnel**: `grow.allocat.xyz` (the separate `allocat-landing` repo) fires `navigator.sendBeacon` at `/api/track`. Anonymous by design — event name, coarse platform, path, referrer *hostname*. No IP, no user agent, no cookie, no id. Event names are allowlisted server-side.
 
+### Product analytics (PostHog)
+
+`lib/analytics/client.ts`, booted by `components/analytics/AnalyticsProvider.tsx` in the root layout. It is web-only on purpose: the Android shell is a WebView of the same app, and the `platform` super prop (`web`/`pwa`/`android`) splits them. No native SDK. Every export is a no-op without `NEXT_PUBLIC_POSTHOG_KEY`.
+
+- **Anonymous**: never `identify()`, `person_profiles: "never"`, and `resetAnalytics()` runs on sign-out (`clearClientSession`) and on account switch (`hydrate.ts`).
+- **Categorical props only**: `sanitizeProps` (`lib/analytics/sanitize.ts`) drops numbers and free text. Never pass amounts, merchant or category names, notes or SMS text. Autocapture and replay mask all text and inputs and block images.
+- **Feature usage = sync writes**: `useEnqueue()` calls `trackWrite(table, operation)` → events like `budget_items_insert` or `debts_payment`. New mutations are tracked for free. `track()` is for the few non-write events (`AnalyticsEvent` union).
+- Sent through the first-party `/ingest` rewrite (`next.config.ts`), which is excluded from the `proxy.ts` matcher and is NetworkOnly in `app/sw.ts`. `/admin` is never captured. Kill switch: the `analytics_enabled` runtime flag.
+- The privacy policy "Analytics" section describes this contract. Update it whenever what is collected changes.
+
 ### Activity log
 
 Server actions write to `activity_logs` via `lib/server/activity-logger.ts` (`logActivity` + `fmt` for INR formatting). Per memory: the SQL migration for the `activity_logs` table still needs to be run on Supabase if missing.

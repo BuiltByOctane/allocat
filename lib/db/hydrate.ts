@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { getDB } from "./index";
 import { hasDeviceFields, keepDeviceFields } from "@/lib/sync/deviceFields";
+import { resetAnalytics } from "@/lib/analytics/client";
 
 const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 const USER_META_KEY = "__userId__";
@@ -609,6 +610,7 @@ async function runHydrate(): Promise<void> {
   const storedUserId = storedMeta?.userId;
   if (storedUserId && storedUserId !== userId) {
     await clearDB();
+    resetAnalytics();
   }
   // clearDB bumped the generation; this run now belongs to the new user.
   const runGen = dbGeneration;

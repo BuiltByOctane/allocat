@@ -7,6 +7,7 @@ import PawLogo from "./PawLogo";
 import ChatMessage from "./ChatMessage";
 import ChatInput from "./ChatInput";
 import SuggestedPrompts from "./SuggestedPrompts";
+import { track } from "@/lib/analytics/client";
 
 interface Message {
   role: "user" | "assistant";
@@ -33,6 +34,7 @@ export default function ChatDrawer({ open, onClose }: ChatDrawerProps) {
     async (text: string) => {
       const trimmed = text.trim();
       if (!trimmed || isStreaming) return;
+      track("ai_chat_sent", { first_in_session: messages.length === 0 });
 
       const userMsg: Message = { role: "user", content: trimmed };
       const nextMessages = [...messages, userMsg];

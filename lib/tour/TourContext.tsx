@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useEffect, useState } from "react";
 import type { TourContextValue, TourPage, TourState } from "./types";
+import { track } from "@/lib/analytics/client";
 
 const STORAGE_KEY = "allocat-tour-state";
 // New installs start un-asked → the upfront prompt decides `enabled`.
@@ -66,6 +67,9 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   const markSeen = useCallback((page: TourPage) => {
     setState((prev) => {
       if (prev.seenPages.includes(page)) return prev;
+      // Inside the updater so it fires once per newly-seen page (StrictMode's
+      // dev-only double invoke can duplicate it; production cannot).
+      track("tour_page_seen", { page });
       const next: TourState = {
         ...prev,
         seenPages: [...prev.seenPages, page],

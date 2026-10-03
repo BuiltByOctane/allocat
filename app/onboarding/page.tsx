@@ -11,6 +11,7 @@ import { OnboardingCard } from "@/components/onboarding/OnboardingCard";
 import { QuizInviteCard, TEACHING_SLIDES } from "@/components/onboarding/onboardingSlides";
 import { QuizFlow } from "@/components/onboarding/quiz/QuizFlow";
 import { markUserAsOnboarded } from "@/lib/actions/profile";
+import { track } from "@/lib/analytics/client";
 import { DASHBOARD_KEY } from "@/lib/hooks/useDashboard";
 import { getDashboardData } from "@/lib/actions/dashboard";
 
@@ -31,6 +32,7 @@ export default function OnboardingFlow() {
   }, [router, qc]);
 
   async function skipToExplore() {
+    track("onboarding_completed", { path: "explore" });
     try {
       await markUserAsOnboarded();
     } catch {
@@ -40,7 +42,12 @@ export default function OnboardingFlow() {
   }
 
   if (mode === "quiz") {
-    return <QuizFlow onDone={() => router.push("/dashboard")} />;
+    return <QuizFlow
+        onDone={() => {
+          track("onboarding_completed", { path: "quiz" });
+          router.push("/dashboard");
+        }}
+      />;
   }
 
   const slides: DeckSlide[] = [

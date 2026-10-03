@@ -3,22 +3,13 @@
 import { Drawer } from "vaul";
 import { useEffect, useRef, useState } from "react";
 import { useHaptic } from "@/lib/hooks/useHaptic";
-import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 import { ColorPicker } from "@/components/ui/ColorPicker";
 import type { CatKey } from "@/lib/theme/dataViz";
-import { calcTotalRepayable, calcEMI } from "@/lib/utils/debt-calc";
-import { CurrencyText } from "@/components/ui/CurrencyText";
 import { DebtPaymentHistory } from "./DebtPaymentHistory";
 
 interface DebtFormData {
   name: string;
-  type: "internal" | "external";
   principal: number;
-  interestRate: number;
-  monthlyMin: number;
-  interestType: "flat" | "diminishing";
-  loanTenureMonths: number | null;
-  totalRepayable: number;
   color: string | null;
   /** Edit mode only — set when the user changed the remaining amount. */
   totalPaid?: number;
@@ -50,12 +41,6 @@ interface DebtDetailSheetProps {
   onDelete?: (id: string) => void;
 }
 
-const DEBT_TYPE_OPTIONS = [
-  { value: "external" as const, label: "External", description: "Bank loans, credit cards, etc." },
-  { value: "internal" as const, label: "Internal", description: "Family, friends, personal" },
-];
-
-
 export function DebtDetailSheet({
   mode,
   debt,
@@ -70,12 +55,7 @@ export function DebtDetailSheet({
   const isEdit = mode === "edit";
 
   const [name, setName] = useState("");
-  const [type, setType] = useState<"internal" | "external">("external");
   const [principal, setPrincipal] = useState("");
-  const [interestRate, setInterestRate] = useState("");
-  const [interestType, setInterestType] = useState<"flat" | "diminishing">("flat");
-  const [tenure, setTenure] = useState("");
-  const [monthlyMin, setMonthlyMin] = useState("");
   const [remaining, setRemaining] = useState("");
   const [color, setColor] = useState<CatKey | null>(null);
   const [error, setError] = useState("");
@@ -86,25 +66,12 @@ export function DebtDetailSheet({
     if (!open) return;
     if (isEdit && debt) {
       setName(debt.name);
-      setType(debt.type === "lent" ? "external" : debt.type);
       setPrincipal(String(debt.principal));
-      setInterestRate(debt.interestRate > 0 ? String(debt.interestRate) : "");
-      setInterestType(debt.interestType ?? "flat");
-      setTenure(debt.loanTenureMonths ? String(debt.loanTenureMonths) : "");
-      setMonthlyMin(debt.monthlyMin > 0 ? String(debt.monthlyMin) : "");
-      {
-        const rep = debt.totalRepayable > 0 ? debt.totalRepayable : debt.principal;
-        setRemaining(String(Math.max(0, rep - debt.totalPaid)));
-      }
+      setRemaining(String(Math.max(0, debt.principal - debt.totalPaid)));
       setColor((debt.color as CatKey | null) ?? null);
     } else {
       setName("");
-      setType("external");
       setPrincipal("");
-      setInterestRate("");
-      setInterestType("flat");
-      setTenure("");
-      setMonthlyMin("");
       setRemaining("");
       setColor(null);
     }
@@ -116,12 +83,6 @@ export function DebtDetailSheet({
   }, [open, debt?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const principalNum = parseFloat(principal) || 0;
-  const rateNum = parseFloat(interestRate) || 0;
-  const tenureNum = parseInt(tenure) || null;
-  const monthlyMinNum = parseFloat(monthlyMin) || 0;
-  const totalRepayable = calcTotalRepayable(principalNum, rateNum, tenureNum, interestType);
-  const emi = tenureNum ? calcEMI(principalNum, rateNum, tenureNum, interestType) : 0;
-  const showPreview = principalNum > 0 && rateNum > 0 && tenureNum;
 
   function handleSave() {
     if (!name.trim()) {
@@ -130,7 +91,7 @@ export function DebtDetailSheet({
       return;
     }
     if (!principalNum || principalNum <= 0) {
-      setError("Principal must be greater than 0.");
+      setError("Amount must be greater than 0.");
       haptic.error();
       return;
     }
@@ -139,11 +100,9 @@ export function DebtDetailSheet({
     if (isEdit && debt && remaining.trim() !== "") {
       const remainingNum = parseFloat(remaining);
       if (!isNaN(remainingNum)) {
-        const origRep = debt.totalRepayable > 0 ? debt.totalRepayable : debt.principal;
-        const origRemaining = Math.max(0, origRep - debt.totalPaid);
+        const origRemaining = Math.max(0, debt.principal - debt.totalPaid);
         if (Math.abs(remainingNum - origRemaining) > 0.001) {
-          const target = totalRepayable > 0 ? totalRepayable : principalNum;
-          totalPaidVal = Math.max(0, target - Math.max(0, remainingNum));
+          totalPaidVal = Math.max(0, principalNum - Math.max(0, remainingNum));
         }
       }
     }
@@ -152,13 +111,7 @@ export function DebtDetailSheet({
     try {
       onSave({
         name: name.trim(),
-        type,
         principal: principalNum,
-        interestRate: rateNum,
-        monthlyMin: monthlyMinNum || emi,
-        interestType,
-        loanTenureMonths: tenureNum,
-        totalRepayable,
         color,
         totalPaid: totalPaidVal,
       });
@@ -255,31 +208,17 @@ export function DebtDetailSheet({
                 <ColorPicker value={color} onChange={setColor} />
               </div>
 
-              {/* Principal + Interest Rate */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls}>Principal</label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="0"
-                    value={principal}
-                    onChange={(e) => setPrincipal(e.target.value)}
-                    className={`${inputCls} tabular-nums`}
-                  />
-                </div>
-                <div>
-                  <label className={labelCls}>Interest (%)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    placeholder="0.0"
-                    value={interestRate}
-                    onChange={(e) => setInterestRate(e.target.value)}
-                    className={`${inputCls} tabular-nums`}
-                  />
-                </div>
+              {/* Amount */}
+              <div>
+                <label className={labelCls}>Amount</label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={principal}
+                  onChange={(e) => setPrincipal(e.target.value)}
+                  className={`${inputCls} tabular-nums`}
+                />
               </div>
 
               {/* Remaining amount (edit only) — direct-set; recomputes total_paid */}
@@ -297,94 +236,6 @@ export function DebtDetailSheet({
                   <p className="text-[11px] text-muted-foreground mt-1.5 font-medium">
                     Amount still owed. Adjusts the paid-to-date total.
                   </p>
-                </div>
-              )}
-
-              {/* Interest Type */}
-              <div>
-                <label className={labelCls}>Interest Type</label>
-                <div className="flex gap-2">
-                  {(["flat", "diminishing"] as const).map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => setInterestType(t)}
-                      className={`flex-1 py-2.5 rounded-pill text-[12px] font-bold capitalize transition-colors ${
-                        interestType === t
-                          ? "bg-[var(--pill)] text-[var(--pill-foreground)]"
-                          : "bg-muted text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-1.5 font-medium">
-                  {interestType === "flat"
-                    ? "Interest on original principal throughout"
-                    : "Interest on reducing balance (EMI-based)"}
-                </p>
-              </div>
-
-              {/* Tenure + Monthly Min */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls}>
-                    Tenure <span className="normal-case">(months, optional)</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    placeholder="e.g. 24"
-                    value={tenure}
-                    onChange={(e) => setTenure(e.target.value)}
-                    className={`${inputCls} tabular-nums`}
-                  />
-                </div>
-                <div>
-                  <label className={labelCls}>
-                    Monthly Min
-                    {emi > 0 && <span className="ml-1 text-[9px] text-muted-foreground normal-case inline-flex items-baseline gap-0.5">(EMI: <CurrencyText value={emi} />)</span>}
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder={emi > 0 ? String(emi) : "0"}
-                    value={monthlyMin}
-                    onChange={(e) => setMonthlyMin(e.target.value)}
-                    className={`${inputCls} tabular-nums`}
-                  />
-                </div>
-              </div>
-
-              {/* Debt Type */}
-              <div>
-                <label className={labelCls}>Debt Type</label>
-                <BottomSheetSelect
-                  title="Debt Type"
-                  options={DEBT_TYPE_OPTIONS}
-                  value={type}
-                  onChange={(val) => setType(val as "internal" | "external")}
-                  className="flex items-center justify-between rounded-[13px] border border-border bg-card px-3.5 py-3 text-sm font-medium text-foreground"
-                />
-              </div>
-
-              {/* Dynamic repayable preview */}
-              {showPreview && (
-                <div className="rounded-tile bg-tile p-3.5 space-y-1.5">
-                  <div className="flex justify-between items-baseline">
-                    <span className="text-[12px] font-semibold text-muted-foreground">Total Repayable</span>
-                    <CurrencyText value={totalRepayable} className="figure text-[14px] text-foreground" />
-                  </div>
-                  <div className="flex justify-between items-baseline">
-                    <span className="text-[12px] font-semibold text-muted-foreground">Total Interest</span>
-                    <CurrencyText value={totalRepayable - principalNum} className="figure text-[14px] text-muted-foreground" />
-                  </div>
-                  {emi > 0 && (
-                    <div className="flex justify-between items-baseline">
-                      <span className="text-[12px] font-semibold text-muted-foreground">Monthly EMI</span>
-                      <CurrencyText value={emi} className="figure text-[14px] text-muted-foreground" />
-                    </div>
-                  )}
                 </div>
               )}
 

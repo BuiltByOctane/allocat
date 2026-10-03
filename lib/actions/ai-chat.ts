@@ -219,7 +219,6 @@ async function getDebtsContextWith({ supabase, userId, fmt }: Ctx): Promise<stri
     return [
       `  - ${d.name} [${d.type.toUpperCase()}]`,
       `    Principal: ${fmt(Number(d.principal))} | Paid: ${fmt(Number(d.total_paid))} | Remaining: ${fmt(remaining)} (${pct}% ${d.type === 'lent' ? 'recovered' : 'paid'})`,
-      d.type !== 'lent' ? `    Interest: ${d.interest_rate}% | Monthly minimum: ${fmt(Number(d.monthly_minimum))}` : null,
       d.expected_payoff_date ? `    Expected ${d.type === 'lent' ? 'recovery' : 'payoff'}: ${d.expected_payoff_date}` : "",
     ].filter(Boolean).join("\n");
   };

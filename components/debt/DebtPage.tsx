@@ -48,7 +48,7 @@ function monthCaption() {
 }
 
 export default function DebtPage({ data }: { data: Debt[] }) {
-  const [activeTab, setActiveTab] = useState<"internal" | "external" | "closed">("external");
+  const [activeTab, setActiveTab] = useState<"active" | "closed">("active");
   const [showLentList, setShowLentList] = useState(false);
   const [debtToDelete, setDebtToDelete] = useState<string | null>(null);
   const [pickerDebtId, setPickerDebtId] = useState<string | null>(null);
@@ -66,28 +66,21 @@ export default function DebtPage({ data }: { data: Debt[] }) {
   const { data: trendData } = useDebtPaymentTrend();
 
   const allActiveDebts = data.filter((d) => !d.isClosed && d.type !== "lent");
-  const activeDebts = allActiveDebts.filter((d) => d.type === activeTab);
+  const activeDebts = allActiveDebts;
   const closedDebts = data.filter((d) => d.isClosed && d.type !== "lent");
   const lents = data.filter((d) => d.type === "lent");
 
-  const totalOutstanding = allActiveDebts.reduce((s, d) => {
-    const repayable = d.totalRepayable > 0 ? d.totalRepayable : d.principal;
-    return s + Math.max(0, repayable - d.totalPaid);
-  }, 0);
+  const totalOutstanding = allActiveDebts.reduce(
+    (s, d) => s + Math.max(0, d.principal - d.totalPaid), 0
+  );
 
   const totalLent = lents.filter((d) => !d.isClosed).reduce(
     (s, d) => s + Math.max(0, d.principal - d.totalPaid), 0
   );
 
-  const avgInterest =
-    allActiveDebts.filter((d) => d.interestRate > 0).reduce((s, d) => s + d.interestRate, 0) /
-    (allActiveDebts.filter((d) => d.interestRate > 0).length || 1);
-
   // Overall payoff % across all active debts
   const totalPaidAll = allActiveDebts.reduce((s, d) => s + d.totalPaid, 0);
-  const totalRepayableAll = allActiveDebts.reduce((s, d) => {
-    return s + (d.totalRepayable > 0 ? d.totalRepayable : d.principal);
-  }, 0);
+  const totalRepayableAll = allActiveDebts.reduce((s, d) => s + d.principal, 0);
   const overallPct = totalRepayableAll > 0 ? totalPaidAll / totalRepayableAll : 0;
 
   // Quick payment — all active non-lent debts
@@ -115,38 +108,24 @@ export default function DebtPage({ data }: { data: Debt[] }) {
 
   function handleSheetSave(formData: {
     name: string;
-    type: "internal" | "external";
     principal: number;
-    interestRate: number;
-    monthlyMin: number;
-    interestType: "flat" | "diminishing";
-    loanTenureMonths: number | null;
-    totalRepayable: number;
     color: string | null;
     totalPaid?: number;
   }) {
     if (sheetMode === "add") {
       addDebtMutation.mutate({
         name: formData.name,
-        type: formData.type,
+        type: "external",
         principal: formData.principal,
-        interestRate: formData.interestRate,
-        monthlyMin: formData.monthlyMin,
-        interestType: formData.interestType,
-        loanTenureMonths: formData.loanTenureMonths,
+        interestRate: 0,
+        monthlyMin: 0,
       });
     } else if (sheetDebt) {
       updateDebtMutation.mutate({
         id: sheetDebt.id,
         updates: {
           name: formData.name,
-          type: formData.type,
           principal: formData.principal,
-          interest_rate: formData.interestRate,
-          monthly_minimum: formData.monthlyMin,
-          interest_type: formData.interestType,
-          loan_tenure_months: formData.loanTenureMonths,
-          total_repayable: formData.totalRepayable,
           color: formData.color,
           ...(formData.totalPaid !== undefined ? { total_paid: formData.totalPaid } : {}),
         },
@@ -247,15 +226,6 @@ export default function DebtPage({ data }: { data: Debt[] }) {
             <span className="text-[11px] font-semibold text-muted-foreground">
               {allActiveDebts.length} active {allActiveDebts.length === 1 ? "liability" : "liabilities"}
             </span>
-            {(hasLents || totalLent > 0) && (
-              <button
-                onClick={() => { haptic.light(); setShowLentList(true); }}
-                className="ml-auto inline-flex items-center gap-1.5 rounded-pill bg-tile px-3 py-1.5 text-[11.5px] font-semibold text-foreground active:scale-[0.97] transition-transform"
-              >
-                <CurrencyText value={totalLent} /> lent out
-                <span className="text-muted-foreground">→</span>
-              </button>
-            )}
           </div>
           {totalRepayableAll > 0 && (
             <div id="debt-progress-ruler" className="mt-3.5">
@@ -269,8 +239,7 @@ export default function DebtPage({ data }: { data: Debt[] }) {
           <SegmentedControl
             variant="pill"
             options={[
-              { label: "Internal", value: "internal", count: allActiveDebts.filter((d) => d.type === "internal").length },
-              { label: "External", value: "external", count: allActiveDebts.filter((d) => d.type === "external").length },
+              { label: "Active", value: "active", count: allActiveDebts.length },
               { label: "Closed", value: "closed", count: closedDebts.length },
             ]}
             value={activeTab}
@@ -290,14 +259,14 @@ export default function DebtPage({ data }: { data: Debt[] }) {
             {activeDebts.length === 0 && (
               <Card compact>
                 <p className="py-4 text-center text-[12px] font-medium text-muted-foreground">
-                  No {activeTab} debts.
+                  No active debts.
                 </p>
               </Card>
             )}
 
             <div className="flex flex-col gap-2.5">
               {activeDebts.map((debt, i) => {
-                const repayable = debt.totalRepayable > 0 ? debt.totalRepayable : debt.principal;
+                const repayable = debt.principal;
                 const remaining = Math.max(0, repayable - debt.totalPaid);
                 const paidPct = repayable > 0 ? debt.totalPaid / repayable : 0;
                 const accent = resolveColor({ id: debt.id, color: debt.color });
@@ -324,23 +293,14 @@ export default function DebtPage({ data }: { data: Debt[] }) {
                                 <span className="text-[14.5px] font-bold text-foreground truncate">
                                   {debt.name}
                                 </span>
-                                {debt.interestRate > 0 && (
-                                  <span className="rounded-[10px] bg-tile px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                                    {debt.interestRate}%
-                                  </span>
-                                )}
                               </div>
-                              <div className="mt-1 text-[10.5px] font-semibold text-muted-foreground inline-flex items-baseline gap-1 flex-wrap">
-                                <span>{Math.round(paidPct * 100)}% paid off</span>
-                                {debt.monthlyMin > 0 && <><span>·</span> <span>min</span> <CurrencyText value={debt.monthlyMin} /></>}
+                              <div className="mt-1 text-[10.5px] font-semibold text-muted-foreground">
+                                {Math.round(paidPct * 100)}% paid off
                               </div>
                             </div>
                             <div className="text-right shrink-0">
-                              <div className="figure text-[16px] inline-flex items-baseline gap-1">
+                              <div className="figure text-[16px]">
                                 <CurrencyText value={remaining} className="text-foreground" />
-                                {repayable !== debt.principal && (
-                                  <span className="text-muted-foreground text-[11px] inline-flex items-baseline gap-0.5">/ <CurrencyText value={repayable} className="text-muted-foreground" /></span>
-                                )}
                               </div>
                               <div className="text-[9.5px] font-semibold text-muted-foreground">remaining</div>
                             </div>
@@ -389,7 +349,7 @@ export default function DebtPage({ data }: { data: Debt[] }) {
                     </div>
                     <div className="text-[11px] font-semibold text-muted-foreground inline-flex items-baseline gap-1.5">
                       Paid off
-                      <CurrencyText value={debt.totalRepayable > 0 ? debt.totalRepayable : debt.principal} />
+                      <CurrencyText value={debt.principal} />
                     </div>
                   </Card>
                 </button>

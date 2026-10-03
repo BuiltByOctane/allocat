@@ -185,9 +185,9 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
     {
       element: "#debt-tabs",
       popover: {
-        title: "Debt Types",
+        title: "Active & Closed",
         description:
-          "External - loans and credit cards from banks or lenders. Internal - debts to family or friends. Closed - fully paid off debts (archived for history).",
+          "Active - debts you're still paying off. Closed - fully paid off debts (archived for history).",
         side: "bottom",
         align: "start",
       },
@@ -197,7 +197,7 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       popover: {
         title: "Debt Card",
         description:
-          "Shows the debt name, remaining balance, interest rate, and repayment progress bar. Tap to edit details or record a payment.",
+          "Shows the debt name, remaining balance, and repayment progress bar. Tap to edit details or record a payment.",
         side: "bottom",
         align: "start",
       },

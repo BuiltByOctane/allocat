@@ -20,9 +20,12 @@ export function useProfile() {
 
       // IDB miss — fall back to Supabase (first load / not hydrated yet)
       const supabase = createClient();
+      // Local session read — getUser() would add an Auth round trip; RLS
+      // enforces ownership on the select below anyway.
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
+        data: { session },
+      } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) throw new Error("Not authenticated");
 
       const { data, error } = await supabase

@@ -104,10 +104,12 @@ export function NativeShell() {
         if (!shouldAskFeedback()) return;
         void (async () => {
           const supabase = createClient();
+          // Only "is anyone signed in?" — the local session answers that
+          // without an Auth round trip on every resume.
           const {
-            data: { user },
-          } = await supabase.auth.getUser();
-          if (!user) return;
+            data: { session },
+          } = await supabase.auth.getSession();
+          if (!session?.user) return;
           try {
             localStorage.setItem(FEEDBACK_ASKED_KEY, String(Date.now()));
           } catch {

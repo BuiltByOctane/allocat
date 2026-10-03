@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getDashboardData } from "@/lib/actions/dashboard";
 import { updateBudgetTotal, getCategoryItems, quickLogSpend } from "@/lib/actions/budget";
 import { getDB } from "@/lib/db";
+import { isHydrated } from "@/lib/db/hydrate";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { computeMonthlyHistory } from "@/lib/utils/netWorthHistory";
 import { computeAutoCompletion } from "@/lib/utils/budget-completion";
@@ -139,9 +140,10 @@ export function useDashboardData() {
     queryKey: DASHBOARD_KEY,
     queryFn: async () => {
       const local = await getDashboardFromIDB();
-      // If IDB has at least budget or goals data, use it
+      // IDB has data, or has been pulled (empty = the user has none) → use it
       if (local.budget !== null || local.goals.length > 0) return local;
-      // IDB empty — first load, fall back to server
+      if (await isHydrated("budgets", "assets")) return local;
+      // Never pulled — first load, fall back to server
       return getDashboardData();
     },
   });
@@ -206,7 +208,7 @@ export function useCategoryItems(categoryId: string | null) {
         .where("category_id")
         .equals(categoryId)
         .toArray();
-      if (items.length > 0) return items;
+      if (items.length > 0 || (await isHydrated("budget_items"))) return items;
       // IDB miss — fall back to server
       return getCategoryItems(categoryId);
     },

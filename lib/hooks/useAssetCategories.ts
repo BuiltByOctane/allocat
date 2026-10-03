@@ -6,6 +6,7 @@ import {
   deleteAssetCategory,
 } from "@/lib/actions/asset-categories";
 import { getDB } from "@/lib/db";
+import { isHydrated } from "@/lib/db/hydrate";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { NET_WORTH_KEY } from "@/lib/hooks/useNetWorth";
 
@@ -14,7 +15,7 @@ export const ASSET_CATEGORIES_KEY = ["asset-categories"] as const;
 async function getCategoriesFromIDB() {
   const db = getDB();
   const cats = await db.asset_categories.orderBy("created_at").toArray();
-  if (cats.length === 0) return null;
+  if (cats.length === 0 && !(await isHydrated("asset_categories"))) return null;
   return cats;
 }
 

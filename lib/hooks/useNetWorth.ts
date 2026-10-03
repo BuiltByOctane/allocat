@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getNetWorthData } from "@/lib/actions/net-worth";
 import { getDB } from "@/lib/db";
+import { isHydrated } from "@/lib/db/hydrate";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { DASHBOARD_KEY } from "./useDashboard";
 import { computeMonthlyHistory } from "@/lib/utils/netWorthHistory";
@@ -17,7 +18,7 @@ export async function getNetWorthFromIDB() {
 
   if (assets.length === 0) {
     const debtCount = await db.debts.count();
-    if (debtCount === 0) return null;
+    if (debtCount === 0 && !(await isHydrated("assets", "debts"))) return null;
   }
 
   // Independent reads — batch in parallel.

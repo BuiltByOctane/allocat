@@ -62,8 +62,33 @@ vi.mock("@/lib/supabase/client", () => ({
       getUser: async () => ({ data: { user: { id: "u1" } } }),
     },
     from: (table: string) => builder(table),
+    rpc: async (fn: string, args: { p_watermarks: Record<string, string> }) => {
+      rpcCalls.push({ fn, watermarks: args.p_watermarks });
+      // null = the RPC is missing (database predates the migration).
+      return manifest
+        ? { data: manifest, error: null }
+        : { data: null, error: { message: "function not found" } };
+    },
   }),
 }));
+
+/** What the stubbed `sync_manifest` RPC answers; null = function missing. */
+let manifest: Record<string, { changed: boolean; n: number | null }> | null = null;
+let rpcCalls: Array<{ fn: string; watermarks: Record<string, string> }> = [];
+
+/** A manifest saying "nothing changed" for every table, with these counts. */
+function quietManifest(counts: Record<string, number> = {}) {
+  const out: Record<string, { changed: boolean; n: number | null }> = {};
+  for (const t of [
+    "profiles", "budgets", "categories", "budget_items", "assets",
+    "asset_categories", "asset_value_history", "debts", "reports",
+    "net_worth_snapshots", "activity_logs", "merchant_rules",
+    "sms_transactions", "sms_blocklist", "feedback",
+  ]) {
+    out[t] = { changed: false, n: counts[t] ?? 0 };
+  }
+  return out;
+}
 
 // ── Dexie-shaped stub ──────────────────────────────────────────────────────
 type Row = Record<string, unknown>;
@@ -138,8 +163,14 @@ db.table = (n: string) => db[n];
 
 vi.mock("./index", () => ({ getDB: () => db }));
 
-const { hydrateAllTables, forceRefreshTable, selectDeltaWatermark } =
-  await import("./hydrate");
+const {
+  hydrateAllTables,
+  forceRefreshTable,
+  refreshTables,
+  selectDeltaWatermark,
+  needsPull,
+  isHydrated,
+} = await import("./hydrate");
 
 function queriesFor(table: string) {
   return queries.filter((q) => q.table === table);
@@ -180,6 +211,8 @@ describe("hydrate delta pulls", () => {
     queries = [];
     responses = {};
     pendingQueue = [];
+    manifest = null;
+    rpcCalls = [];
     for (const n of [...tableNames, "sync_meta"]) await db[n].clear();
   });
 
@@ -323,5 +356,124 @@ describe("hydrate delta pulls", () => {
     ]);
     // Server says the account has no assets left → the local row goes.
     expect(db.assets.rows).toHaveLength(0);
+  });
+});
+
+describe("needsPull", () => {
+  const quiet = { changed: false, n: 2 };
+  it("pulls a table that was never pulled", () => {
+    expect(needsPull({ hasMeta: false, entry: quiet, reconcileDeletes: true, localCount: 2 })).toBe(true);
+  });
+  it("pulls when the manifest has no entry for the table", () => {
+    expect(needsPull({ hasMeta: true, entry: undefined, reconcileDeletes: true, localCount: 2 })).toBe(true);
+  });
+  it("pulls when a row changed after the watermark", () => {
+    expect(needsPull({ hasMeta: true, entry: { changed: true, n: 2 }, reconcileDeletes: false, localCount: 0 })).toBe(true);
+  });
+  it("pulls a full-payload table whose count drifted (a deletion)", () => {
+    expect(needsPull({ hasMeta: true, entry: { changed: false, n: 1 }, reconcileDeletes: true, localCount: 2 })).toBe(true);
+  });
+  it("skips an unchanged table with matching count", () => {
+    expect(needsPull({ hasMeta: true, entry: quiet, reconcileDeletes: true, localCount: 2 })).toBe(false);
+  });
+  it("ignores count on truncated tables", () => {
+    expect(needsPull({ hasMeta: true, entry: { changed: false, n: null }, reconcileDeletes: false, localCount: 5 })).toBe(false);
+  });
+});
+
+describe("manifest-driven reconcile", () => {
+  beforeEach(async () => {
+    queries = [];
+    responses = {};
+    pendingQueue = [];
+    manifest = null;
+    rpcCalls = [];
+    for (const n of [...tableNames, "sync_meta"]) await db[n].clear();
+  });
+
+  async function seed() {
+    responses["budgets:*"] = [
+      { id: "b1", user_id: "u1", updated_at: "2026-09-12T10:00:00Z" },
+      { id: "b2", user_id: "u1", updated_at: "2026-09-12T10:00:00Z" },
+    ];
+    responses["budgets:id"] = [{ id: "b1" }, { id: "b2" }];
+    await hydrateAllTables();
+    queries = [];
+    rpcCalls = [];
+  }
+
+  it("first launch skips the manifest and pulls everything", async () => {
+    manifest = quietManifest();
+    await hydrateAllTables();
+    expect(rpcCalls).toHaveLength(0);
+    expect(queriesFor("budgets").length).toBeGreaterThan(0);
+  });
+
+  it("a quiet reconcile is ONE request and pulls nothing", async () => {
+    await seed();
+    manifest = quietManifest({ budgets: 2 });
+    await hydrateAllTables();
+
+    expect(rpcCalls).toHaveLength(1);
+    expect(rpcCalls[0].watermarks.budgets).toBe("2026-09-12T10:00:00Z");
+    expect(queries).toHaveLength(0);
+  });
+
+  it("pulls only the table the manifest flags as changed", async () => {
+    await seed();
+    manifest = { ...quietManifest({ budgets: 2 }), debts: { changed: true, n: 1 } };
+    responses["debts:*"] = [{ id: "d1", user_id: "u1", updated_at: "2026-10-01T00:00:00Z" }];
+    responses["debts:id"] = [{ id: "d1" }];
+    await hydrateAllTables();
+
+    expect(new Set(queries.map((q) => q.table))).toEqual(new Set(["debts"]));
+    expect(db.debts.rows).toHaveLength(1);
+  });
+
+  it("a count drift triggers the sweep that removes the deleted row", async () => {
+    await seed();
+    manifest = quietManifest({ budgets: 1 });
+    responses["budgets:*"] = [];
+    responses["budgets:id"] = [{ id: "b1" }];
+    await hydrateAllTables();
+
+    expect(db.budgets.rows.map((r) => r.id)).toEqual(["b1"]);
+  });
+
+  it("an un-synced temp_ row does not count as drift", async () => {
+    await seed();
+    await db.budgets.bulkPut([{ id: "temp_x", user_id: "u1" }]);
+    manifest = quietManifest({ budgets: 2 });
+    await hydrateAllTables();
+    expect(queries).toHaveLength(0);
+  });
+
+  it("falls back to a full reconcile when the RPC is missing", async () => {
+    await seed();
+    manifest = null;
+    await hydrateAllTables();
+    expect(queriesFor("budgets").length).toBeGreaterThan(0);
+    expect(queriesFor("profiles").length).toBeGreaterThan(0);
+  });
+
+  it("concurrent calls share one run", async () => {
+    await seed();
+    manifest = quietManifest({ budgets: 2 });
+    await Promise.all([hydrateAllTables(), hydrateAllTables()]);
+    expect(rpcCalls).toHaveLength(1);
+  });
+
+  it("refreshTables pulls only the cascaded tables that changed", async () => {
+    await seed();
+    manifest = { ...quietManifest({ budgets: 2 }), assets: { changed: true, n: 0 } };
+    await refreshTables(["assets", "debts", "budgets"]);
+    expect(new Set(queries.map((q) => q.table))).toEqual(new Set(["assets"]));
+  });
+
+  it("isHydrated is true for a pulled-but-empty table", async () => {
+    expect(await isHydrated("debts")).toBe(false);
+    await hydrateAllTables();
+    expect(db.debts.rows).toHaveLength(0);
+    expect(await isHydrated("debts")).toBe(true);
   });
 });

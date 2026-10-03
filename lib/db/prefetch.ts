@@ -7,6 +7,7 @@ import { getDashboardData } from "@/lib/actions/dashboard";
 import { getBudgetView } from "@/lib/actions/budget";
 import { getNetWorthData } from "@/lib/actions/net-worth";
 import { getDebtData } from "@/lib/actions/debt";
+import { isHydrated } from "@/lib/db/hydrate";
 import { DASHBOARD_KEY } from "@/lib/hooks/useDashboard";
 import { NET_WORTH_KEY } from "@/lib/hooks/useNetWorth";
 import { DEBT_KEY } from "@/lib/hooks/useDebt";
@@ -29,6 +30,7 @@ export async function prefetchAllQueries(qc: QueryClient): Promise<void> {
       queryFn: async () => {
         const local = await getDashboardFromIDB();
         if (local.budget !== null || local.goals.length > 0) return local;
+        if (await isHydrated("budgets", "assets")) return local;
         return getDashboardData();
       },
     }),
@@ -40,7 +42,7 @@ export async function prefetchAllQueries(qc: QueryClient): Promise<void> {
       queryFn: async () => {
         const local = await getBudgetFromIDB(month, year);
         if (local) return local;
-        const view = await getBudgetView(month, year);
+        const view = (await isHydrated("budgets")) ? null : await getBudgetView(month, year);
         if (view) return view;
         return { id: "", month, year, totalBudget: 0, templateId: null, categories: [] };
       },

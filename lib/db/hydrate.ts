@@ -4,6 +4,8 @@ import { hasDeviceFields, keepDeviceFields } from "@/lib/sync/deviceFields";
 
 const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 const USER_META_KEY = "__userId__";
+/** Stamped when a whole reconcile finished — tables that didn't change aren't pulled, so no per-table stamp tracks it. */
+const RECONCILE_META_KEY = "__reconciled__";
 
 /**
  * Bumped by `clearDB()` (logout / account switch). A pull that started before
@@ -37,12 +39,23 @@ async function localUserId(): Promise<string | null> {
   return session?.user?.id ?? null;
 }
 
-/** Returns true if the table has never been synced or was synced more than 5 min ago. */
-export async function isTableStale(table: string): Promise<boolean> {
-  const db = getDB();
-  const meta = await db.sync_meta.get(table);
+/** True if no full reconcile has completed in the last 5 min. */
+export async function isReconcileStale(): Promise<boolean> {
+  const meta = await getDB().sync_meta.get(RECONCILE_META_KEY);
   if (!meta) return true;
   return Date.now() - meta.lastSynced > STALE_THRESHOLD_MS;
+}
+
+/**
+ * True once every named table has been pulled for the current user, i.e. the
+ * IDB copy is authoritative: an EMPTY table then means "the user has none",
+ * not "not loaded yet". Read hooks use this to stop falling back to a server
+ * action on every open for a user who simply has no debts / no budget this
+ * month. `clearDB()` wipes sync_meta, so this resets on logout/account switch.
+ */
+export async function isHydrated(...tables: string[]): Promise<boolean> {
+  const metas = await getDB().sync_meta.bulkGet(tables);
+  return metas.every(Boolean);
 }
 
 /**
@@ -228,7 +241,7 @@ async function reconcileDeletes(
  *
  * The userId match is what keeps this safe on a shared device: a different user
  * (or no cached user) returns false → the caller takes the cold path, where
- * `hydrateAllTables` does the authoritative `getUser()` + wipe-if-mismatch.
+ * `hydrateAllTables` does the wipe-if-mismatch.
  */
 export async function canHydrateFromCache(): Promise<boolean> {
   try {
@@ -268,8 +281,14 @@ interface Queryable {
   ): Promise<T>;
 }
 
-function queryClient(): { from(table: string): Queryable } {
-  return createClient() as unknown as { from(table: string): Queryable };
+function queryClient(): {
+  from(table: string): Queryable;
+  rpc(
+    fn: string,
+    args: Record<string, unknown>,
+  ): PromiseLike<{ data: unknown; error: unknown }>;
+} {
+  return createClient() as never;
 }
 
 /** How one table is pulled and reconciled. */
@@ -429,31 +448,161 @@ async function pullTable(
   });
 }
 
+/** One table's answer from the `sync_manifest` RPC. */
+export interface ManifestEntry {
+  /** A server row is newer than the watermark we sent. */
+  changed: boolean;
+  /** Server row count — only for full-payload tables, else null. */
+  n: number | null;
+}
+
+/**
+ * Pure pull decision for one table. Exported for unit testing.
+ *
+ * - Never pulled (no sync_meta) → pull: there is nothing local to trust.
+ * - No manifest entry → pull: a table the server function doesn't know yet.
+ * - `changed` → pull: an insert or update landed after our watermark.
+ * - Full-payload table whose server count differs from the local count →
+ *   pull: a deletion never bumps `updated_at`, so the count is the only signal
+ *   short of the id sweep itself. (Delete + insert elsewhere keeps the count
+ *   equal, but the insert sets `changed`, and every pull runs the sweep.)
+ */
+export function needsPull(opts: {
+  hasMeta: boolean;
+  entry: ManifestEntry | undefined;
+  reconcileDeletes: boolean;
+  localCount: number;
+}): boolean {
+  const { hasMeta, entry, reconcileDeletes, localCount } = opts;
+  if (!hasMeta || !entry || entry.changed) return true;
+  return reconcileDeletes && entry.n != null && entry.n !== localCount;
+}
+
+/** Local rows that exist server-side too (un-synced `temp_` INSERTs excluded). */
+async function countSyncedRows(table: string): Promise<number> {
+  const rows = (await getDB().table(table).toArray()) as Array<{ id: unknown }>;
+  return rows.filter((r) => !String(r.id).startsWith("temp_")).length;
+}
+
+/**
+ * Which of `specs` actually need a pull, decided by ONE `sync_manifest` call
+ * instead of two PostgREST calls per table. A quiet reconcile (nothing changed
+ * anywhere) therefore costs a single request.
+ *
+ * Falls back to pulling every spec when the manifest can't be had — the RPC is
+ * missing on a database that predates 20261004000000_sync_manifest.sql, or the
+ * call failed. Degrading to the old full reconcile is safe; degrading to
+ * "pull nothing" would silently freeze the cache.
+ */
+async function selectTablesToPull(specs: TableSpec[]): Promise<TableSpec[]> {
+  const db = getDB();
+  const metas = await db.sync_meta.bulkGet(specs.map((s) => s.table));
+
+  // Nothing pulled yet (first launch / just wiped): everything is needed, and
+  // asking the server first would only add a request.
+  if (metas.every((m) => !m)) return specs;
+
+  const watermarks: Record<string, string> = {};
+  specs.forEach((s, i) => {
+    const w = metas[i]?.watermark;
+    if (w) watermarks[s.table] = w;
+  });
+
+  let manifest: Record<string, ManifestEntry>;
+  try {
+    const { data, error } = await queryClient().rpc("sync_manifest", {
+      p_watermarks: watermarks,
+    });
+    if (error || !data || typeof data !== "object") return specs;
+    manifest = data as Record<string, ManifestEntry>;
+  } catch {
+    return specs;
+  }
+
+  const out: TableSpec[] = [];
+  for (const [i, spec] of specs.entries()) {
+    const entry = manifest[spec.table];
+    const localCount =
+      spec.reconcileDeletes && entry && !entry.changed
+        ? await countSyncedRows(spec.table)
+        : 0;
+    if (
+      needsPull({
+        hasMeta: Boolean(metas[i]),
+        entry,
+        reconcileDeletes: spec.reconcileDeletes,
+        localCount,
+      })
+    ) {
+      out.push(spec);
+    }
+  }
+  return out;
+}
+
+/** Pull `specs` in parallel; one failing table must not abort the rest. */
+async function pullAll(
+  specs: TableSpec[],
+  userId: string,
+  gen: number,
+): Promise<void> {
+  if (specs.length === 0) return;
+  // Snapshot in-flight protected ids BEFORE the fetches (union'd per table with
+  // a post-fetch snapshot to cover items that drain during the fetch window).
+  const protectedPre = await buildProtectedIds();
+  await Promise.all(
+    specs.map((spec) =>
+      pullTable(spec, userId, gen, protectedPre).catch((err) => {
+        // Its watermark stays put, so the next reconcile re-asks for the same window.
+        console.warn(`[hydrate] ${spec.table} pull failed:`, err);
+      }),
+    ),
+  );
+}
+
 /**
  * Reconciles every table for the current user into IDB. Called at app startup
  * (SyncProvider mount), on foreground/reconnect, and by pull-to-refresh.
  *
- * Each table pulls its own delta (see pullTable), so a quiet reconcile moves
- * almost no rows — it used to re-download the entire account every time.
+ * One `sync_manifest` request decides which tables changed server-side (another
+ * device, a server cascade, the Ko-fi webhook); only those are pulled, each as
+ * a delta (see pullTable). Nothing changed → one request total.
+ *
+ * The user id comes from the LOCAL session (`getSession`), not `getUser()` —
+ * the latter is a Supabase Auth round trip that every other request waited on.
+ * RLS enforces ownership server-side with the same JWT, so the local id is
+ * exactly the identity the server will apply.
  *
  * If the stored user ID in IDB differs from the current user (different person
  * logged in on the same device), IDB is wiped first before re-hydrating.
+ *
+ * Concurrent calls (StrictMode double-mount, foreground + pull-to-refresh)
+ * share one run — unless a wipe happened since it started, in which case that
+ * run will discard its result and a fresh one is needed.
  */
-export async function hydrateAllTables(): Promise<void> {
+let inFlight: { gen: number; promise: Promise<void> } | null = null;
+
+export function hydrateAllTables(): Promise<void> {
+  if (inFlight && inFlight.gen === dbGeneration) return inFlight.promise;
+  const run = { gen: dbGeneration, promise: runHydrate() };
+  inFlight = run;
+  void run.promise.finally(() => {
+    if (inFlight === run) inFlight = null;
+  }).catch(() => {});
+  return run.promise;
+}
+
+async function runHydrate(): Promise<void> {
   // Snapshot the wipe generation: if a logout / account switch clears IDB while
   // this pull is in flight, every write phase below bails instead of writing the
   // old user's rows back into the cleared database.
   const gen = dbGeneration;
 
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
+  const userId = await localUserId();
+  if (!userId) return;
   if (isStale(gen)) return;
 
   const db = getDB();
-  const userId = user.id;
 
   // Guard: if a different user's data is cached, clear everything first
   const storedMeta = await db.sync_meta.get(USER_META_KEY);
@@ -461,23 +610,15 @@ export async function hydrateAllTables(): Promise<void> {
   if (storedUserId && storedUserId !== userId) {
     await clearDB();
   }
+  // clearDB bumped the generation; this run now belongs to the new user.
+  const runGen = dbGeneration;
 
   // Store the current user's ID so we can detect account changes on next open
   await db.sync_meta.put({ table: USER_META_KEY, lastSynced: Date.now(), userId });
 
-  // Snapshot in-flight protected ids BEFORE the fetches (union'd per table with
-  // a post-fetch snapshot to cover items that drain during the fetch window).
-  const protectedPre = await buildProtectedIds();
-
-  await Promise.all(
-    TABLE_SPECS.map((spec) =>
-      pullTable(spec, userId, gen, protectedPre).catch((err) => {
-        // One failing table must not abort the rest: its watermark stays put, so
-        // the next reconcile simply re-asks for the same window.
-        console.warn(`[hydrate] ${spec.table} pull failed:`, err);
-      }),
-    ),
-  );
+  await pullAll(await selectTablesToPull(TABLE_SPECS), userId, runGen);
+  if (isStale(runGen)) return;
+  await db.sync_meta.put({ table: RECONCILE_META_KEY, lastSynced: Date.now() });
 }
 
 /** Tables the single-table refresh helpers accept. */
@@ -492,8 +633,29 @@ type RefreshableTable =
   | "net_worth_snapshots"
   | "reports";
 
-/** Pull one table by name, on behalf of the two exported helpers below. */
-async function refreshOne(table: RefreshableTable): Promise<void> {
+/**
+ * Refresh the given tables after a sync that may have triggered server-side
+ * cascades (e.g. a budget_items UPDATE that cascaded into assets / debts). The
+ * cascade bumps `updated_at`, so the manifest flags exactly the tables it
+ * touched; the rest cost nothing.
+ */
+export async function refreshTables(tables: RefreshableTable[]): Promise<void> {
+  const specs = tables
+    .map((t) => SPEC_BY_TABLE.get(t))
+    .filter((s): s is TableSpec => Boolean(s));
+  if (specs.length === 0) return;
+
+  const gen = dbGeneration;
+  const userId = await localUserId();
+  if (!userId) return;
+
+  await pullAll(await selectTablesToPull(specs), userId, gen);
+}
+
+/** Force-pull one table (delta + sweep) without asking the manifest first. */
+export async function forceRefreshTable(
+  table: RefreshableTable,
+): Promise<void> {
   const spec = SPEC_BY_TABLE.get(table);
   if (!spec) return;
 
@@ -502,18 +664,6 @@ async function refreshOne(table: RefreshableTable): Promise<void> {
   if (!userId) return;
 
   await pullTable(spec, userId, gen, await buildProtectedIds());
-}
-
-/**
- * Force-refresh a single table regardless of staleness.
- * Use after a sync that may have triggered server-side cascades (e.g. a
- * budget_items UPDATE that cascaded into assets / debts) — the cascade bumps
- * `updated_at`, so the delta picks the changed rows up.
- */
-export async function forceRefreshTable(
-  table: RefreshableTable,
-): Promise<void> {
-  await refreshOne(table);
 }
 
 /** Wipes all user data from IDB — also called when a different user logs in. */

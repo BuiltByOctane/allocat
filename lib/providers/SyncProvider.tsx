@@ -14,9 +14,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { SyncEngine } from "@/lib/sync/SyncEngine";
 import {
   hydrateAllTables,
-  forceRefreshTable,
+  refreshTables,
   canHydrateFromCache,
-  isTableStale,
+  isReconcileStale,
 } from "@/lib/db/hydrate";
 import { prefetchAllQueries } from "@/lib/db/prefetch";
 import { installRandomUUIDPolyfill } from "@/lib/utils/uuid";
@@ -26,7 +26,7 @@ import type { SyncQueueItem } from "@/lib/db";
 // before any mutation hook runs.
 installRandomUUIDPolyfill();
 
-type RefreshTable = Parameters<typeof forceRefreshTable>[0];
+type RefreshTable = Parameters<typeof refreshTables>[0][number];
 
 interface SyncContextValue {
   pendingCount: number;
@@ -62,12 +62,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
     const now = Date.now();
     if (now - lastRefreshRef.current < 20_000) return;
-    // Skip the full 15-table pull when local data is still fresh. Every
-    // foreground flip / resume used to re-hydrate everything; now a resume
-    // within the staleness window (isTableStale: 5 min) is a no-op. `budgets`
-    // is representative — hydrateAllTables stamps sync_meta for all tables
-    // together, so its staleness tracks the whole cache.
-    if (!(await isTableStale("budgets"))) return;
+    // A resume within 5 min of the last completed reconcile is a no-op — not
+    // even the one-request manifest check.
+    if (!(await isReconcileStale())) return;
     lastRefreshRef.current = now;
     // Yield off the interaction path. On a long-background resume the user often
     // taps the bottom nav the instant the app foregrounds; running the heavy
@@ -94,7 +91,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   }, [qc]);
 
   // Coalesce the heavy post-sync refresh. Under the concurrent drain many items
-  // finish near-together; firing forceRefreshTable + refetch per item would pull
+  // finish near-together; firing refreshTables + refetch per item would pull
   // the same tables dozens of times. Accumulate the union of tables/keys and flush
   // ONCE when the queue comes to rest (engine `onDrainEnd`) — a backlog of 40 SMS
   // used to re-pull budget_items/assets/debts on every wave. Outside a drain (an
@@ -111,7 +108,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     refetchKeysRef.current.clear();
     if (tables.length > 0) {
       try {
-        await Promise.all(tables.map((t) => forceRefreshTable(t)));
+        await refreshTables(tables);
       } catch (err) {
         console.warn("[SyncEngine] Coalesced post-sync refresh failed:", err);
       }
@@ -298,8 +295,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       // Fast path: this user's data is already in IDB. Render from it
       // IMMEDIATELY (no network gate on first paint) and reconcile with the
-      // server in the background. hydrateAllTables does its own authoritative
-      // getUser() + wipe-if-different-user, so the background pull stays safe.
+      // server in the background (one manifest request; only changed tables
+      // are pulled). hydrateAllTables wipes first if the user differs.
       if (await canHydrateFromCache()) {
         if (!mounted) return;
         await goLive();

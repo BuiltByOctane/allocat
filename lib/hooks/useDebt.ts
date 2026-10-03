@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getDebtData, getDebtPaymentTrend } from "@/lib/actions/debt";
 import { getDB } from "@/lib/db";
+import { isHydrated } from "@/lib/db/hydrate";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { DASHBOARD_KEY } from "./useDashboard";
 import { NET_WORTH_KEY } from "./useNetWorth";
@@ -14,7 +15,9 @@ export const DEBT_TREND_KEY = ["debt-trend"] as const;
 export async function getDebtFromIDB() {
   const db = getDB();
   const debts = await db.debts.orderBy("created_at").toArray();
-  if (debts.length === 0) return null;
+  // Empty but already pulled = the user has no debts; only a never-pulled
+  // table is a miss worth a server round trip.
+  if (debts.length === 0 && !(await isHydrated("debts"))) return null;
 
   return debts.map((d) => ({
     id: d.id,

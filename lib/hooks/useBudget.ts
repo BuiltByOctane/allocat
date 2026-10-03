@@ -11,6 +11,7 @@ import { fitItemsToAllocation, type SetupCategory } from "@/lib/budget/setupMath
 import { reapplyRulesToPending } from "@/lib/sms/ingestClient";
 import { pushSmsMirrorToNative } from "@/lib/sms/nativeMirror";
 import { getDB } from "@/lib/db";
+import { isHydrated } from "@/lib/db/hydrate";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { computeAutoCompletion } from "@/lib/utils/budget-completion";
 import { applyLinkedSpendCascadeIDB } from "@/lib/utils/budget-cascade";
@@ -102,10 +103,12 @@ export function useBudgetData(month: number, year: number) {
       const local = await getBudgetFromIDB(month, year);
       if (local) return local;
 
-      // IDB miss: read-only server fetch (never creates a row). When no budget
-      // exists yet, hand back a virtual empty budget (id "") so the page shows
-      // its empty state; a real row is created lazily on the first write action.
-      const view = await getBudgetView(month, year);
+      // IDB miss: read-only server fetch (never creates a row) — skipped when
+      // budgets were already pulled, since then no local row means no server
+      // row either. When no budget exists yet, hand back a virtual empty budget
+      // (id "") so the page shows its empty state; a real row is created lazily
+      // on the first write action.
+      const view = (await isHydrated("budgets")) ? null : await getBudgetView(month, year);
       if (view) return view;
       return { id: "", month, year, totalBudget: 0, templateId: null, categories: [] };
     },

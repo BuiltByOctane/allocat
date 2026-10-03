@@ -22,7 +22,7 @@ const state: Record<string, Map<string, Row>> = {
 
 const USER = { id: "u1" };
 
-// Counts reads (select().single()) per table so we can inject the "concurrent
+// Counts reads (select().single() / .maybeSingle()) per table so we can inject the "concurrent
 // writer" mutation exactly once, right after our first read captures its
 // snapshot — mirroring a real race window between our SELECT and our UPDATE.
 const readCounts: Record<string, number> = { budget_items: 0, debts: 0 };
@@ -33,6 +33,9 @@ const counterField: Record<string, string> = {
   budget_items: "actual_amount",
   debts: "total_paid",
 };
+
+// When set, every select fails with this message (Supabase unreachable).
+let readFailure: string | null = null;
 
 class Builder {
   private table: string;
@@ -68,6 +71,14 @@ class Builder {
     return row;
   }
   async single() {
+    const res = this.read();
+    return res.data ? res : { data: null, error: { message: "not found" } };
+  }
+  async maybeSingle() {
+    return this.read();
+  }
+  private read(): { data: Row | null; error: { message: string } | null } {
+    if (this.op === "select" && readFailure) return { data: null, error: { message: readFailure } };
     const row = this.apply();
     if (this.op === "select" && row && this.table in readCounts) {
       readCounts[this.table]++;
@@ -81,10 +92,6 @@ class Builder {
       }
       return { data: snapshot, error: null };
     }
-    return { data: row ? { ...row } : null, error: row ? null : { message: "not found" } };
-  }
-  async maybeSingle() {
-    const row = this.apply();
     return { data: row ? { ...row } : null, error: null };
   }
 }
@@ -115,6 +122,7 @@ vi.mock("@/lib/server/push-notify", () => ({ notifyUser: vi.fn(async () => {}) }
 
 import { quickLogSpend } from "@/lib/actions/budget";
 import { makePayment } from "@/lib/actions/debt";
+import { isTransientSyncError } from "@/lib/sync/errors";
 
 beforeEach(() => {
   state.budget_items.clear();
@@ -124,6 +132,7 @@ beforeEach(() => {
   readCounts.debts = 0;
   concurrentDelta.budget_items = 0;
   concurrentDelta.debts = 0;
+  readFailure = null;
 });
 
 describe("quickLogSpend CAS retry", () => {
@@ -154,6 +163,33 @@ describe("quickLogSpend CAS retry", () => {
     expect(state.budget_items.get("item1")!.actual_amount).toBe(140);
     // Two reads: the lost-race attempt, then the successful retry.
     expect(readCounts.budget_items).toBe(2);
+  });
+});
+
+describe("quickLogSpend read failure", () => {
+  it("surfaces a Supabase network failure as transient, not 'Item not found'", async () => {
+    state.budget_items.set("item1", {
+      id: "item1",
+      user_id: "u1",
+      name: "Rent",
+      actual_amount: 0,
+      planned_amount: 0,
+      is_completed: false,
+      overspend_count: 0,
+      link_type: null,
+      link_id: null,
+    });
+    readFailure = "TypeError: fetch failed";
+
+    const err = await quickLogSpend("item1", 78).catch((e: unknown) => e);
+
+    expect((err as Error).message).not.toBe("Item not found");
+    expect(isTransientSyncError(err, true)).toBe(true);
+    expect(state.budget_items.get("item1")!.actual_amount).toBe(0);
+  });
+
+  it("still reports a genuinely missing item as 'Item not found'", async () => {
+    await expect(quickLogSpend("nope", 5)).rejects.toThrow("Item not found");
   });
 });
 

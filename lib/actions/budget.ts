@@ -800,12 +800,17 @@ export async function quickLogSpend(
   // drop one increment. The update is filtered on the value we read, so a lost
   // race yields no row and we re-read.
   const { item, updatedItem } = await withCas(4, async () => {
-    const { data: item } = await supabase
+    // maybeSingle: a missing row is `null` with no error, so any `error` here is
+    // a real failure (e.g. "TypeError: fetch failed" reaching Supabase). Surface
+    // it as-is — reporting it as "Item not found" made SyncEngine treat a
+    // transient blip as a permanent rejection and drop the queued spend.
+    const { data: item, error: readError } = await supabase
       .from("budget_items")
       .select("*")
       .eq("id", itemId)
       .eq("user_id", user.id)
-      .single();
+      .maybeSingle();
+    if (readError) throw new Error(readError.message);
     if (!item) throw new Error("Item not found");
 
     const previousActual = Number(item.actual_amount);

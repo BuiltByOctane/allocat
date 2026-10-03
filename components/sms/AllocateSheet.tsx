@@ -144,89 +144,13 @@ export function AllocateSheet({
 
               {/* Scrollable list */}
               <div className="overflow-y-auto overscroll-contain flex-1">
-                <ul className="px-2 py-2 space-y-0.5">
-                  {/* Create-new — for spends not in the budget yet (allocate only) */}
-                  {!isReallocate && (
-                    <li>
-                      <button
-                        type="button"
-                        onClick={() => setView("pick-category")}
-                        className="w-full flex items-center gap-3 px-4 py-3.5 rounded-tile text-left border border-dashed border-border text-foreground hover:bg-muted/50 active:bg-muted transition-colors"
-                      >
-                        <span className="material-symbols-outlined text-[20px] shrink-0">
-                          add
-                        </span>
-                        <div>
-                          <span className="text-sm font-medium block">
-                            Create new item
-                          </span>
-                          <span className="text-[11px] text-muted-foreground block mt-0.5">
-                            Not in your budget? Add it here.
-                          </span>
-                        </div>
-                      </button>
-                    </li>
-                  )}
-
-                  {items.length === 0 ? (
-                    <li className="px-4 py-6 text-center text-xs text-muted-foreground">
-                      No budget items this month yet. Create one above.
-                    </li>
-                  ) : (
-                    items.map((it) => {
-                      const isSelected = it.id === chosenItem;
-                      const left =
-                        it.planned != null && it.actual != null
-                          ? Math.max(0, it.planned - it.actual)
-                          : null;
-                      return (
-                        <li key={it.id}>
-                          <button
-                            type="button"
-                            onClick={() => setChosenItem(it.id)}
-                            className={`w-full flex items-center justify-between gap-2 px-4 py-3.5 rounded-tile text-left transition-colors ${
-                              isSelected
-                                ? "bg-muted text-foreground"
-                                : "text-muted-foreground hover:bg-muted/50 active:bg-muted"
-                            }`}
-                          >
-                            <div className="flex items-center gap-3 min-w-0">
-                              {(it.emoji || it.icon) && (
-                                <span className="text-lg leading-none shrink-0">
-                                  {it.emoji || it.icon}
-                                </span>
-                              )}
-                              <div className="min-w-0">
-                                <span className="text-sm font-medium block truncate">
-                                  {it.itemName}
-                                </span>
-                                <span className="text-[11px] text-muted-foreground block mt-0.5 truncate">
-                                  {it.categoryName}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              {left != null && (
-                                <span className="figure text-[11px] text-muted-foreground">
-                                  {formatCurrency(left, {
-                                    code: currency,
-                                    maximumFractionDigits: 0,
-                                  })}{" "}
-                                  left
-                                </span>
-                              )}
-                              {isSelected && (
-                                <span className="material-symbols-outlined text-foreground text-[18px]">
-                                  check
-                                </span>
-                              )}
-                            </div>
-                          </button>
-                        </li>
-                      );
-                    })
-                  )}
-                </ul>
+                <AllocateItemList
+                  items={items}
+                  chosenId={chosenItem}
+                  onChoose={setChosenItem}
+                  onCreateNew={isReallocate ? undefined : () => setView("pick-category")}
+                  currency={currency}
+                />
               </div>
 
               {/* Footer — name + remember + actions */}
@@ -307,33 +231,11 @@ export function AllocateSheet({
 
               {/* Category list */}
               <div className="overflow-y-auto overscroll-contain flex-1 pb-safe">
-                {categories.length === 0 ? (
-                  <p className="px-5 py-8 text-center text-sm text-muted-foreground">
-                    No categories yet. Create a budget first, then come back to
-                    add this transaction.
-                  </p>
-                ) : (
-                  <ul className="px-2 py-2 space-y-0.5">
-                    {categories.map((cat) => (
-                      <li key={cat.id}>
-                        <button
-                          type="button"
-                          onClick={() => onCreateNew(cat.id)}
-                          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-tile text-left text-muted-foreground hover:bg-muted/50 active:bg-muted transition-colors"
-                        >
-                          {cat.icon && (
-                            <span className="text-lg leading-none shrink-0">
-                              {cat.icon}
-                            </span>
-                          )}
-                          <span className="text-sm font-medium text-foreground">
-                            {cat.name}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <CategoryPickList
+                  categories={categories}
+                  onPick={onCreateNew}
+                  emptyText="No categories yet. Create a budget first, then come back to add this transaction."
+                />
                 <div className="h-6" />
               </div>
             </>
@@ -341,5 +243,149 @@ export function AllocateSheet({
         </Drawer.Content>
       </Drawer.Portal>
     </Drawer.Root>
+  );
+}
+
+interface AllocateItemListProps {
+  items: AllocatePickerItem[];
+  chosenId: string;
+  onChoose: (id: string) => void;
+  /** Shows the "Create new item" row when set. */
+  onCreateNew?: () => void;
+  currency: string;
+}
+
+/** Existing budget items (+ optional create-new row) for an allocate picker. */
+export function AllocateItemList({
+  items,
+  chosenId,
+  onChoose,
+  onCreateNew,
+  currency,
+}: AllocateItemListProps) {
+  return (
+    <ul className="px-2 py-2 space-y-0.5">
+      {/* Create-new — for spends not in the budget yet */}
+      {onCreateNew && (
+        <li>
+          <button
+            type="button"
+            onClick={onCreateNew}
+            className="w-full flex items-center gap-3 px-4 py-3.5 rounded-tile text-left border border-dashed border-border text-foreground hover:bg-muted/50 active:bg-muted transition-colors"
+          >
+            <span className="material-symbols-outlined text-[20px] shrink-0">
+              add
+            </span>
+            <div>
+              <span className="text-sm font-medium block">
+                Create new item
+              </span>
+              <span className="text-[11px] text-muted-foreground block mt-0.5">
+                Not in your budget? Add it here.
+              </span>
+            </div>
+          </button>
+        </li>
+      )}
+
+      {items.length === 0 ? (
+        <li className="px-4 py-6 text-center text-xs text-muted-foreground">
+          No budget items this month yet.{onCreateNew ? " Create one above." : ""}
+        </li>
+      ) : (
+        items.map((it) => {
+          const isSelected = it.id === chosenId;
+          // No hint for an item with nothing planned — "₹0 left" reads as spent out.
+          const left =
+            it.planned != null && it.actual != null && it.planned > 0
+              ? Math.max(0, it.planned - it.actual)
+              : null;
+          return (
+            <li key={it.id}>
+              <button
+                type="button"
+                onClick={() => onChoose(it.id)}
+                className={`w-full flex items-center justify-between gap-2 px-4 py-3.5 rounded-tile text-left transition-colors ${
+                  isSelected
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:bg-muted/50 active:bg-muted"
+                }`}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  {(it.emoji || it.icon) && (
+                    <span className="text-lg leading-none shrink-0">
+                      {it.emoji || it.icon}
+                    </span>
+                  )}
+                  <div className="min-w-0">
+                    <span className="text-sm font-medium block truncate">
+                      {it.itemName}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground block mt-0.5 truncate">
+                      {it.categoryName}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {left != null && (
+                    <span className="figure text-[11px] text-muted-foreground">
+                      {formatCurrency(left, {
+                        code: currency,
+                        maximumFractionDigits: 0,
+                      })}{" "}
+                      left
+                    </span>
+                  )}
+                  {isSelected && (
+                    <span className="material-symbols-outlined text-foreground text-[18px]">
+                      check
+                    </span>
+                  )}
+                </div>
+              </button>
+            </li>
+          );
+        })
+      )}
+    </ul>
+  );
+}
+
+interface CategoryPickListProps {
+  categories: AllocateCategory[];
+  onPick: (categoryId: string) => void;
+  emptyText: string;
+}
+
+/** Category list for the create-new-item branch of an allocate picker. */
+export function CategoryPickList({ categories, onPick, emptyText }: CategoryPickListProps) {
+  if (categories.length === 0) {
+    return (
+      <p className="px-5 py-8 text-center text-sm text-muted-foreground">
+        {emptyText}
+      </p>
+    );
+  }
+  return (
+    <ul className="px-2 py-2 space-y-0.5">
+      {categories.map((cat) => (
+        <li key={cat.id}>
+          <button
+            type="button"
+            onClick={() => onPick(cat.id)}
+            className="w-full flex items-center gap-3 px-4 py-3.5 rounded-tile text-left text-muted-foreground hover:bg-muted/50 active:bg-muted transition-colors"
+          >
+            {cat.icon && (
+              <span className="text-lg leading-none shrink-0">
+                {cat.icon}
+              </span>
+            )}
+            <span className="text-sm font-medium text-foreground">
+              {cat.name}
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }

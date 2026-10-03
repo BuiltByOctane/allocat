@@ -3,10 +3,9 @@
 import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { TrendingUp } from "lucide-react";
-import QuickSpendInput from "@/components/dashboard/QuickSpendInput";
+import ManualSpendButton from "@/components/dashboard/ManualSpendButton";
 import TopSpendingGlimpse from "@/components/dashboard/TopSpendingGlimpse";
 import { CurrencyText } from "@/components/ui/CurrencyText";
-import { Card } from "@/components/ui/Card";
 import { StatCard } from "@/components/ui/StatCard";
 import { Chip } from "@/components/ui/Chip";
 import { useHaptic } from "@/lib/hooks/useHaptic";
@@ -123,7 +122,7 @@ export default function DashboardPage({ data }: DashboardProps) {
     : 0;
 
   return (
-    <div className="px-4 pt-4 flex flex-col gap-3.5">
+    <div className="px-4 pt-3 flex flex-col gap-3">
       {/* Header */}
       <div className="flex items-center justify-between px-1 pt-1">
         <div>
@@ -282,12 +281,8 @@ export default function DashboardPage({ data }: DashboardProps) {
         </Link>
       </div>
 
-      {/* Quick Log */}
-      {data.budget && data.categories.length > 0 && (
-        <Card id="dashboard-quick-spend">
-          <QuickSpendInput categories={data.categories} />
-        </Card>
-      )}
+      {/* Manual spend — one button; the amount → item flow lives in a sheet */}
+      {data.budget && data.categories.length > 0 && <ManualSpendButton />}
 
       <SupportNudge />
     </div>

@@ -38,7 +38,7 @@ export const TOUR_STEPS: Record<TourPage, DriveStep[]> = {
       popover: {
         title: "Quick Logger",
         description:
-          "Log a spend instantly from here - pick a category, pick an item, enter the amount. No need to navigate to Budget.",
+          "Log a cash spend in two taps - enter the amount, then pick the budget item it belongs to. You can create a new item on the spot.",
         side: "bottom",
         align: "start",
       },

@@ -8,7 +8,7 @@ import { Receipt } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { useRegisterQuickAction } from "@/lib/providers/QuickActionProvider";
-import QuickSpendInput from "@/components/dashboard/QuickSpendInput";
+import { ManualSpendSheet } from "@/components/dashboard/ManualSpendSheet";
 import {
   useAddBudgetCategory,
   useUpdateBudgetTotal,
@@ -601,26 +601,7 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
       </Drawer.Root>
 
       {/* Quick-log expense sheet (opened from the dock button) */}
-      <Drawer.Root repositionInputs={false} open={spendOpen} onOpenChange={setSpendOpen}>
-        <Drawer.Portal>
-          <Drawer.Overlay className="fixed inset-0 bg-black/50 z-40" />
-          <Drawer.Content
-            aria-describedby="quick-spend-description"
-            className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-sheet bg-card focus:outline-none sheet-3q"
-          >
-            <div className="flex justify-center pt-3 pb-1 shrink-0">
-              <div className="w-9 h-1 bg-border rounded-full" />
-            </div>
-            <Drawer.Title className="sr-only">Log expense</Drawer.Title>
-            <p id="quick-spend-description" className="sr-only">
-              Pick a category and item, then enter an amount to log a spend.
-            </p>
-            <div className="overflow-y-auto flex-1 px-6 pt-2 pb-8">
-              <QuickSpendInput categories={data.categories} />
-            </div>
-          </Drawer.Content>
-        </Drawer.Portal>
-      </Drawer.Root>
+      <ManualSpendSheet open={spendOpen} onOpenChange={setSpendOpen} />
     </>
   );
 }

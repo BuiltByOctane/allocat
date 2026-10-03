@@ -1,14 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getDashboardData } from "@/lib/actions/dashboard";
-import { updateBudgetTotal, getCategoryItems, quickLogSpend } from "@/lib/actions/budget";
+import { updateBudgetTotal, getCategoryItems } from "@/lib/actions/budget";
 import { getDB } from "@/lib/db";
 import { isHydrated } from "@/lib/db/hydrate";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { computeMonthlyHistory } from "@/lib/utils/netWorthHistory";
-import { computeAutoCompletion } from "@/lib/utils/budget-completion";
-import { applyLinkedSpendCascadeIDB } from "@/lib/utils/budget-cascade";
+import { applyQuickSpend } from "@/lib/hooks/quickSpend";
 import {
-  writeManualTransaction,
   ALL_TX_KEY,
   ITEM_TX_KEY,
   SMS_CATEGORIZED_KEY,
@@ -226,7 +224,7 @@ export function useQuickLogSpend() {
   const enqueue = useEnqueue();
 
   return useMutation({
-    mutationFn: async ({
+    mutationFn: ({
       itemId,
       amount,
       label,
@@ -235,58 +233,7 @@ export function useQuickLogSpend() {
       amount: number;
       /** Optional name for the ledger transaction row. */
       label?: string | null;
-    }) => {
-      const db = getDB();
-      // Profile currency for the ledger row (falls back to INR).
-      const profiles = await db.profiles.toArray();
-      const currency = profiles[0]?.currency ?? "INR";
-      const item = await db.budget_items.get(itemId);
-      if (item) {
-        const newActual = Number(item.actual_amount) + amount;
-        const planned = Number(item.planned_amount);
-        const nextCompleted = computeAutoCompletion(planned, newActual);
-        await db.budget_items.update(itemId, {
-          actual_amount: newActual,
-          is_completed: nextCompleted,
-          updated_at: new Date().toISOString(),
-        });
-        // Mirror the server cascade optimistically: a spend on an asset/debt-
-        // linked item moves the linked target now (server quickLogSpend does the
-        // same via addAssetEntry/makePayment). Matches the item-sheet path.
-        await applyLinkedSpendCascadeIDB(item, { actual_amount: newActual });
-        await enqueue({
-          table: "budget_items",
-          operation: "PAYMENT",
-          recordId: itemId,
-          payload: { itemId, amount },
-        });
-        // Ledger record only — the PAYMENT above already bumped actual_amount, so
-        // the manual transaction's server insert must NOT re-apply the spend.
-        await writeManualTransaction(
-          { budgetItemId: itemId, amount, currency, label: label ?? null },
-          { enqueue },
-        );
-        return {
-          itemName: item.name,
-          remaining: planned - newActual,
-          planned,
-          actual: newActual,
-        };
-      }
-      // Item not in IDB yet — fall back to server action
-      await quickLogSpend(itemId, amount);
-      await enqueue({
-        table: "budget_items",
-        operation: "PAYMENT",
-        recordId: itemId,
-        payload: { itemId, amount },
-      });
-      await writeManualTransaction(
-        { budgetItemId: itemId, amount, currency, label: label ?? null },
-        { enqueue },
-      );
-      return null;
-    },
+    }) => applyQuickSpend({ itemId, amount, label }, { enqueue }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: DASHBOARD_KEY });
       qc.invalidateQueries({ queryKey: ["budget"] });
@@ -302,6 +249,8 @@ export function useQuickLogSpend() {
       qc.invalidateQueries({ queryKey: ALL_TX_KEY });
       qc.invalidateQueries({ queryKey: ITEM_TX_KEY });
       qc.invalidateQueries({ queryKey: SMS_CATEGORIZED_KEY });
+      // "<amount> left" hints in the allocate / manual-spend pickers.
+      qc.invalidateQueries({ queryKey: ["sms-picker"] });
     },
   });
 }

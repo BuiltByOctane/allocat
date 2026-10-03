@@ -3,8 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { ChevronLeft, Inbox } from "lucide-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getDB } from "@/lib/db";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
 import { formatCurrency } from "@/lib/number-format";
@@ -25,83 +24,14 @@ import { useTourDriver } from "@/lib/tour/useTourDriver";
 import {
   ItemDetailSheet,
   NEW_ITEM_ID,
-  type LinkTarget,
 } from "@/components/budget/ItemDetailSheet";
+import { AllocateSheet } from "@/components/sms/AllocateSheet";
 import {
-  AllocateSheet,
-  type AllocatePickerItem,
-  type AllocateCategory,
-} from "@/components/sms/AllocateSheet";
+  ALLOCATE_PICKER_KEY,
+  useAllocatePicker,
+  useLinkTargets,
+} from "@/lib/hooks/useAllocatePicker";
 import type { SmsTransactionRow } from "@/lib/db";
-
-const SMS_PICKER_KEY = ["sms-picker"] as const;
-
-type CategoryType = "needs" | "wants" | "investments" | "misc" | null;
-
-interface CatMeta {
-  name: string;
-  icon: string | null;
-  type: CategoryType;
-  allocation: number;
-  /** Σ planned of the category's existing items (the "other items" for a new one). */
-  plannedTotal: number;
-}
-
-interface PickerData {
-  items: AllocatePickerItem[];
-  categories: AllocateCategory[];
-  metaById: Record<string, CatMeta>;
-}
-
-/** Budget items + categories for the current month, read from IDB. */
-async function loadPickerData(): Promise<PickerData> {
-  const db = getDB();
-  const now = new Date();
-  const budget = await db.budgets
-    .where("[month+year]")
-    .equals([now.getMonth() + 1, now.getFullYear()])
-    .first();
-  if (!budget) return { items: [], categories: [], metaById: {} };
-
-  const categories = await db.categories
-    .where("budget_id")
-    .equals(budget.id)
-    .toArray();
-
-  const items: AllocatePickerItem[] = [];
-  const metaById: Record<string, CatMeta> = {};
-
-  for (const cat of categories) {
-    const catItems = await db.budget_items
-      .where("category_id")
-      .equals(cat.id)
-      .toArray();
-    for (const item of catItems) {
-      items.push({
-        id: item.id,
-        itemName: item.name,
-        categoryName: cat.name,
-        icon: cat.icon,
-        emoji: item.emoji ?? null,
-        planned: Number(item.planned_amount) || 0,
-        actual: Number(item.actual_amount) || 0,
-      });
-    }
-    metaById[cat.id] = {
-      name: cat.name,
-      icon: cat.icon,
-      type: (cat.type as CategoryType) ?? null,
-      allocation: Number(cat.allocated_amount) || 0,
-      plannedTotal: catItems.reduce((s, i) => s + (Number(i.planned_amount) || 0), 0),
-    };
-  }
-
-  return {
-    items,
-    categories: categories.map((c) => ({ id: c.id, name: c.name, icon: c.icon })),
-    metaById,
-  };
-}
 
 function money(row: SmsTransactionRow): string {
   if (typeof row.amount !== "number") return "-";
@@ -143,10 +73,7 @@ export default function SmsPage() {
   // The categorized txn being moved/renamed via the reallocate sheet.
   const [reallocTxn, setReallocTxn] = useState<SmsTransactionRow | null>(null);
 
-  const { data: pickerData } = useQuery({
-    queryKey: SMS_PICKER_KEY,
-    queryFn: loadPickerData,
-  });
+  const { data: pickerData } = useAllocatePicker();
 
   const now = new Date();
   const month = now.getMonth() + 1;
@@ -193,34 +120,7 @@ export default function SmsPage() {
   );
 
   // Asset/debt link targets for the full item editor (loaded once).
-  const [linkTargets, setLinkTargets] = useState<{
-    assets: LinkTarget[];
-    debts: LinkTarget[];
-  }>({ assets: [], debts: [] });
-
-  useEffect(() => {
-    const db = getDB();
-    let cancelled = false;
-    (async () => {
-      const [assets, debts] = await Promise.all([
-        db.assets.toArray(),
-        db.debts.toArray(),
-      ]);
-      if (cancelled) return;
-      const activeAssets = assets.filter((a) => !a.achieved_at);
-      setLinkTargets({
-        assets: activeAssets.map((a) => ({
-          id: a.id,
-          name: a.is_goal ? `🎯 ${a.name}` : a.name,
-          icon: a.icon,
-        })),
-        debts: debts.map((d) => ({ id: d.id, name: d.name, icon: d.icon })),
-      });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const linkTargets = useLinkTargets();
 
   // Deep link from a notification:
   //   /sms?txn=<id>                         → open allocate sheet
@@ -408,7 +308,7 @@ export default function SmsPage() {
 
     // Allocated successfully — drop the memo so a later flow can't reuse a stale
     // id. ItemDetailSheet closes itself (calls onClose → setCreateFlow(null)).
-    qc.invalidateQueries({ queryKey: SMS_PICKER_KEY });
+    qc.invalidateQueries({ queryKey: ALLOCATE_PICKER_KEY });
     createdItemRef.current = null;
   }
 

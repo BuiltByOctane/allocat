@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, type CSSProperties } from "react";
 import Link from "next/link";
 import { TrendingUp } from "lucide-react";
 import ManualSpendButton from "@/components/dashboard/ManualSpendButton";
@@ -16,6 +16,7 @@ import { CrownBadge } from "@/components/ui/CrownBadge";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import { getTimeGreeting } from "@/lib/utils/greeting";
 import { projectMonthSpend } from "@/lib/sms/insightStats";
+import { budgetMeter } from "@/lib/budget/meter";
 import type { DashboardCategory, DashboardItem } from "@/lib/hooks/useDashboard";
 
 interface DashboardProps {
@@ -93,11 +94,8 @@ export default function DashboardPage({ data }: DashboardProps) {
     }
   }
 
-  const budgetSpentPct =
-    data.budget && data.budget.totalBudget > 0
-      ? Math.min(100, Math.round((data.budget.spent / data.budget.totalBudget) * 100))
-      : 0;
-  const overBudget = !!data.budget && data.budget.spent > data.budget.totalBudget;
+  const budgetLeft = data.budget ? budgetMeter(data.budget.spent, data.budget.totalBudget) : null;
+  const overBudget = !!budgetLeft?.over;
 
   // Forward-looking pace: linear month-end projection from spend-so-far vs the
   // total budget. null until the clock snapshot hydrates (and only meaningful
@@ -115,6 +113,8 @@ export default function DashboardPage({ data }: DashboardProps) {
     : offPace
       ? { tone: "neutral" as const, label: "Off pace" }
       : { tone: "good" as const, label: "On track" };
+
+  const canLogSpend = !!data.budget && data.categories.length > 0;
 
   const topGoal = data.goals[0];
   const topGoalPct = topGoal
@@ -152,9 +152,15 @@ export default function DashboardPage({ data }: DashboardProps) {
       {/* Budget hero (lime) */}
       <div id="dashboard-budget-summary">
         {data.budget ? (
-          <div className="relative overflow-hidden rounded-card bg-accent wordmark-watermark p-[18px] text-[var(--accent-ink)]">
+          <div
+            className="relative overflow-hidden rounded-card bg-accent wordmark-watermark p-[18px] text-[var(--accent-ink)]"
+            // Overspent: the whole card goes red; re-pointing --accent-ink recolors every child.
+            style={overBudget ? ({ background: "var(--neg)", "--accent-ink": "#fff" } as CSSProperties) : undefined}
+          >
             <div className="flex items-start justify-between">
-              <span className="text-[11.5px] font-semibold">Left to spend · this month</span>
+              <span className="text-[11.5px] font-semibold">
+                {overBudget ? "Over budget · this month" : "Left to spend · this month"}
+              </span>
               <div className="flex flex-col items-end gap-1.5">
                 <div className="flex items-center gap-1.5">
                   {month !== null && (
@@ -170,7 +176,7 @@ export default function DashboardPage({ data }: DashboardProps) {
               </div>
             </div>
             <div className="figure text-[44px] leading-[0.92] my-2.5" style={{ color: "var(--accent-ink)" }}>
-              <CurrencyText value={data.budget.remaining} />
+              <CurrencyText value={Math.abs(data.budget.remaining)} />
             </div>
             <div
               id="dashboard-budget-progress"
@@ -179,7 +185,10 @@ export default function DashboardPage({ data }: DashboardProps) {
             >
               <div
                 className="h-full rounded-full"
-                style={{ width: `${budgetSpentPct}%`, background: "var(--accent-ink)" }}
+                style={{
+                  width: `${budgetLeft?.leftPct ?? 0}%`,
+                  background: budgetLeft?.low ? "var(--warn)" : "var(--accent-ink)",
+                }}
               />
             </div>
             <div className="flex justify-between mt-2 text-[11px] font-semibold">
@@ -205,10 +214,15 @@ export default function DashboardPage({ data }: DashboardProps) {
                 )}
               </div>
             )}
+            {/* Secondary when the Log-a-spend CTA sits below, so only one black button competes. */}
             <Link
               href="/budget"
               onClick={() => haptic.light()}
-              className="mt-3.5 flex h-[46px] items-center justify-center gap-2 rounded-pill bg-[var(--pill)] text-[var(--pill-foreground)] text-sm font-bold active:scale-[0.98] transition-transform"
+              className={`mt-3.5 flex h-[46px] items-center justify-center gap-2 rounded-pill text-sm font-bold active:scale-[0.98] transition-transform ${
+                canLogSpend
+                  ? "bg-white/45 text-[var(--accent-ink)]"
+                  : "bg-[var(--pill)] text-[var(--pill-foreground)]"
+              }`}
             >
               Manage budget
             </Link>
@@ -281,8 +295,8 @@ export default function DashboardPage({ data }: DashboardProps) {
         </Link>
       </div>
 
-      {/* Manual spend — one button; the amount → item flow lives in a sheet */}
-      {data.budget && data.categories.length > 0 && <ManualSpendButton />}
+      {/* Manual spend — the page's primary action, kept low for one-handed reach */}
+      {canLogSpend && <ManualSpendButton />}
 
       <FoundingBanner />
     </div>

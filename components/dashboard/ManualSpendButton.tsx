@@ -7,7 +7,7 @@ import { parseSpend } from "@/lib/ai/parseSpend";
 import { ManualSpendSheet } from "@/components/dashboard/ManualSpendSheet";
 
 /**
- * Dashboard entry point for a manual spend: one large button that opens the
+ * Dashboard entry point for a manual spend: the page's primary CTA, opens the
  * amount → item sheet. Also handles `?shared=` (Web Share Target) and
  * `?focus=quick-spend` (manifest shortcut) by opening the sheet pre-filled.
  */
@@ -52,20 +52,18 @@ export default function ManualSpendButton() {
           setSeed({ amount: null, label: null });
           setOpen(true);
         }}
-        className="w-full flex items-center gap-3.5 rounded-card bg-[var(--pill)] text-[var(--pill-foreground)] px-4 py-3 text-left active:scale-[0.98] transition-transform"
+        className="w-full flex items-center gap-3 rounded-pill bg-[var(--pill)] text-[var(--pill-foreground)] py-2 pl-2 pr-5 text-left ring-1 ring-inset ring-white/10 shadow-[0_8px_20px_-10px_rgba(0,0,0,0.45)] active:scale-[0.98] transition-transform"
       >
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-accent text-[var(--accent-ink)]">
-          <span className="material-symbols-outlined text-[24px]">add</span>
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-accent text-[var(--accent-ink)]">
+          <span className="material-symbols-outlined text-[26px]">add</span>
         </span>
         <span className="flex-1 min-w-0">
-          <span className="block font-display text-[17px] font-bold leading-tight">
-            Log a spend
-          </span>
-          <span className="block text-[11px] font-medium opacity-70 mt-0.5">
+          <span className="block text-[15px] font-bold leading-tight">Log a spend</span>
+          <span className="block text-[11px] font-medium opacity-60 mt-0.5">
             Cash or anything SMS didn&apos;t catch
           </span>
         </span>
-        <span className="material-symbols-outlined text-[20px] opacity-70">arrow_forward</span>
+        <span className="material-symbols-outlined text-[20px] opacity-60">arrow_forward</span>
       </button>
 
       <ManualSpendSheet

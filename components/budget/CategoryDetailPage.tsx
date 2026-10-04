@@ -29,6 +29,7 @@ import { NET_WORTH_KEY } from "@/lib/hooks/useNetWorth";
 import { GOALS_KEY } from "@/lib/hooks/useGoals";
 import { DEBT_KEY } from "@/lib/hooks/useDebt";
 import { suggestItemNames } from "@/lib/budget/categorySuggestions";
+import { budgetMeter, OVER_SURFACE_STYLE, type BudgetMeter } from "@/lib/budget/meter";
 
 type LinkType = "asset" | "debt";
 
@@ -50,12 +51,13 @@ interface LinkTargetEntry {
   icon?: string | null;
 }
 
-function SegBar({ pct, over, color }: { pct: number; over?: boolean; color?: string }) {
+/** Draining budget bar — full when untouched, amber when low, empty when used up. */
+function SegBar({ meter, color }: { meter: BudgetMeter; color?: string }) {
   return (
     <Progress
-      value={pct * 100}
-      state={over ? "over" : "normal"}
-      color={over ? undefined : color}
+      value={meter.leftPct}
+      state={meter.state}
+      color={meter.state === "normal" ? color : undefined}
       className="mt-2 h-1.5"
     />
   );
@@ -191,10 +193,7 @@ function CategoryDetailContent({
   const totalPlanned = items.reduce((s, i) => s + i.planned, 0);
   const totalActual = items.reduce((s, i) => s + i.actual, 0);
   const left = categoryAllocation - totalActual;
-  const pct =
-    categoryAllocation > 0
-      ? Math.min(1, totalActual / categoryAllocation)
-      : 0;
+  const categoryMeter = budgetMeter(totalActual, categoryAllocation);
 
   const remainingBudgetCapacity = data.totalBudget - data.otherAllocated - categoryAllocation;
 
@@ -705,7 +704,7 @@ function CategoryDetailContent({
       )}
 
       {/* Stats card */}
-      <Card>
+      <Card style={categoryMeter.over ? OVER_SURFACE_STYLE : undefined}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <span className="t-label text-muted-foreground">
@@ -732,7 +731,7 @@ function CategoryDetailContent({
           </div>
         </div>
 
-        <SegBar pct={pct} over={totalActual > categoryAllocation && categoryAllocation > 0} color={categoryColor} />
+        <SegBar meter={categoryMeter} color={categoryColor} />
 
         <div className="mt-2.5 space-y-1">
           <button
@@ -846,11 +845,11 @@ function CategoryDetailContent({
       ) : (
       <div className="flex flex-col gap-2.5">
         {items.map((item) => {
-          const itemPct = item.planned > 0 ? Math.min(1, item.actual / item.planned) : 0;
+          const itemMeter = budgetMeter(item.actual, item.planned);
 
           return (
             <SwipeToDeleteRow key={item.id} onDelete={() => handleDeleteItem(item.id)}>
-              <Card compact>
+              <Card compact style={itemMeter.over ? OVER_SURFACE_STYLE : undefined}>
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
@@ -913,15 +912,23 @@ function CategoryDetailContent({
                       onSave={(v) => handleUpdateItem(item.id, { planned_amount: v })}
                       className="figure text-[13px]"
                     />
-                    {item.actual > 0 && (
+                    {itemMeter.over ? (
+                      <div className="text-[9.5px] font-bold text-neg tabular-nums mt-0.5">
+                        <CurrencyText value={item.actual - item.planned} /> over
+                      </div>
+                    ) : item.planned > 0 ? (
+                      <div className="text-[9.5px] font-medium text-muted-foreground tabular-nums mt-0.5">
+                        <CurrencyText value={item.planned - item.actual} /> left
+                      </div>
+                    ) : item.actual > 0 ? (
                       <div className="text-[9.5px] font-medium text-muted-foreground tabular-nums mt-0.5">
                         <CurrencyText value={item.actual} /> spent
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 </div>
                 {item.planned > 0 && (
-                  <SegBar pct={itemPct} over={item.actual > item.planned} color={categoryColor} />
+                  <SegBar meter={itemMeter} color={categoryColor} />
                 )}
               </Card>
             </SwipeToDeleteRow>

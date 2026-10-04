@@ -5,36 +5,20 @@ import { Card } from "@/components/ui/Card";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import type { DashboardItem } from "@/lib/hooks/useDashboard";
+import { budgetMeter, OVER_SURFACE_STYLE, type BudgetMeter } from "@/lib/budget/meter";
 
-/** Items over ~90% of their allocation get a warning tint. */
-const WARN_RATIO = 0.9;
 const MAX_TILES = 8;
-
-type Tone = "normal" | "warn" | "over";
 
 interface Tile extends DashboardItem {
   remaining: number;
-  pct: number;
-  tone: Tone;
+  meter: BudgetMeter;
 }
 
 function toTile(it: DashboardItem): Tile {
-  const ratio = it.planned > 0 ? it.actual / it.planned : 0;
-  const tone: Tone =
-    it.actual > it.planned && it.planned > 0
-      ? "over"
-      : ratio >= WARN_RATIO && it.planned > 0
-        ? "warn"
-        : "normal";
-  return {
-    ...it,
-    remaining: it.planned - it.actual,
-    pct: it.planned > 0 ? Math.min(100, ratio * 100) : 0,
-    tone,
-  };
+  return { ...it, remaining: it.planned - it.actual, meter: budgetMeter(it.actual, it.planned) };
 }
 
-const BAR_FILL: Record<Tone, string> = {
+const BAR_FILL: Record<BudgetMeter["state"], string> = {
   normal: "var(--accent-strong)",
   warn: "var(--warn)",
   over: "var(--neg)",
@@ -57,7 +41,7 @@ export default function TopSpendingGlimpse({
     .filter((it) => it.actual > 0)
     .map(toTile)
     // Highest spend first; ties broken by how close to the limit (near-done up).
-    .sort((a, b) => b.actual - a.actual || b.pct - a.pct)
+    .sort((a, b) => b.actual - a.actual || a.meter.leftPct - b.meter.leftPct)
     .slice(0, MAX_TILES);
 
   if (tiles.length === 0) return null;
@@ -77,13 +61,14 @@ export default function TopSpendingGlimpse({
 
       <div className="flex gap-2 overflow-x-auto overscroll-x-contain -mx-0.5 px-0.5 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {tiles.map((t) => {
-          const over = t.tone === "over";
+          const over = t.meter.over;
           return (
             <Link
               key={t.id}
               href={`/budget/${t.categoryId}`}
               onClick={() => haptic.selection()}
               className="shrink-0 w-[96px] rounded-[13px] bg-tile p-2.5 active:scale-[0.97] transition-transform"
+              style={over ? OVER_SURFACE_STYLE : undefined}
             >
               <span className="text-[15px] leading-none block mb-1.5">{t.emoji || "💸"}</span>
               <span className="block text-[12px] font-bold tabular-nums leading-none truncate text-foreground">
@@ -95,7 +80,7 @@ export default function TopSpendingGlimpse({
               <div className="mt-1.5 h-1 rounded-full overflow-hidden" style={{ background: "var(--progress-empty)" }}>
                 <div
                   className="h-full rounded-full"
-                  style={{ width: `${over ? 100 : t.pct}%`, background: BAR_FILL[t.tone] }}
+                  style={{ width: `${t.meter.leftPct}%`, background: BAR_FILL[t.meter.state] }}
                 />
               </div>
               {t.planned > 0 && (

@@ -31,6 +31,7 @@ import BudgetEmptyState from "@/components/budget/BudgetEmptyState";
 import { BudgetSetupSheet } from "@/components/budget/BudgetSetupSheet";
 import { BudgetQuickSetup } from "@/components/budget/BudgetQuickSetup";
 import { readDraftPlan, type QuizDraft } from "@/lib/budget/quizDraft";
+import { budgetMeter, OVER_SURFACE_STYLE } from "@/lib/budget/meter";
 
 const DETAIL_HINT_KEY = "allocat-budget-detail-hint-dismissed";
 
@@ -227,7 +228,7 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
   const leftOfBudget = data.totalBudget - totalSpent;
   const overspent = leftOfBudget < 0;
   const unallocatedBudget = data.totalBudget - totalAllocated;
-  const spentPct = data.totalBudget > 0 ? Math.round((totalSpent / data.totalBudget) * 100) : 0;
+  const totalMeter = budgetMeter(totalSpent, data.totalBudget);
 
   function pushPeriod(month: number, year: number) {
     router.push(`?month=${month}&year=${year}`);
@@ -344,7 +345,7 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
         </div>
 
         {/* Summary card */}
-        <Card id="budget-hero-section">
+        <Card id="budget-hero-section" style={overspent ? OVER_SURFACE_STYLE : undefined}>
           <div id="budget-spend-meter">
             <div className="flex justify-between items-end">
               <div>
@@ -369,10 +370,10 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
               <p className="mt-2 text-[11px] text-neg text-right">{budgetTotalError}</p>
             )}
             <div id="budget-tick-ruler" className="mt-3.5">
-              <Progress value={Math.min(spentPct, 100)} state={overspent ? "over" : "normal"} />
+              <Progress value={totalMeter.leftPct} state={totalMeter.state} />
             </div>
             <div className="text-[11px] font-semibold text-muted-foreground mt-2.5">
-              {spentPct}% used ·{" "}
+              {overspent ? "Budget used up" : `${Math.round(totalMeter.leftPct)}% left`} ·{" "}
               <span className="text-foreground">
                 <CurrencyText value={totalSpent} /> spent
               </span>
@@ -433,8 +434,8 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
         ) : (
           <div className="flex flex-col gap-2.5">
             {data.categories.map((cat, i) => {
-              const pct = cat.allocated > 0 ? cat.spent / cat.allocated : 0;
-              const isOver = cat.spent > cat.allocated && cat.allocated > 0;
+              const meter = budgetMeter(cat.spent, cat.allocated);
+              const isOver = meter.over;
               const isPending = cat.id.startsWith("temp_");
               return (
                 <Link
@@ -448,7 +449,7 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
                   aria-disabled={isPending}
                   className={`block active:scale-[0.99] transition-transform ${isPending ? "opacity-60 cursor-progress" : ""}`}
                 >
-                  <Card compact className="flex items-center gap-3">
+                  <Card compact className="flex items-center gap-3" style={isOver ? OVER_SURFACE_STYLE : undefined}>
                     <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-tile text-[17px]">
                       {cat.icon || "📁"}
                     </div>
@@ -458,19 +459,27 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
                           {cat.name}
                           <span className="text-[11px] font-medium text-muted-foreground"> · {cat.subtitle}</span>
                         </span>
+                        {/* Money left is the number that matters here, not money spent. */}
                         <span className="figure text-[13px] shrink-0">
-                          <span style={{ color: isOver ? "var(--neg)" : "var(--foreground)" }}>
-                            <CurrencyText value={cat.spent} />
-                          </span>
-                          <span className="text-muted-foreground"> / <CurrencyText value={cat.allocated} /></span>
+                          {isOver ? (
+                            <span className="text-neg">
+                              <CurrencyText value={cat.spent - cat.allocated} /> over
+                            </span>
+                          ) : (
+                            <span className="text-foreground">
+                              <CurrencyText value={cat.allocated - cat.spent} /> left
+                            </span>
+                          )}
+                          <span className="text-muted-foreground"> of <CurrencyText value={cat.allocated} /></span>
                         </span>
                       </div>
                       <Progress
                         className="mt-2 h-1.5"
-                        value={Math.min(pct, 1) * 100}
-                        state={isOver ? "over" : "normal"}
-                        color={isOver ? undefined : resolveColor({ id: cat.id, color: cat.color })}
+                        value={meter.leftPct}
+                        state={meter.state}
+                        color={meter.state === "normal" ? resolveColor({ id: cat.id, color: cat.color }) : undefined}
                       />
+
                     </div>
                   </Card>
                 </Link>

@@ -21,6 +21,7 @@ import {
   CategoryPickList,
 } from "@/components/sms/AllocateSheet";
 import { ItemDetailSheet, NEW_ITEM_ID } from "@/components/budget/ItemDetailSheet";
+import { OVER_SURFACE_STYLE } from "@/lib/budget/meter";
 
 interface SpendResult {
   itemName: string;
@@ -58,7 +59,7 @@ function AllocationStatus({ result }: { result: SpendResult }) {
   const statusLabel = isOver ? "Over budget" : isCritical ? "Almost empty" : isWarning ? "Running low" : "Logged";
 
   return (
-    <div className="rounded-tile bg-tile p-4 space-y-2">
+    <div className="rounded-tile bg-tile p-4 space-y-2" style={isOver ? OVER_SURFACE_STYLE : undefined}>
       <div className="flex items-baseline justify-between">
         <span className="text-[11px] font-bold text-foreground">{statusLabel}</span>
         <span
@@ -84,8 +85,8 @@ function AllocationStatus({ result }: { result: SpendResult }) {
         <div
           className="h-full rounded-full"
           style={{
-            width: isOver ? "100%" : `${barPct}%`,
-            background: isOver ? "var(--neg)" : "var(--accent-strong)",
+            width: `${barPct}%`,
+            background: isCritical ? "var(--neg)" : isWarning ? "var(--warn)" : "var(--accent-strong)",
           }}
         />
       </div>

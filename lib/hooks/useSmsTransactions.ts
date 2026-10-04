@@ -1,9 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getDB } from "@/lib/db";
-import type { SmsTransactionRow, SmsBlocklistRow } from "@/lib/db";
+import type { SmsTransactionRow, SmsBlocklistRow, BudgetItemRow } from "@/lib/db";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { ingestSmsClient } from "@/lib/sms/ingestClient";
-import { smsTemplateKey, type MerchantMatchType } from "@/lib/sms/match";
+import {
+  smsTemplateKey,
+  matchMerchantRule,
+  type MerchantMatchType,
+} from "@/lib/sms/match";
 import { nearLimitFromIDB } from "@/lib/sms/nearLimit";
 import { groupAllocationsForMonth, type AllocatedGroup } from "@/lib/sms/monthAllocations";
 import { randomUUID } from "@/lib/utils/uuid";
@@ -47,6 +51,7 @@ export function invalidateSmsCaches(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: NET_WORTH_KEY });
   qc.invalidateQueries({ queryKey: ["goals"] });
   qc.invalidateQueries({ queryKey: ["debt"] });
+  qc.invalidateQueries({ queryKey: MERCHANT_RULES_KEY });
   // Every SMS mutation funnels through here — re-mirror rules/targets/config
   // to native so a closed-app notification reflects the fresh numbers. No-op
   // on web; the signature guard inside makes redundant calls free.
@@ -213,55 +218,11 @@ export function useItemTransactions(itemId: string) {
   });
 }
 
-/** A remembered merchant, with the name of the item it auto-allocates to. */
-export interface RememberedMerchant {
-  matchType: MerchantMatchType;
-  pattern: string;
-  itemName: string | null;
-  itemIcon: string | null;
-  createdAt: string;
-}
-
-/**
- * The user's remembered merchants, newest first. Collapsed by
- * (match_type, pattern) — the rule identity — so an optimistic temp_ row and
- * its synced twin show once. The item is looked up via the rule's cached
- * budget_item_id, falling back to any item sharing its template_item_id.
- */
-export async function getMerchantRulesFromIDB(): Promise<RememberedMerchant[]> {
-  const db = getDB();
-  const [rules, items] = await Promise.all([
-    db.merchant_rules.toArray(),
-    db.budget_items.toArray(),
-  ]);
-  const itemsById = new Map(items.map((it) => [it.id, it]));
-  const byKey = new Map<string, RememberedMerchant>();
-  for (const r of rules) {
-    const key = `${r.match_type}|${r.pattern}`;
-    if (byKey.has(key)) continue;
-    const item =
-      (r.budget_item_id ? itemsById.get(r.budget_item_id) : undefined) ??
-      (r.template_item_id
-        ? items.find((it) => it.template_item_id === r.template_item_id)
-        : undefined);
-    byKey.set(key, {
-      matchType: r.match_type,
-      pattern: r.pattern,
-      itemName: item?.name ?? null,
-      itemIcon: item?.emoji ?? null,
-      createdAt: r.created_at,
-    });
-  }
-  return [...byKey.values()].sort((a, b) =>
-    b.createdAt.localeCompare(a.createdAt),
-  );
-}
-
 /** The user's remembered merchants (learned auto-allocate rules). */
 export function useMerchantRules() {
   return useQuery({
     queryKey: MERCHANT_RULES_KEY,
-    queryFn: () => getMerchantRulesFromIDB(),
+    queryFn: () => getDB().merchant_rules.toArray(),
   });
 }
 
@@ -299,6 +260,74 @@ export function useIngestSms() {
       qc.invalidateQueries({ queryKey: ["sms-picker"] });
       qc.invalidateQueries({ queryKey: ["categoryData"] });
     },
+  });
+}
+
+/**
+ * Optimistically learn (or re-point) a merchant rule in IDB so the *next* SMS
+ * from this merchant auto-applies immediately. Mirrors the server's
+ * upsertMerchantRule: an existing (match_type, pattern) rule is re-pointed
+ * instead of stacking a duplicate. The server creates the canonical row; the
+ * next hydrate reconciles.
+ */
+async function learnRuleIDB(
+  pattern: string,
+  matchType: MerchantMatchType,
+  item: BudgetItemRow,
+): Promise<void> {
+  const db = getDB();
+  const now = new Date().toISOString();
+  const durable = {
+    merchant_normalized: pattern,
+    // Durable cross-month key; budget_item_id/category_id are caches.
+    template_id: item.template_id ?? null,
+    template_item_id: item.template_item_id ?? null,
+    budget_item_id: item.id,
+    category_id: item.category_id,
+    auto_apply: true,
+    updated_at: now,
+  };
+  const existing = (await db.merchant_rules.toArray()).find(
+    (r) => r.match_type === matchType && r.pattern === pattern,
+  );
+  if (existing) {
+    await db.merchant_rules.update(existing.id, durable);
+  } else {
+    await db.merchant_rules.add({
+      id: `temp_${randomUUID()}`,
+      user_id: "__pending__",
+      match_type: matchType,
+      pattern,
+      times_applied: 0,
+      created_at: now,
+      ...durable,
+    });
+  }
+}
+
+/**
+ * Forget a merchant rule: drop every IDB row with this identity (an optimistic
+ * temp_ row and any synced twin) and enqueue a server DELETE keyed by
+ * (match_type, pattern) — the device never learns a learned rule's real id.
+ */
+async function forgetRuleIDB(
+  enqueue: ReturnType<typeof useEnqueue>,
+  rule: { pattern: string; matchType: MerchantMatchType },
+): Promise<void> {
+  const db = getDB();
+  const ids = (await db.merchant_rules.toArray())
+    .filter((r) => r.match_type === rule.matchType && r.pattern === rule.pattern)
+    .map((r) => r.id);
+  await db.merchant_rules.bulkDelete(ids);
+  await enqueue({
+    table: "merchant_rules",
+    operation: "DELETE",
+    // A real id as recordId protects the server row from being re-pulled by a
+    // hydrate that runs before this DELETE drains (buildProtectedIds).
+    recordId:
+      ids.find((id) => !id.startsWith("temp_")) ??
+      `${rule.matchType}:${rule.pattern}`,
+    payload: { pattern: rule.pattern, matchType: rule.matchType },
   });
 }
 
@@ -366,37 +395,11 @@ export function useCategorizeSms() {
       // row; next hydrate reconciles).
       let ruleLearned = false;
       if (input.rememberRule && txn.merchant_normalized && item) {
-        const now = new Date().toISOString();
-        const matchType = input.matchType ?? "contains";
-        const durable = {
-          merchant_normalized: txn.merchant_normalized,
-          // Durable cross-month key; budget_item_id/category_id are caches.
-          template_id: item.template_id ?? null,
-          template_item_id: item.template_item_id ?? null,
-          budget_item_id: input.budgetItemId,
-          category_id: item.category_id,
-          auto_apply: true,
-          updated_at: now,
-        };
-        // Re-point an existing rule for this merchant instead of stacking a
-        // duplicate (mirrors the server upsert) — keeps matching unambiguous.
-        const existing = (await db.merchant_rules.toArray()).find(
-          (r) =>
-            r.match_type === matchType && r.pattern === txn.merchant_normalized,
+        await learnRuleIDB(
+          txn.merchant_normalized,
+          input.matchType ?? "contains",
+          item,
         );
-        if (existing) {
-          await db.merchant_rules.update(existing.id, durable);
-        } else {
-          await db.merchant_rules.add({
-            id: `temp_${randomUUID()}`,
-            user_id: "__pending__",
-            match_type: matchType,
-            pattern: txn.merchant_normalized,
-            times_applied: 0,
-            created_at: now,
-            ...durable,
-          });
-        }
         ruleLearned = true;
       }
 
@@ -621,47 +624,6 @@ export function useUnblockSms() {
   });
 }
 
-/**
- * Forget a remembered merchant: drop every IDB rule with this identity (the
- * optimistic temp_ row and any synced twin) and enqueue a server DELETE keyed
- * by (match_type, pattern). Future SMS from the merchant land in Pending;
- * already-allocated transactions are left alone. Re-mirrors to native so the
- * closed-app receiver stops auto-sorting it too.
- */
-export function useForgetMerchant() {
-  const qc = useQueryClient();
-  const enqueue = useEnqueue();
-  return useMutation({
-    mutationFn: async (rule: {
-      pattern: string;
-      matchType: MerchantMatchType;
-    }) => {
-      const db = getDB();
-      const ids = (await db.merchant_rules.toArray())
-        .filter(
-          (r) => r.match_type === rule.matchType && r.pattern === rule.pattern,
-        )
-        .map((r) => r.id);
-      await db.merchant_rules.bulkDelete(ids);
-      await enqueue({
-        table: "merchant_rules",
-        operation: "DELETE",
-        // A real id as recordId protects the server row from being re-pulled
-        // by a hydrate that runs before this DELETE drains (buildProtectedIds).
-        recordId:
-          ids.find((id) => !id.startsWith("temp_")) ??
-          `${rule.matchType}:${rule.pattern}`,
-        payload: { pattern: rule.pattern, matchType: rule.matchType },
-      });
-      return { ok: true };
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: MERCHANT_RULES_KEY });
-      void pushSmsMirrorToNative();
-    },
-  });
-}
-
 /** Reverse a categorized txn's spend and move it back to pending. */
 export function useUnallocateSms() {
   const qc = useQueryClient();
@@ -714,6 +676,12 @@ export function useRecategorizeSms() {
       label?: string | null;
       /** Edited spend amount (defaults to the current amount). */
       amount?: number;
+      /**
+       * The Edit sheet's remember checkbox. true → learn / re-point the
+       * merchant's rule to the new item; false → forget the rule that
+       * currently matches this merchant; undefined → leave rules alone.
+       */
+      remember?: boolean;
     }) => {
       const db = getDB();
       const { txnId, txn } = await resolveTxn(db, input.txnId);
@@ -771,8 +739,23 @@ export function useRecategorizeSms() {
           newBudgetItemId: input.newBudgetItemId,
           ...(input.label !== undefined ? { label: input.label } : {}),
           ...(edited ? { amount: newAmount } : {}),
+          ...(input.remember ? { rememberRule: true } : {}),
         },
       });
+
+      const merchant = txn.merchant_normalized;
+      if (merchant && input.remember === true) {
+        const newItem = await db.budget_items.get(input.newBudgetItemId);
+        if (newItem) await learnRuleIDB(merchant, "contains", newItem);
+      } else if (merchant && input.remember === false) {
+        const rule = matchMerchantRule(merchant, await db.merchant_rules.toArray());
+        if (rule) {
+          await forgetRuleIDB(enqueue, {
+            pattern: rule.pattern,
+            matchType: rule.match_type,
+          });
+        }
+      }
       return { ok: true };
     },
     onSuccess: () => invalidateSmsCaches(qc),

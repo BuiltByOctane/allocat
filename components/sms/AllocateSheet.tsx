@@ -45,9 +45,15 @@ interface AllocateSheetProps {
   /**
    * "allocate" (default): first-time allocate of a pending txn — offers
    * remember-rule + create-new. "reallocate": move an already-categorized txn —
-   * existing items only, no rule learning.
+   * existing items only.
    */
   mode?: "allocate" | "reallocate";
+  /**
+   * Starting state of the remember checkbox each time a txn opens (default
+   * true). The Edit sheet passes whether the merchant is already remembered,
+   * so unticking it there forgets the merchant.
+   */
+  initialRemember?: boolean;
 }
 
 type View = "items" | "pick-category";
@@ -63,11 +69,12 @@ export function AllocateSheet({
   onClose,
   isPending,
   mode = "allocate",
+  initialRemember = true,
 }: AllocateSheetProps) {
   const isReallocate = mode === "reallocate";
   const [view, setView] = useState<View>("items");
   const [chosenItem, setChosenItem] = useState("");
-  const [remember, setRemember] = useState(true);
+  const [remember, setRemember] = useState(initialRemember);
   const [label, setLabel] = useState("");
   // Editable spend amount (seeded from the parsed amount). Kept as a string so
   // the field can be cleared/typed; parsed back to a number on Allocate.
@@ -82,7 +89,7 @@ export function AllocateSheet({
     if (txnId) {
       setView("items");
       setChosenItem(txn?.budget_item_id ?? "");
-      setRemember(true);
+      setRemember(initialRemember);
       setLabel(txn?.label ?? "");
       setAmountText(amount != null ? String(amount) : "");
     }
@@ -163,7 +170,7 @@ export function AllocateSheet({
                   placeholder={`Name this transaction (e.g. ${merchant})`}
                   className="w-full h-[42px] rounded-tile border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent-strong"
                 />
-                {!isReallocate && (
+                {(!isReallocate || txn?.merchant_normalized) && (
                   <button
                     type="button"
                     onClick={() => setRemember((v) => !v)}

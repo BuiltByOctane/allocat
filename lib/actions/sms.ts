@@ -364,6 +364,65 @@ export interface CategorizeSmsInput {
   amount?: number;
 }
 
+/**
+ * Learn (or re-point) the rule for a merchant. Re-points an existing rule with
+ * the same (match_type, pattern) rather than stacking a duplicate — so a
+ * corrected allocation overwrites the old (possibly stale) target instead of
+ * leaving a shadow rule behind. See resolveRuleItem.ts.
+ */
+async function upsertMerchantRule(
+  supabase: Supa,
+  userId: string,
+  rule: {
+    pattern: string;
+    matchType: MerchantRule["match_type"];
+    budgetItemId: string;
+    item: {
+      category_id: string;
+      template_id: string | null;
+      template_item_id: string | null;
+    };
+  },
+): Promise<string | null> {
+  const ruleFields = {
+    merchant_normalized: rule.pattern,
+    // Durable cross-month key; budget_item_id/category_id are now caches.
+    template_id: rule.item.template_id,
+    template_item_id: rule.item.template_item_id,
+    budget_item_id: rule.budgetItemId,
+    category_id: rule.item.category_id,
+    auto_apply: true,
+  };
+
+  const { data: existing } = await supabase
+    .from("merchant_rules")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("match_type", rule.matchType)
+    .eq("pattern", rule.pattern)
+    .maybeSingle();
+
+  if (existing) {
+    await supabase
+      .from("merchant_rules")
+      .update(ruleFields)
+      .eq("id", existing.id)
+      .eq("user_id", userId);
+    return existing.id;
+  }
+  const { data: created } = await supabase
+    .from("merchant_rules")
+    .insert({
+      user_id: userId,
+      match_type: rule.matchType,
+      pattern: rule.pattern,
+      ...ruleFields,
+    })
+    .select("id")
+    .single();
+  return created?.id ?? null;
+}
+
 /** Apply a user's category choice to a pending SMS txn, optionally learning a rule. */
 export async function categorizeSmsTransaction(input: CategorizeSmsInput) {
   const { supabase, user } = await getAuthed();
@@ -409,48 +468,12 @@ export async function categorizeSmsTransaction(input: CategorizeSmsInput) {
 
   let ruleId: string | null = null;
   if (input.rememberRule && txn.merchant_normalized) {
-    const matchType = input.matchType ?? "contains";
-    const ruleFields = {
-      merchant_normalized: txn.merchant_normalized,
-      // Durable cross-month key; budget_item_id/category_id are now caches.
-      template_id: item.template_id,
-      template_item_id: item.template_item_id,
-      budget_item_id: input.budgetItemId,
-      category_id: item.category_id,
-      auto_apply: true,
-    };
-
-    // Re-point an existing rule for this merchant rather than stacking a
-    // duplicate — so a corrected allocation overwrites the old (possibly stale)
-    // target instead of leaving a shadow rule behind. See resolveRuleItem.ts.
-    const { data: existing } = await supabase
-      .from("merchant_rules")
-      .select("id")
-      .eq("user_id", user.id)
-      .eq("match_type", matchType)
-      .eq("pattern", txn.merchant_normalized)
-      .maybeSingle();
-
-    if (existing) {
-      await supabase
-        .from("merchant_rules")
-        .update(ruleFields)
-        .eq("id", existing.id)
-        .eq("user_id", user.id);
-      ruleId = existing.id;
-    } else {
-      const { data: rule } = await supabase
-        .from("merchant_rules")
-        .insert({
-          user_id: user.id,
-          match_type: matchType,
-          pattern: txn.merchant_normalized,
-          ...ruleFields,
-        })
-        .select("id")
-        .single();
-      ruleId = rule?.id ?? null;
-    }
+    ruleId = await upsertMerchantRule(supabase, user.id, {
+      pattern: txn.merchant_normalized,
+      matchType: input.matchType ?? "contains",
+      budgetItemId: input.budgetItemId,
+      item,
+    });
   }
 
   await supabase
@@ -474,6 +497,11 @@ export interface RecategorizeSmsInput {
   txnId: string;
   newBudgetItemId: string;
   label?: string | null;
+  /**
+   * Learn / re-point the merchant's rule to `newBudgetItemId` (the Edit sheet's
+   * remember checkbox). Forgetting goes through deleteMerchantRule instead.
+   */
+  rememberRule?: boolean;
   /**
    * Edited spend amount. When provided and ≠ the current amount, the budget
    * item totals are reconciled against the new value and `amount` /
@@ -755,6 +783,23 @@ export async function recategorizeSmsTransaction(input: RecategorizeSmsInput) {
     .eq("id", input.txnId)
     .eq("user_id", user.id);
   if (error) throw new Error(error.message);
+
+  if (input.rememberRule && txn.merchant_normalized) {
+    const { data: item } = await supabase
+      .from("budget_items")
+      .select("category_id, template_id, template_item_id")
+      .eq("id", input.newBudgetItemId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (item) {
+      await upsertMerchantRule(supabase, user.id, {
+        pattern: txn.merchant_normalized,
+        matchType: "contains",
+        budgetItemId: input.newBudgetItemId,
+        item,
+      });
+    }
+  }
 
   const cur = await getUserCurrency(supabase, user.id);
   await logActivity(supabase, user.id, {

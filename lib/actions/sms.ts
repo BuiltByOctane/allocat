@@ -644,6 +644,28 @@ export async function deleteBlocklistEntry(id: string) {
   return { ok: true as const };
 }
 
+/**
+ * Forget a remembered merchant: delete its rule so future SMS from it land in
+ * Pending again. Keyed by (match_type, pattern) — the identity the categorize
+ * upsert uses — not by id, because the device only ever holds the optimistic
+ * temp_ id for a rule it learned. Idempotent. Already-allocated transactions
+ * stay where they are.
+ */
+export async function deleteMerchantRule(input: {
+  pattern: string;
+  matchType: MerchantRule["match_type"];
+}) {
+  const { supabase, user } = await getAuthed();
+  const { error } = await supabase
+    .from("merchant_rules")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("match_type", input.matchType)
+    .eq("pattern", input.pattern);
+  if (error) throw new Error(error.message);
+  return { ok: true as const };
+}
+
 /** Reverse a categorized txn's spend and move it back to pending. */
 export async function unallocateSmsTransaction(txnId: string) {
   const { supabase, user } = await getAuthed();

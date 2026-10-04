@@ -88,6 +88,7 @@ import {
   recategorizeSmsTransaction,
   reportSmsMistake,
   deleteBlocklistEntry,
+  deleteMerchantRule,
   type IngestSmsInput,
   type CategorizeSmsInput,
   type RecategorizeSmsInput,
@@ -435,6 +436,13 @@ export class SyncEngine {
           },
         ),
       DELETE: (p) => deleteBlocklistEntry(p.id as string),
+    },
+    merchant_rules: {
+      DELETE: (p) =>
+        deleteMerchantRule({
+          pattern: p.pattern as string,
+          matchType: p.matchType as "exact" | "contains" | "regex",
+        }),
     },
   };
 

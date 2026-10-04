@@ -18,7 +18,11 @@ import {
   useBlocklist,
   useUnblockSms,
   useMonthAllocations,
+  useMerchantRules,
+  useForgetMerchant,
+  type RememberedMerchant,
 } from "@/lib/hooks/useSmsTransactions";
+import { matchMerchantRule } from "@/lib/sms/match";
 import { useAddBudgetItem } from "@/lib/hooks/useBudget";
 import { useTourDriver } from "@/lib/tour/useTourDriver";
 import {
@@ -67,9 +71,13 @@ export default function SmsPage() {
   const report = useReportSmsMistake();
   const { data: blocklist } = useBlocklist();
   const unblock = useUnblockSms();
+  const { data: merchantRules } = useMerchantRules();
+  const forget = useForgetMerchant();
   const addItem = useAddBudgetItem();
 
-  const [tab, setTab] = useState<"pending" | "allocated" | "blocked">("pending");
+  const [tab, setTab] = useState<
+    "pending" | "allocated" | "merchants" | "blocked"
+  >("pending");
   // The categorized txn being moved/renamed via the reallocate sheet.
   const [reallocTxn, setReallocTxn] = useState<SmsTransactionRow | null>(null);
 
@@ -317,6 +325,21 @@ export default function SmsPage() {
     : undefined;
 
   const allocCount = allocGroups?.reduce((s, g) => s + g.txns.length, 0);
+
+  /** The remembered rule (if any) that auto-allocates this txn's merchant. */
+  function ruleFor(txn: SmsTransactionRow): RememberedMerchant | null {
+    if (!txn.merchant_normalized || !merchantRules?.length) return null;
+    const hit = matchMerchantRule(
+      txn.merchant_normalized,
+      merchantRules.map((r, i) => ({
+        id: String(i),
+        match_type: r.matchType,
+        pattern: r.pattern,
+        auto_apply: true,
+      })),
+    );
+    return hit ? merchantRules[Number(hit.id)] : null;
+  }
   const allocMonthLabel = new Date(allocPeriod.year, allocPeriod.month - 1, 1)
     .toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 
@@ -340,14 +363,16 @@ export default function SmsPage() {
               ? `Awaiting allocation${!isLoading && pending ? ` · ${pending.length}` : ""}`
               : tab === "allocated"
                 ? `Allocated${allocCount !== undefined ? ` · ${allocCount}` : ""}`
-                : `Blocked SMS types${blocklist ? ` · ${blocklist.length}` : ""}`}
+                : tab === "merchants"
+                  ? `Remembered merchants${merchantRules ? ` · ${merchantRules.length}` : ""}`
+                  : `Blocked SMS types${blocklist ? ` · ${blocklist.length}` : ""}`}
           </p>
         </div>
       </div>
 
       {/* Pending / Allocated tabs */}
       <div id="sms-tabs" className="flex gap-1 rounded-pill border border-border bg-card p-1">
-        {(["pending", "allocated", "blocked"] as const).map((t) => (
+        {(["pending", "allocated", "merchants", "blocked"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -502,6 +527,7 @@ export default function SmsPage() {
 
                 {group.txns.map((txn) => {
                   const when = txnDate(txn);
+                  const rule = ruleFor(txn);
                   return (
                     <div key={txn.id} className="flex flex-col gap-2">
                       <div className="flex items-start justify-between gap-3">
@@ -551,12 +577,78 @@ export default function SmsPage() {
                         >
                           Not a transaction
                         </button>
+                        {rule && (
+                          <button
+                            onClick={() =>
+                              forget.mutate({
+                                pattern: rule.pattern,
+                                matchType: rule.matchType,
+                              })
+                            }
+                            disabled={forget.isPending}
+                            className="h-8 px-3 rounded-pill border border-border text-xs font-semibold text-muted-foreground active:scale-[0.98] transition-transform disabled:opacity-40"
+                          >
+                            Forget merchant
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
                 })}
               </Card>
             ))
+          )}
+        </section>
+      )}
+
+      {/* Remembered merchants — learned auto-allocate rules, with forget */}
+      {tab === "merchants" && (
+        <section className="flex flex-col gap-3">
+          {!merchantRules || merchantRules.length === 0 ? (
+            <Card className="flex flex-col items-center gap-2 py-12 text-center">
+              <div className="flex size-12 items-center justify-center rounded-[14px] bg-tile text-muted-foreground mb-1">
+                <Inbox size={24} strokeWidth={1.7} />
+              </div>
+              <p className="text-sm font-bold text-foreground">No remembered merchants</p>
+              <p className="text-xs text-muted-foreground">
+                When you allocate a transaction with &ldquo;Remember this
+                merchant&rdquo; ticked, future spends there are allocated
+                automatically and listed here.
+              </p>
+            </Card>
+          ) : (
+            <>
+              <p className="rounded-xl border border-border bg-card px-3 py-2.5 text-[11.5px] font-medium text-muted-foreground">
+                Forgetting a merchant sends its future spends to Pending.
+                Already-allocated transactions stay where they are.
+              </p>
+              {merchantRules.map((r) => (
+                <Card
+                  key={`${r.matchType}|${r.pattern}`}
+                  className="flex items-center justify-between gap-3"
+                >
+                  <div className="flex min-w-0 flex-col">
+                    <span className="truncate text-[13px] font-bold text-foreground capitalize">
+                      {r.pattern}
+                    </span>
+                    <span className="truncate text-[11px] text-muted-foreground mt-0.5">
+                      {r.itemName
+                        ? `→ ${r.itemIcon ? `${r.itemIcon} ` : ""}${r.itemName}`
+                        : "→ Deleted item"}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() =>
+                      forget.mutate({ pattern: r.pattern, matchType: r.matchType })
+                    }
+                    disabled={forget.isPending}
+                    className="h-9 px-4 shrink-0 rounded-pill border border-border text-xs font-bold text-foreground active:scale-[0.98] transition-transform disabled:opacity-40"
+                  >
+                    Forget
+                  </button>
+                </Card>
+              ))}
+            </>
           )}
         </section>
       )}

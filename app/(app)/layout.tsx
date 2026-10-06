@@ -6,6 +6,7 @@ import { InstallPrompt } from "@/components/ui/InstallPrompt";
 import { AppBadgeReset } from "@/components/pwa/AppBadgeReset";
 import { PushPermissionPrompt } from "@/components/pwa/PushPermissionPrompt";
 import { SmsBridgeGate } from "@/components/pwa/SmsBridge";
+import { ShortcutReconcilerGate } from "@/components/pwa/ShortcutReconciler";
 import { PushRegistration } from "@/components/pwa/PushRegistration";
 import { SheetScrollLock } from "@/components/pwa/SheetScrollLock";
 import { KeyboardInset } from "@/components/pwa/KeyboardInset";
@@ -44,6 +45,7 @@ export default async function AppLayout({
         <InstallPrompt />
         <KeyboardInset />
         <SmsBridgeGate />
+        <ShortcutReconcilerGate />
         <PushRegistration />
         <SheetScrollLock />
         <TourPrompt />

@@ -97,4 +97,37 @@ Status of the in-app prerequisites:
 - Parsing is on-device regex only (`parseSmsTransaction.ts`); SMS that don't yield
   an amount become `pending` for manual allocation on `/sms`. Keep the JS and
   native (`SmsParser.java`) patterns in sync.
-- iOS builds (if added) must exclude this feature.
+- iOS builds (if added) must exclude the native receiver. iPhone capture works
+  differently — see below.
+
+## iPhone (PWA) — Shortcuts automation
+
+iOS gives apps no SMS access, but a Shortcuts **Message** automation ("Message
+Contains *debited*", Run Immediately) can run the shared **AlloCat Log** shortcut,
+which POSTs the message text to `POST /api/shortcut/sms` with
+`Authorization: Bearer <key>`.
+
+- **Keys**: `shortcut_keys` (hash only, one live key per user, service-role only).
+  Minted on the `/sms` setup card (`components/sms/ShortcutSetup.tsx` →
+  `lib/actions/shortcut-keys.ts`); the user pastes it over the
+  `PASTE-YOUR-ALLOCAT-KEY-HERE` Text action. Import Questions are not used — they
+  can't be saved since iOS 18.5.
+- **Endpoint** (`app/api/shortcut/sms/route.ts`): key → owner, then
+  `prepareShortcutSms` (same parser/OTP/debit rules as `ingestSmsClient`, no
+  sender) → `ingestShortcutTxn` inserts a **pending** row. The text is never
+  stored or logged. Always answers 200 `{status, notify?}`; the shortcut only
+  shows `notify`, so all wording is server-side and the shortcut never needs
+  reinstalling (re-adding it switches the user's automation off).
+- **Auto-allocation**: the request has no cookie session, so the spend cascade
+  (`quickLogSpend`) can't run server-side. `ShortcutReconciler` pulls
+  `sms_transactions` and runs `reapplyRulesToPending` when the PWA opens — the
+  same timing as Android SMS that arrive while the app is closed.
+- **Notifications**: a Shortcuts notification can only open the Shortcuts app,
+  so the endpoint also sends a **web push** (`notifyUser`, tap → `/sms?txn=<id>`).
+  If it reached an iPhone (UA stored at subscribe time), the reply carries no
+  `notify` and the shortcut stays silent; otherwise the shortcut shows its own.
+  Web push on iPhone needs the PWA on the Home Screen (iOS 16.4+, HTTPS) and is
+  enabled from the setup card (`lib/push/webPush.ts`). No service worker in
+  `next dev`, so this path is only testable on a production build.
+- **User guide**: `/guides/iphone-sms` (public).
+

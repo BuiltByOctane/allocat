@@ -633,7 +633,8 @@ type RefreshableTable =
   | "asset_value_history"
   | "debts"
   | "net_worth_snapshots"
-  | "reports";
+  | "reports"
+  | "sms_transactions";
 
 /**
  * Refresh the given tables after a sync that may have triggered server-side

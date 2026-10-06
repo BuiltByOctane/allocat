@@ -34,6 +34,10 @@ import {
   useLinkTargets,
 } from "@/lib/hooks/useAllocatePicker";
 import type { SmsTransactionRow } from "@/lib/db";
+import { Capacitor } from "@capacitor/core";
+import { ShortcutSetup } from "@/components/sms/ShortcutSetup";
+import { isIosDevice, IOS_SHORTCUT_URL } from "@/lib/shortcut/config";
+import { useAppFlags } from "@/lib/hooks/useAppFlags";
 
 function money(row: SmsTransactionRow): string {
   if (typeof row.amount !== "number") return "-";
@@ -73,6 +77,24 @@ export default function SmsPage() {
   const addItem = useAddBudgetItem();
 
   const [tab, setTab] = useState<"pending" | "allocated" | "blocked">("pending");
+
+  // iPhone web/PWA users get the Shortcuts-based capture setup instead of the
+  // Android SMS permission flow. Resolved after mount (navigator is client-only).
+  const { sms_enabled } = useAppFlags();
+  const [iosSetup, setIosSetup] = useState<{ show: boolean; open: boolean }>({
+    show: false,
+    open: false,
+  });
+  useEffect(() => {
+    if (Capacitor.isNativePlatform() || !isIosDevice()) return;
+    const open = new URLSearchParams(window.location.search).get("setup") === "ios";
+    // Until the shared shortcut is published, the card is reachable only via
+    // the explicit ?setup=ios link (the guide page / testing), not shown to all.
+    if (!IOS_SHORTCUT_URL && !open) return;
+    // Client-only platform detection; can't run during render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIosSetup({ show: true, open });
+  }, []);
   // The categorized txn being moved/renamed via the reallocate sheet.
   const [reallocTxn, setReallocTxn] = useState<SmsTransactionRow | null>(null);
 
@@ -365,6 +387,8 @@ export default function SmsPage() {
         </div>
       </div>
 
+      {sms_enabled && iosSetup.show && <ShortcutSetup defaultOpen={iosSetup.open} />}
+
       {/* Pending / Allocated tabs */}
       <div id="sms-tabs" className="flex gap-1 rounded-pill border border-border bg-card p-1">
         {(["pending", "allocated", "blocked"] as const).map((t) => (
@@ -407,7 +431,10 @@ export default function SmsPage() {
             <p className="text-sm font-bold text-foreground">Nothing to allocate</p>
             <p className="text-xs text-muted-foreground">
               When a bank or UPI payment SMS arrives, AlloCat reads it and lists it
-              here so you can drop it into a budget category. (Android app only.)
+              here so you can drop it into a budget category.
+              {iosSetup.show
+                ? " On iPhone, set up auto-capture above."
+                : " (Android app, or iPhone via Shortcuts.)"}
             </p>
           </Card>
         ) : (

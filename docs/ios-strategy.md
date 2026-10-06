@@ -87,25 +87,15 @@ Note the PWA-launch quirk: `Open URL` from a Shortcut opens **Safari**, not the 
 home-screen web app. So Shortcuts should hit the **API** (`Get Contents of URL`), not deep
 link, whenever the goal is "log without leaving what I'm doing".
 
-## 3a. What is built (2026-09-16)
+## 3a. What is built (2026-10-06)
 
-Phase 0's manual-log path is implemented and tested; the notification-automation
-path in §2 is not (it is the same `POST /api/shortcut/log` endpoint with a body
-the shortcut parses, so it needs no new server work).
-
-| Piece | Where |
-|---|---|
-| `api_tokens` table, hash-only | `supabase/migrations/20260916000000_api_tokens.sql` |
-| Token mint / hash / bearer auth | `lib/server/api-tokens.ts` |
-| Token UI actions | `lib/actions/api-tokens.ts` |
-| Picker feed | `app/api/shortcut/items/route.ts` + `lib/shortcut/choices.ts` |
-| Log endpoint | `app/api/shortcut/log/route.ts` + `lib/shortcut/logBody.ts` |
-| Session-free spend engine | `lib/server/spend-core.ts`, `assets-core.ts`, `debts-core.ts` |
-| Setup screen | `/shortcut` → `components/shortcut/ShortcutSetupPage.tsx` |
-
-Two things remain, both requiring a physical iPhone: authoring the shortcut and
-publishing its iCloud link into `NEXT_PUBLIC_IOS_SHORTCUT_URL`. Until that is
-set, `/shortcut` shows the step-by-step build recipe instead of an Add button.
+The earlier version of this section listed an `api_tokens` table and
+`/api/shortcut/*` routes; that code never landed. What exists now is SMS capture
+via the **Message** automation trigger (iOS 17+, available today — no iOS 27
+needed), validated on a device: it fires locked and unlocked, and the shortcut
+receives the full SMS body (not the sender). See `docs/sms-feature.md` →
+"iPhone (PWA) — Shortcuts automation" for the design, and `/guides/iphone-sms`
+for the user-facing setup.
 
 ## 4. Phase 0 — ship on the existing PWA (days, no Mac, no $99)
 

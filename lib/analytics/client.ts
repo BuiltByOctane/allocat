@@ -37,7 +37,9 @@ export type AnalyticsEvent =
   | "theme_changed"
   | "currency_changed"
   | "founding_banner_dismissed"
-  | "founding_claimed";
+  | "founding_claimed"
+  | "shortcut_setup_opened"
+  | "shortcut_key_created";
 
 export function platform(): "android" | "pwa" | "web" {
   if (Capacitor.isNativePlatform()) return "android";

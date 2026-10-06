@@ -7,7 +7,7 @@ export const metadata = {
   alternates: { canonical: "https://allocat.xyz/legal/privacy-policy" },
 };
 
-const UPDATED = "3 October 2026";
+const UPDATED = "6 October 2026";
 
 export default function PrivacyPolicyPage() {
   return (
@@ -29,8 +29,10 @@ export default function PrivacyPolicyPage() {
           AlloCat is a personal-finance app operated by Octane Innovations. Your
           financial data is yours. We
           collect the minimum needed to run the app, we never sell your data, and
-          we never share it with third-party advertisers or data brokers. The raw
-          content of your SMS messages never leaves your device.
+          we never share it with third-party advertisers or data brokers. On
+          Android, the raw content of your SMS messages never leaves your device.
+          On iPhone, if you set up automatic capture, the text of matching bank
+          messages is sent to us to be read and is never stored.
         </p>
       </Section>
 
@@ -70,6 +72,39 @@ export default function PrivacyPolicyPage() {
             name, the direction (spend/credit), and a date - together with a
             one-way hashed de-duplication key, are synced to your account so your
             budgets stay consistent across devices.
+          </li>
+        </ul>
+      </Section>
+
+      <Section title="SMS transaction tracking (iPhone, optional)">
+        <p>
+          iPhone apps cannot read SMS. If you choose to set it up, an automation
+          you create in Apple&rsquo;s Shortcuts app sends the text of incoming
+          messages that contain a keyword you pick (for example
+          &ldquo;debited&rdquo;) to AlloCat. We handle this data as follows:
+        </p>
+        <ul className="ml-5 list-disc space-y-2">
+          <li>
+            <strong>Only what you choose.</strong> AlloCat never sees any message
+            unless it matches the keyword in your own automation. The sender is
+            not sent.
+          </li>
+          <li>
+            <strong>Read once, never stored.</strong> Our server reads the message
+            text in memory to find the amount and merchant, using the same parser
+            as the Android app, then discards it. It is not written to our
+            database or our logs, and is never sent to any third party or AI
+            provider.
+          </li>
+          <li>
+            <strong>What is kept.</strong> The same extracted fields as on Android
+            - amount, currency, merchant, direction and time - plus one-way hashed
+            keys used to avoid duplicates.
+          </li>
+          <li>
+            <strong>Your key.</strong> The shortcut identifies your account with a
+            personal key. We store only a one-way hash of it. You can switch it off
+            at any time in the app, which stops all capture immediately.
           </li>
         </ul>
       </Section>
@@ -181,7 +216,9 @@ export default function PrivacyPolicyPage() {
       <Section title="Your choices and data deletion">
         <p>
           You can withdraw SMS or notification permission at any time in Android
-          settings; the related features simply stop. You may permanently delete
+          settings; the related features simply stop. On iPhone, delete the
+          automation in the Shortcuts app or turn off iPhone auto-capture in
+          AlloCat. You may permanently delete
           your account and all associated data in-app under{" "}
           <strong>Profile → Delete account</strong>, or by following the steps on
           our{" "}

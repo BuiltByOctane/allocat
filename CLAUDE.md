@@ -106,7 +106,7 @@ Auth uses `@supabase/ssr` with cookie-based sessions:
 
 **Every matched request pays a Supabase Auth round trip**, so the matcher excludes `/api/*` and static assets, and `skipsAuth()` (`lib/supabase/middleware.ts`) additionally skips server-action POSTs (`Next-Action` header). Both authenticate themselves and — unlike an RSC render — can write the refreshed session cookie, so the middleware pass was pure duplication (a 40-item sync drain made 40 extra auth calls). Keep document/RSC navigations on the auth path: that is where the cookie rotation and the protected-route redirect happen.
 
-Protected paths (redirect to `/auth/login` if no user): `/dashboard`, `/budget`, `/net-worth`, `/debt`, `/onboarding`. `/goals`, `/profile`, `/activity` are *not* in this list — confirm intent before adding new private routes.
+Protected paths (redirect to `/auth/login` if no user) live in `PROTECTED_PREFIXES` (`lib/supabase/middleware.ts`): every top-level route under `app/(app)/`, plus `/onboarding` and `/admin`. Adding a new `(app)` route means adding it there — `lib/supabase/middleware.test.ts` fails otherwise.
 
 ### Monetization: free now, founding-member waitlist
 
@@ -173,6 +173,8 @@ The core native feature reads incoming bank/UPI **transaction** SMS and auto-cat
 1. **Native receiver** (`android/app/src/main/java/app/allocat/mobile/`) — `SmsTransactionReceiver` fires even when the app is killed. `SmsFilter` applies an on-device financial-only gate (Play SMS-policy compliance). Messages are queued in `SmsQueue` (SharedPreferences); if the WebView is foregrounded, a `smsReceived` event is emitted. When app is closed, `SmsParser` (a Java port of the TS parser) + `SmsNotifier` post a transaction notification directly. **Only `RECEIVE_SMS` is declared — the app never reads the existing inbox (`READ_SMS` is intentionally absent).**
 2. **JS bridge** — `components/pwa/SmsBridge.tsx` (native-only) listens for live events and drains the queue silently on open (native already notified). It mirrors merchant rules / quick-allocate targets / notif config into native via the `SmsReader` Capacitor plugin (`lib/native/SmsReader.ts`).
 3. **Ingest** — `lib/sms/ingestClient.ts` parses on-device (`lib/ai/parseSmsTransaction.ts`, regex, **no LLM/network** — removed for Play compliance), matches a learned `merchant_rules` row (`lib/sms/match.ts`, exact > contains > regex), writes an optimistic `sms_transactions` IDB row, and enqueues a sync INSERT. **Privacy: only extracted fields + a hashed dedupe key sync to the server; the raw SMS body/sender stay on-device.** Only debits are tracked; credits are ignored.
+
+**iPhone capture (PWA, no native app)**: a Shortcuts "Message" automation POSTs the bank SMS text to `app/api/shortcut/sms/route.ts`, authenticated by a per-user key (`shortcut_keys`, hash only). Parsed server-side in memory, never stored; lands as a pending row that `ShortcutReconciler` auto-allocates on next open via `reapplyRulesToPending`. Setup card `components/sms/ShortcutSetup.tsx`, public guide `/guides/iphone-sms`. Details in `docs/sms-feature.md`.
 
 Keep `SmsParser.java` regex in sync with `lib/ai/parseSmsTransaction.ts` (both are documented as needing to match). Notifications go through `lib/native/notify.ts` (`notifyLocal`, no-op on web); sounds in `android/app/src/main/res/raw/` mapped by `lib/native/notifSounds.ts`.
 

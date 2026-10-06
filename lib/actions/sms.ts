@@ -9,10 +9,8 @@ import {
   matchMerchantRules,
   type MerchantRule,
 } from "@/lib/sms/match";
-import {
-  selectRuleForPeriod,
-  type RuleResolutionContext,
-} from "@/lib/sms/resolveRuleItem";
+import { selectRuleForPeriod } from "@/lib/sms/resolveRuleItem";
+import { loadPeriodContext } from "@/lib/server/sms-period";
 import {
   isAmountEdited,
   effectiveAmount,
@@ -35,46 +33,6 @@ async function getAuthed() {
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
 
-/**
- * Load the resolver context (budget + its items) for the SMS's period — its
- * occurred_at month, falling back to now. Read-only: never creates a budget.
- * See lib/sms/resolveRuleItem.ts.
- */
-async function loadPeriodContext(
-  supabase: Supa,
-  userId: string,
-  occurredAt: string | null | undefined,
-): Promise<RuleResolutionContext> {
-  const d = occurredAt ? new Date(occurredAt) : new Date();
-  const month = d.getMonth() + 1;
-  const year = d.getFullYear();
-
-  const { data: budget } = await supabase
-    .from("budgets")
-    .select("id, template_id")
-    .eq("user_id", userId)
-    .eq("month", month)
-    .eq("year", year)
-    .maybeSingle();
-
-  let items: RuleResolutionContext["items"] = [];
-  if (budget) {
-    const { data: cats } = await supabase
-      .from("categories")
-      .select("id")
-      .eq("budget_id", budget.id);
-    const catIds = (cats ?? []).map((c) => c.id);
-    if (catIds.length > 0) {
-      const { data: rows } = await supabase
-        .from("budget_items")
-        .select("id, template_id, template_item_id")
-        .in("category_id", catIds);
-      items = rows ?? [];
-    }
-  }
-
-  return { budget: budget ?? null, items };
-}
 
 export interface IngestSmsInput {
   /**

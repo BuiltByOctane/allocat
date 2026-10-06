@@ -663,6 +663,34 @@ export type Database = {
         }
         Relationships: []
       }
+      shortcut_keys: {
+        Row: {
+          id: string
+          user_id: string
+          key_hash: string
+          key_prefix: string
+          created_at: string
+          last_used_at: string | null
+          last_capture_at: string | null
+          revoked_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          key_hash: string
+          key_prefix: string
+          created_at?: string
+          last_used_at?: string | null
+          last_capture_at?: string | null
+          revoked_at?: string | null
+        }
+        Update: {
+          last_used_at?: string | null
+          last_capture_at?: string | null
+          revoked_at?: string | null
+        }
+        Relationships: []
+      }
       founding_members: {
         Row: {
           user_id: string

@@ -32,6 +32,8 @@ export interface PushResult {
   subscriptions: number;
   sent: number;
   failed: number;
+  /** User agents (as stored at subscribe time) of the devices that accepted the push. */
+  deliveredUserAgents?: Array<string | null>;
   /** Why nothing was attempted, when nothing was. */
   skipped?: "vapid_unconfigured" | "service_unavailable" | "query_failed" | "no_subscriptions";
 }
@@ -62,7 +64,7 @@ export async function notifyUser(
 
   const { data: subs, error } = await supabase
     .from("push_subscriptions")
-    .select("id, endpoint, p256dh, auth")
+    .select("id, endpoint, p256dh, auth, user_agent")
     .eq("user_id", userId);
 
   if (error) {
@@ -75,6 +77,7 @@ export async function notifyUser(
   const stale: string[] = [];
   let sent = 0;
   let failed = 0;
+  const deliveredUserAgents: Array<string | null> = [];
 
   await Promise.allSettled(
     subs.map(async (s) => {
@@ -84,6 +87,7 @@ export async function notifyUser(
           body,
         );
         sent += 1;
+        deliveredUserAgents.push(s.user_agent);
         await supabase
           .from("push_subscriptions")
           .update({ last_used_at: new Date().toISOString() })
@@ -104,5 +108,5 @@ export async function notifyUser(
     await supabase.from("push_subscriptions").delete().in("endpoint", stale);
   }
 
-  return { subscriptions: subs.length, sent, failed };
+  return { subscriptions: subs.length, sent, failed, deliveredUserAgents };
 }

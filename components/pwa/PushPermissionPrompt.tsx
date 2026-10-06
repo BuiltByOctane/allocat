@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useHaptic } from "@/lib/hooks/useHaptic";
-import { subscribePush } from "@/lib/actions/push";
-import { urlBase64ToUint8Array } from "@/lib/utils/urlBase64";
+import { enableWebPush } from "@/lib/push/webPush";
 
 const SESSION_KEY = "push-prompt-sessions";
 const DISMISS_KEY = "push-prompt-dismissed";
@@ -43,42 +42,11 @@ export function PushPermissionPrompt() {
     haptic.medium();
     setBusy(true);
     try {
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
+      const state = await enableWebPush();
+      if (state !== "on") {
         setVisible(false);
         return;
       }
-      const vapid = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-      if (!vapid) {
-        console.warn("NEXT_PUBLIC_VAPID_PUBLIC_KEY missing");
-        setVisible(false);
-        return;
-      }
-
-      const reg = await navigator.serviceWorker.ready;
-      const existing = await reg.pushManager.getSubscription();
-      const sub =
-        existing ??
-        (await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapid) as BufferSource,
-        }));
-
-      const json = sub.toJSON() as {
-        endpoint?: string;
-        keys?: { p256dh?: string; auth?: string };
-      };
-      if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
-        throw new Error("Subscription missing keys");
-      }
-
-      await subscribePush(
-        {
-          endpoint: json.endpoint,
-          keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
-        },
-        navigator.userAgent,
-      );
       haptic.success();
       setVisible(false);
     } catch (err) {

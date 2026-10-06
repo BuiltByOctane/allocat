@@ -28,6 +28,7 @@ export const ACCOUNT_SCOPED_LS_KEYS = [
   "allocat-last-seen-day",
   "allocat-supporter-checked-day",
   "allocat-fcm-registered",
+  "allocat-ios-shortcut",
 ] as const;
 
 /** Removes the account-scoped keys from the given storage. Pure — testable. */

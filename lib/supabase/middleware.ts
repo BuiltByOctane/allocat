@@ -21,6 +21,36 @@ export function skipsAuth(request: NextRequest): boolean {
   return false;
 }
 
+/**
+ * Routes a signed-out visitor is redirected away from. Every top-level route
+ * under `app/(app)/` MUST be listed here — a missing entry renders the app
+ * shell to anyone (see middleware.test.ts, which enforces this).
+ */
+export const PROTECTED_PREFIXES = [
+  "/dashboard",
+  "/budget",
+  "/net-worth",
+  "/debt",
+  "/goals",
+  "/profile",
+  "/activity",
+  "/sms",
+  "/support",
+  "/transactions",
+  "/notifications",
+  "/reports",
+  "/onboarding",
+  // Admin portal. The allowlist check itself lives in lib/admin/guard.ts and
+  // 404s non-admins; this only spares a signed-out visitor a blank render.
+  "/admin",
+] as const;
+
+export function isProtectedPath(pathname: string): boolean {
+  return PROTECTED_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -55,15 +85,7 @@ export async function updateSession(request: NextRequest) {
 
   // Redirect logic: simple protection for /auth vs app routes
   const isAuthRoute = request.nextUrl.pathname.startsWith("/auth");
-  const isProtectedAppRoute =
-    request.nextUrl.pathname.startsWith("/dashboard") ||
-    request.nextUrl.pathname.startsWith("/budget") ||
-    request.nextUrl.pathname.startsWith("/net-worth") ||
-    request.nextUrl.pathname.startsWith("/debt") ||
-    request.nextUrl.pathname.startsWith("/onboarding") ||
-    // Admin portal. The allowlist check itself lives in lib/admin/guard.ts and
-    // 404s non-admins; this only spares a signed-out visitor a blank render.
-    request.nextUrl.pathname.startsWith("/admin");
+  const isProtectedAppRoute = isProtectedPath(request.nextUrl.pathname);
 
   if (!user && isProtectedAppRoute) {
     const url = request.nextUrl.clone();

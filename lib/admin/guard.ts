@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
@@ -31,8 +32,12 @@ export function isAdminEmail(email: string | null | undefined): boolean {
  * Call this at the top of EVERY admin entry point, not just the layout: server
  * actions and route handlers are independently addressable and a layout check
  * does not protect them.
+ *
+ * Wrapped in `cache()` so the layout and the page of one navigation share a
+ * single `auth.getUser()` round trip instead of paying one each. `cache()` is
+ * request-scoped, so it never spans users.
  */
-export async function requireAdmin(): Promise<User> {
+export const requireAdmin = cache(async (): Promise<User> => {
   const supabase = await createClient();
   const {
     data: { user },
@@ -42,4 +47,4 @@ export async function requireAdmin(): Promise<User> {
     notFound();
   }
   return user;
-}
+});

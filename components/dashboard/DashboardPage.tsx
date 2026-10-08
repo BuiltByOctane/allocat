@@ -12,6 +12,7 @@ import { useHaptic } from "@/lib/hooks/useHaptic";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { useIsFoundingMember } from "@/lib/hooks/useFoundingMember";
 import { FoundingBanner } from "@/components/founding/FoundingBanner";
+import { IosShortcutPrompt } from "@/components/sms/IosShortcutPrompt";
 import { CrownBadge } from "@/components/ui/CrownBadge";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import { getTimeGreeting } from "@/lib/utils/greeting";
@@ -148,6 +149,8 @@ export default function DashboardPage({ data }: DashboardProps) {
           </Link>
         </div>
       </div>
+
+      <IosShortcutPrompt />
 
       {/* Budget hero (lime) */}
       <div id="dashboard-budget-summary">

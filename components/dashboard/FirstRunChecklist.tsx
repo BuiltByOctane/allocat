@@ -7,6 +7,7 @@ import { useHaptic } from "@/lib/hooks/useHaptic";
 import { MaterialSymbol } from "@/components/ui/MaterialSymbol";
 import type { DashboardEmptySource } from "@/lib/utils/dashboard-empty";
 import { readDraftPlan } from "@/lib/budget/quizDraft";
+import { IOS_SETUP_HREF, useIosShortcut } from "@/lib/shortcut/useIosShortcut";
 
 const DISMISS_KEY = "allocat-firstrun-dismissed";
 
@@ -41,6 +42,7 @@ export function useFirstRun(
   const [dismissed, setDismissed] = useState(false);
   const [hasDebt, setHasDebt] = useState(false);
   const [draftPlanName, setDraftPlanName] = useState<string | null>(null);
+  const iosShortcut = useIosShortcut();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -108,6 +110,18 @@ export function useFirstRun(
       href: "/goals",
       done: goalDone,
     },
+    ...(iosShortcut.eligible
+      ? [
+          {
+            id: "ios-shortcut",
+            icon: "sms",
+            title: "Auto-log spends from bank SMS",
+            description: "A one-time iPhone Shortcuts setup.",
+            href: IOS_SETUP_HREF,
+            done: iosShortcut.setUp,
+          },
+        ]
+      : []),
   ];
 
   const doneCount = items.filter((i) => i.done).length;

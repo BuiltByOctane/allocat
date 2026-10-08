@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { Capacitor } from "@capacitor/core";
-import { ChevronRight, History, MessageSquareText, CheckCircle2, Lightbulb, RotateCcw, MessageSquareHeart, Receipt, FileBarChart, Sun, Moon, ShieldCheck, Trash2 } from "lucide-react";
+import { ChevronRight, History, MessageSquareText, Smartphone, CheckCircle2, Lightbulb, RotateCcw, MessageSquareHeart, Receipt, FileBarChart, Sun, Moon, ShieldCheck, Trash2 } from "lucide-react";
 import UserAvatar from "@/components/profile/UserAvatar";
 import AvatarPickerSheet from "@/components/profile/AvatarPickerSheet";
 import { Card } from "@/components/ui/Card";
@@ -33,12 +33,14 @@ import { CrownBadge } from "@/components/ui/CrownBadge";
 import { FeedbackSheet } from "@/components/feedback/FeedbackSheet";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import { track } from "@/lib/analytics/client";
+import { IOS_SETUP_HREF, useIosShortcut } from "@/lib/shortcut/useIosShortcut";
 
 export default function ProfilePage() {
   const { data: profile } = useProfile();
   const { engine } = useSyncContext();
   const tour = useTour();
   const isFoundingMember = useIsFoundingMember();
+  const iosShortcut = useIosShortcut();
   const { resolvedTheme, setTheme } = useTheme();
 
   // Quick-action dock on /profile = light/dark toggle. Icon reflects the
@@ -167,6 +169,25 @@ export default function ProfilePage() {
           <ChevronRight size={16} strokeWidth={2} className="text-muted-foreground" />
         </Card>
       </Link>
+
+      {iosShortcut.eligible && (
+        <Link href={IOS_SETUP_HREF} className="block active:scale-[0.99] transition-transform">
+          <Card compact className="flex items-center gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-tile text-muted-foreground">
+              <Smartphone size={18} strokeWidth={1.7} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13.5px] font-bold text-foreground">iPhone auto-capture</div>
+              <div className="text-[10.5px] font-medium text-muted-foreground mt-0.5">
+                {iosShortcut.setUp
+                  ? "Set up · manage your Shortcuts key"
+                  : "Log spends from bank SMS via Shortcuts"}
+              </div>
+            </div>
+            <ChevronRight size={16} strokeWidth={2} className="text-muted-foreground" />
+          </Card>
+        </Link>
+      )}
 
       <Link href="/transactions" className="block active:scale-[0.99] transition-transform">
         <Card compact className="flex items-center gap-3">

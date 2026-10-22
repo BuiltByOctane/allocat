@@ -23,6 +23,8 @@ const ALLOWED_EVENTS = new Set([
   "cta_login_click",
   "cta_kofi_click",
   "pwa_ios_help",
+  "cta_waitlist_open",
+  "waitlist_join",
 ]);
 
 const ALLOWED_ORIGIN = "https://grow.allocat.xyz";

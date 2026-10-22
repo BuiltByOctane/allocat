@@ -827,6 +827,33 @@ export type Database = {
         }
         Relationships: []
       }
+      ios_waitlist: {
+        Row: {
+          id: string
+          email: string
+          preference: string
+          source: string | null
+          platform: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          email: string
+          preference: string
+          source?: string | null
+          platform?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          preference?: string
+          source?: string | null
+          platform?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       landing_events: {
         Row: {
           id: string

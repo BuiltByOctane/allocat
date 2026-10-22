@@ -247,6 +247,60 @@ export async function listFoundingMembers(): Promise<FoundingMembersSummary> {
   return { total: count ?? data?.length ?? 0, rows: (data ?? []) as FoundingMemberRow[] };
 }
 
+export interface WaitlistRow {
+  email: string;
+  preference: string;
+  source: string | null;
+  platform: string | null;
+  created_at: string;
+}
+
+export interface WaitlistSummary {
+  total: number;
+  native: number;
+  web: number;
+  either: number;
+  new_7d: number;
+  rows: WaitlistRow[];
+}
+
+/**
+ * iOS waitlist (landing → app/api/waitlist). Counts are exact head queries so
+ * the native/web split stays right past the row cap; `rows` is newest first.
+ * Pass `limit: null` for the full list (CSV export).
+ */
+export async function listWaitlist({ limit = 500 }: { limit?: number | null } = {}): Promise<WaitlistSummary> {
+  const client = createServiceClient();
+  const head = () => client.from("ios_waitlist").select("id", { count: "exact", head: true });
+  const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
+
+  let rowsQuery = client
+    .from("ios_waitlist")
+    .select("email, preference, source, platform, created_at")
+    .order("created_at", { ascending: false });
+  if (limit !== null) rowsQuery = rowsQuery.limit(limit);
+
+  const [all, native, web, either, recent, rows] = await Promise.all([
+    head(),
+    head().eq("preference", "native"),
+    head().eq("preference", "web"),
+    head().eq("preference", "either"),
+    head().gte("created_at", weekAgo),
+    rowsQuery,
+  ]);
+  const error = all.error ?? native.error ?? web.error ?? either.error ?? recent.error ?? rows.error;
+  if (error) throw new Error(`listWaitlist: ${error.message}`);
+
+  return {
+    total: all.count ?? 0,
+    native: native.count ?? 0,
+    web: web.count ?? 0,
+    either: either.count ?? 0,
+    new_7d: recent.count ?? 0,
+    rows: (rows.data ?? []) as WaitlistRow[],
+  };
+}
+
 export interface AppConfigRow {
   min_android_version_code: number;
   update_message: string | null;

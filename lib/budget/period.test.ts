@@ -6,6 +6,9 @@ import {
   daysElapsed,
   daysLeft,
   findCoveringBudget,
+  findOverlappingBudget,
+  pickBudgetForPeriod,
+  budgetContainsDate,
   formatPeriodLabel,
   labelForDate,
   periodDays,
@@ -205,6 +208,146 @@ describe("period", () => {
         startDay: 15, current: null, deleteBudgetIds: [], deleteLabels: [], redate: [], nextStart: null,
       });
       expect(planStartDaySwitch({ today: "2026-10-28", oldStartDay: 15, newStartDay: 15, budgets: [oct1] })).toBeNull();
+    });
+  });
+  describe("stepResolved across a clipped gap", () => {
+    const sep: StoredBudgetPeriod = { id: "sep", month: 9, year: 2026, period_start: "2026-09-01", period_end: "2026-09-30" };
+    const nov: StoredBudgetPeriod = { id: "nov", month: 11, year: 2026, period_start: "2026-11-15", period_end: "2026-12-14" };
+    const budgets = [sep, nov];
+    const chain = [
+      { month: 9, year: 2026, start: "2026-09-01", end: "2026-09-30", budgetId: "sep" },
+      { month: 9, year: 2026, start: "2026-10-01", end: "2026-10-14", budgetId: null },
+      { month: 10, year: 2026, start: "2026-10-15", end: "2026-11-14", budgetId: null },
+      { month: 11, year: 2026, start: "2026-11-15", end: "2026-12-14", budgetId: "nov" },
+      { month: 12, year: 2026, start: "2026-12-15", end: "2027-01-14", budgetId: null },
+    ];
+
+    it("steps forward through the gap", () => {
+      let cur = resolvePeriod("2026-09-10", budgets, 15);
+      expect(cur).toEqual(chain[0]);
+      for (const want of chain.slice(1)) {
+        cur = stepResolved(cur, 1, budgets, 15);
+        expect(cur).toEqual(want);
+      }
+    });
+
+    it("steps back in exact reverse", () => {
+      let cur = resolvePeriod("2026-12-20", budgets, 15);
+      expect(cur).toEqual(chain[4]);
+      for (const want of chain.slice(0, 4).reverse()) {
+        cur = stepResolved(cur, -1, budgets, 15);
+        expect(cur).toEqual(want);
+      }
+    });
+  });
+
+  describe("planStartDaySwitch edge cases", () => {
+    it("wraps the year (Dec → Jan)", () => {
+      const dec: StoredBudgetPeriod = { id: "dec", month: 12, year: 2026, period_start: "2026-12-01", period_end: "2026-12-31" };
+      const jan: StoredBudgetPeriod = { id: "jan", month: 1, year: 2027, period_start: "2027-01-01", period_end: "2027-01-31" };
+      const plan = planStartDaySwitch({ today: "2026-12-20", oldStartDay: 1, newStartDay: 15, budgets: [dec, jan] })!;
+      expect(plan.current).toEqual({ budgetId: "dec", month: 12, year: 2026, start: "2026-12-01", end: "2027-01-14" });
+      expect(plan.nextStart).toBe("2027-01-15");
+      expect(plan.deleteBudgetIds).toEqual([]);
+      expect(plan.redate).toEqual([{ budgetId: "jan", start: "2027-01-15", end: "2027-02-14" }]);
+    });
+
+    it("ends the current cycle on a leap day (28 → 1)", () => {
+      // Start day 28 cycles: Dec 2027 (past), Jan 2028 (current), Feb, Mar.
+      const dec: StoredBudgetPeriod = { id: "dec", month: 12, year: 2027, period_start: "2027-12-28", period_end: "2028-01-27" };
+      const jan: StoredBudgetPeriod = { id: "jan", month: 1, year: 2028, period_start: "2028-01-28", period_end: "2028-02-27" };
+      const feb: StoredBudgetPeriod = { id: "feb", month: 2, year: 2028, period_start: "2028-02-28", period_end: "2028-03-27" };
+      const mar: StoredBudgetPeriod = { id: "mar", month: 3, year: 2028, period_start: "2028-03-28", period_end: "2028-04-27" };
+      const plan = planStartDaySwitch({ today: "2028-02-10", oldStartDay: 28, newStartDay: 1, budgets: [dec, jan, feb, mar] })!;
+      expect(plan.current).toEqual({ budgetId: "jan", month: 1, year: 2028, start: "2028-01-28", end: "2028-02-29" });
+      expect(plan.nextStart).toBe("2028-03-01");
+      expect(plan.deleteBudgetIds).toEqual(["feb"]);
+      expect(plan.deleteLabels).toEqual([{ month: 2, year: 2028 }]);
+      expect(plan.redate).toEqual([{ budgetId: "mar", start: "2028-03-01", end: "2028-03-31" }]);
+    });
+
+    it("15 → 1 with several future budgets deletes the absorbed label and redates the rest", () => {
+      const sep: StoredBudgetPeriod = { id: "sep", month: 9, year: 2026, period_start: "2026-09-15", period_end: "2026-10-14" };
+      const nov: StoredBudgetPeriod = { id: "nov", month: 11, year: 2026, period_start: "2026-11-15", period_end: "2026-12-14" };
+      const dec: StoredBudgetPeriod = { id: "dec", month: 12, year: 2026, period_start: "2026-12-15", period_end: "2027-01-14" };
+      const jan: StoredBudgetPeriod = { id: "jan", month: 1, year: 2027, period_start: "2027-01-15", period_end: "2027-02-14" };
+      const plan = planStartDaySwitch({ today: "2026-11-05", oldStartDay: 15, newStartDay: 1, budgets: [sep, oct15, nov, dec, jan] })!;
+      expect(plan.current).toEqual({ budgetId: "oct", month: 10, year: 2026, start: "2026-10-15", end: "2026-11-30" });
+      expect(plan.deleteBudgetIds).toEqual(["nov"]);
+      expect(plan.redate).toEqual([
+        { budgetId: "dec", start: "2026-12-01", end: "2026-12-31" },
+        { budgetId: "jan", start: "2027-01-01", end: "2027-01-31" },
+      ]);
+      expect(plan.nextStart).toBe("2026-12-01");
+    });
+  });
+
+  describe("budgetContainsDate", () => {
+    it("is inclusive on both ends", () => {
+      expect(budgetContainsDate(oct15, "2026-10-15")).toBe(true);
+      expect(budgetContainsDate(oct15, "2026-11-14")).toBe(true);
+      expect(budgetContainsDate(oct15, "2026-10-14")).toBe(false);
+      expect(budgetContainsDate(oct15, "2026-11-15")).toBe(false);
+    });
+
+    it("treats a missing range as the calendar month of the label", () => {
+      const legacy: StoredBudgetPeriod = { id: "sep", month: 9, year: 2026 };
+      expect(budgetContainsDate(legacy, "2026-09-30")).toBe(true);
+      expect(budgetContainsDate(legacy, "2026-10-01")).toBe(false);
+    });
+  });
+
+  describe("findOverlappingBudget", () => {
+    const sep: StoredBudgetPeriod = { id: "sep", month: 9, year: 2026, period_start: "2026-09-01", period_end: "2026-09-30" };
+
+    it("finds a partial overlap that does not contain the start", () => {
+      // Aug at start day 15 (Aug 15 – Sep 14) runs into a stored calendar September.
+      const aug = rangeForLabel({ month: 8, year: 2026 }, [sep], 15);
+      expect(findOverlappingBudget(aug, [sep])).toBe(sep);
+    });
+
+    it("finds a stored budget containing the whole range", () => {
+      const octStretched: StoredBudgetPeriod = { id: "oct", month: 10, year: 2026, period_start: "2026-10-15", period_end: "2026-11-30" };
+      expect(findOverlappingBudget({ start: "2026-11-01", end: "2026-11-30" }, [octStretched])).toBe(octStretched);
+    });
+
+    it("is null for touching but disjoint ranges", () => {
+      expect(findOverlappingBudget({ start: "2026-10-01", end: "2026-10-31" }, [sep])).toBeNull();
+      expect(findOverlappingBudget({ start: "2026-08-01", end: "2026-08-31" }, [sep])).toBeNull();
+    });
+
+    it("ignores the range's own budget", () => {
+      const self = rangeForLabel({ month: 9, year: 2026 }, [sep], 1);
+      expect(findOverlappingBudget(self, [sep])).toBeNull();
+    });
+
+    it("uses the calendar month for a row missing its range", () => {
+      const legacy: StoredBudgetPeriod = { id: "sep", month: 9, year: 2026 };
+      expect(findOverlappingBudget({ start: "2026-09-30", end: "2026-10-29" }, [legacy])).toBe(legacy);
+    });
+  });
+
+  describe("pickBudgetForPeriod", () => {
+    const period = { month: 10, year: 2026, start: "2026-10-15", end: "2026-11-14", budgetId: "temp_1" };
+
+    it("prefers the row with the resolved id", () => {
+      const byId = { ...oct15, id: "temp_1" };
+      expect(pickBudgetForPeriod(period, [oct15, byId], "2026-10-20")).toBe(byId);
+    });
+
+    it("falls back to a same-label row whose range contains the date (temp id swapped)", () => {
+      expect(pickBudgetForPeriod(period, [oct15], "2026-10-20")).toBe(oct15);
+    });
+
+    it("rejects a same-label row whose range does not contain the date", () => {
+      const noId = { ...period, budgetId: null };
+      expect(pickBudgetForPeriod(noId, [oct1], "2026-11-05")).toBeUndefined();
+      expect(pickBudgetForPeriod(noId, [oct1], "2026-10-20")).toBe(oct1);
+    });
+
+    it("ignores rows of other labels", () => {
+      const nov: StoredBudgetPeriod = { id: "nov", month: 11, year: 2026, period_start: "2026-10-01", period_end: "2026-12-01" };
+      expect(pickBudgetForPeriod({ ...period, budgetId: null }, [nov], "2026-10-20")).toBeUndefined();
     });
   });
   describe("findCoveringBudget", () => {

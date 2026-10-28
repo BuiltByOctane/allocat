@@ -216,6 +216,51 @@ export function findCoveringBudget(
   );
 }
 
+/** Whether a stored budget's range (missing ⇒ calendar month of its label) contains `date`. */
+export function budgetContainsDate(b: StoredBudgetPeriod, date: ISODate): boolean {
+  const r = storedRange(b);
+  return r.start <= date && date <= r.end;
+}
+
+/**
+ * A stored budget whose range intersects `range` anywhere (full interval
+ * overlap, not just the start), ignoring `range.budgetId` itself. Creating a
+ * budget for `range` while this is non-null would be refused by the server's
+ * `budget_period_overlap` guard.
+ */
+export function findOverlappingBudget<T extends StoredBudgetPeriod>(
+  range: PeriodRange & { budgetId?: string | null },
+  budgets: T[],
+): T | null {
+  return (
+    budgets.find((b) => {
+      if (range.budgetId && b.id === range.budgetId) return false;
+      const r = storedRange(b);
+      return r.start <= range.end && range.start <= r.end;
+    }) ?? null
+  );
+}
+
+/**
+ * The budget row behind a resolved period: the row with `period.budgetId` if
+ * present among `candidates` (a temp id may have been swapped by sync), else a
+ * row with the same label whose range contains `date`. A same-label row that
+ * does NOT cover the date is someone else's cycle and is rejected.
+ */
+export function pickBudgetForPeriod<T extends StoredBudgetPeriod>(
+  period: ResolvedPeriod,
+  candidates: T[],
+  date: ISODate,
+): T | undefined {
+  if (period.budgetId) {
+    const byId = candidates.find((b) => b.id === period.budgetId);
+    if (byId) return byId;
+  }
+  return candidates.find(
+    (b) => labelIndex(b) === labelIndex(period) && budgetContainsDate(b, date),
+  );
+}
+
 /**
  * The adjacent cycle. Steps by date, not label, so a label absorbed into a
  * longer stored budget is skipped by construction.

@@ -19,6 +19,7 @@ import {
   isReconcileStale,
 } from "@/lib/db/hydrate";
 import { prefetchAllQueries } from "@/lib/db/prefetch";
+import { CURRENT_PERIOD_KEY } from "@/lib/hooks/useCurrentPeriod";
 import { installRandomUUIDPolyfill } from "@/lib/utils/uuid";
 import type { SyncQueueItem } from "@/lib/db";
 
@@ -183,6 +184,11 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       if (item.table === "debts") {
         qc.invalidateQueries({ queryKey: ["debt"] });
         qc.invalidateQueries({ queryKey: ["dashboard"] });
+      }
+      // A synced budgets INSERT swaps its temp id for the real one in IDB; the
+      // cached current period still carries the temp `budgetId`.
+      if (item.table === "budgets") {
+        qc.invalidateQueries({ queryKey: CURRENT_PERIOD_KEY });
       }
 
       // CARRY_SETUP back-stamps durable identity onto the SOURCE month's budget

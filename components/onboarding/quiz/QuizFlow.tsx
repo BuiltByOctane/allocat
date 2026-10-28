@@ -8,11 +8,13 @@ import { Q2Life } from "./screens/Q2Life";
 import { Q3Dream } from "./screens/Q3Dream";
 import { Q4Treat } from "./screens/Q4Treat";
 import { Q5Amount } from "./screens/Q5Amount";
+import { Q0Payday } from "./screens/Q0Payday";
 import { RevealScreen } from "./screens/RevealScreen";
 import { quizPlanToServerCategories, type QuizPlan } from "@/lib/budget/quizMapping";
 import { saveDraftPlan } from "@/lib/budget/quizDraft";
 import { labelForDate, toISODate } from "@/lib/budget/period";
 import { getBudgetForPeriod, setupBudgetFromTemplate } from "@/lib/actions/budget";
+import { setBudgetStartDay } from "@/lib/actions/budget-cycle";
 import { markUserAsOnboarded } from "@/lib/actions/profile";
 
 export interface QuizFlowProps {
@@ -43,10 +45,26 @@ export function QuizFlow({ onDone }: QuizFlowProps) {
     []
   );
 
-  async function handleSave(plan: QuizPlan) {
+  /** Best-effort: a brand-new user has no budgets, so only the profile's
+   *  start day changes. Returns the start day the profile actually holds. */
+  async function applyPayday(): Promise<number> {
+    if (answers.payday === 1) return 1;
     try {
-      // Start day 1 until the quiz asks for a payday answer (Task 9).
-      const label = labelForDate(toISODate(new Date()), 1);
+      const res = await setBudgetStartDay(answers.payday, toISODate(new Date()), {
+        deleteBudgetIds: [],
+        currentEnd: null,
+      });
+      return res.ok ? answers.payday : 1;
+    } catch {
+      return 1;
+    }
+  }
+
+  async function handleSave(plan: QuizPlan) {
+    const startDay = await applyPayday();
+    try {
+      // The DB trigger stamps the new budget from the profile's start day.
+      const label = labelForDate(toISODate(new Date()), startDay);
       const budget = await getBudgetForPeriod(label.month, label.year);
       await setupBudgetFromTemplate(
         budget.id,
@@ -67,6 +85,7 @@ export function QuizFlow({ onDone }: QuizFlowProps) {
 
   async function handleDiscard(plan: QuizPlan) {
     saveDraftPlan(plan);
+    await applyPayday();
     try {
       await markUserAsOnboarded();
     } catch {
@@ -81,6 +100,7 @@ export function QuizFlow({ onDone }: QuizFlowProps) {
     { key: "q3", hideNext: true, content: <Q3Dream answers={answers} dispatch={dispatch} deckNav={deckNav} /> },
     { key: "q4", hideNext: true, content: <Q4Treat answers={answers} dispatch={dispatch} deckNav={deckNav} /> },
     { key: "q5", hideNext: true, content: <Q5Amount answers={answers} dispatch={dispatch} deckNav={deckNav} /> },
+    { key: "q0", hideNext: true, content: <Q0Payday answers={answers} dispatch={dispatch} deckNav={deckNav} /> },
     {
       key: "reveal",
       hideNext: true,

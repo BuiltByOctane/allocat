@@ -11,6 +11,7 @@ import {
   type DreamId,
   type ResolvedQuizAnswers,
 } from "@/lib/budget/quizMapping";
+import { clampStartDay } from "@/lib/budget/period";
 
 /**
  * Quiz answer state. Every `*Skipped` flag is purely informational (e.g. for
@@ -24,9 +25,12 @@ export interface QuizAnswersState extends ResolvedQuizAnswers {
   dreamSkipped: boolean;
   treatSkipped: boolean;
   amountSkipped: boolean;
+  /** Budget cycle start day (1-28). Not a plan input; 1 = calendar month. */
+  payday: number;
+  paydaySkipped: boolean;
 }
 
-const initialState: QuizAnswersState = {
+export const initialState: QuizAnswersState = {
   habit: HABIT_DEFAULT,
   habitSkipped: false,
   life: [],
@@ -37,6 +41,8 @@ const initialState: QuizAnswersState = {
   treatSkipped: false,
   amount: AMOUNT_DEFAULT,
   amountSkipped: false,
+  payday: 1,
+  paydaySkipped: false,
 };
 
 export type QuizAction =
@@ -49,13 +55,15 @@ export type QuizAction =
   | { type: "TOGGLE_TREAT"; id: string }
   | { type: "SKIP_TREAT" }
   | { type: "SET_AMOUNT"; amount: number }
-  | { type: "SKIP_AMOUNT" };
+  | { type: "SKIP_AMOUNT" }
+  | { type: "SET_PAYDAY"; payday: number }
+  | { type: "SKIP_PAYDAY" };
 
 function toggle(list: string[], id: string): string[] {
   return list.includes(id) ? list.filter((i) => i !== id) : [...list, id];
 }
 
-function reducer(state: QuizAnswersState, action: QuizAction): QuizAnswersState {
+export function reducer(state: QuizAnswersState, action: QuizAction): QuizAnswersState {
   switch (action.type) {
     case "SET_HABIT":
       return { ...state, habit: action.habit, habitSkipped: false };
@@ -77,6 +85,10 @@ function reducer(state: QuizAnswersState, action: QuizAction): QuizAnswersState 
       return { ...state, amount: action.amount, amountSkipped: false };
     case "SKIP_AMOUNT":
       return { ...state, amount: AMOUNT_DEFAULT, amountSkipped: true };
+    case "SET_PAYDAY":
+      return { ...state, payday: clampStartDay(action.payday), paydaySkipped: false };
+    case "SKIP_PAYDAY":
+      return { ...state, payday: 1, paydaySkipped: true };
     default:
       return state;
   }

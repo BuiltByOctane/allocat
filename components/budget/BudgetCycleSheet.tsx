@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { liveQuery } from "dexie";
 import { Drawer as DrawerPrimitive } from "vaul";
 import { useQueryClient } from "@tanstack/react-query";
@@ -14,13 +14,14 @@ import {
 import { Button } from "@/components/ui/Button";
 import { getDB } from "@/lib/db";
 import { forceRefreshTable } from "@/lib/db/hydrate";
-import { getStartDayIDB, getStoredPeriodsIDB } from "@/lib/budget/periodIDB";
+import { getStartDayChoiceIDB, getStoredPeriodsIDB } from "@/lib/budget/periodIDB";
 import {
+  clampStartDay,
   planStartDaySwitch,
   toISODate,
   type StoredBudgetPeriod,
 } from "@/lib/budget/period";
-import { absorbedWarning, switchPreviewText } from "@/lib/budget/cycleText";
+import { absorbedWarning, cycleRangeText, switchPreviewText } from "@/lib/budget/cycleText";
 import { setBudgetStartDay } from "@/lib/actions/budget-cycle";
 import { CURRENT_PERIOD_KEY } from "@/lib/hooks/useCurrentPeriod";
 import { PROFILE_KEY } from "@/lib/hooks/useProfile";
@@ -37,12 +38,18 @@ const DAYS = Array.from({ length: 28 }, (_, i) => i + 1);
  * Another device may have created budgets this one hasn't seen; the server's
  * mismatch guard is the backstop if the pull fails.
  */
-async function loadFresh(): Promise<{ startDay: number; budgets: StoredBudgetPeriod[] }> {
+interface Loaded {
+  /** The stored choice; null = never chosen (plans from the effective day 1). */
+  choice: number | null;
+  budgets: StoredBudgetPeriod[];
+}
+
+async function loadFresh(): Promise<Loaded> {
   await Promise.all([forceRefreshTable("budgets"), forceRefreshTable("profiles")]).catch((e) =>
     console.warn("Budget cycle preview refresh failed:", e),
   );
-  const [startDay, budgets] = await Promise.all([getStartDayIDB(), getStoredPeriodsIDB()]);
-  return { startDay, budgets };
+  const [choice, budgets] = await Promise.all([getStartDayChoiceIDB(), getStoredPeriodsIDB()]);
+  return { choice, budgets };
 }
 
 function countQueued(): Promise<number> {
@@ -57,6 +64,18 @@ interface BudgetCycleSheetProps {
   onClose: () => void;
   /** Opened from inside another vaul drawer (BudgetSetupSheet). */
   nested?: boolean;
+  /**
+   * The first-time pick before a new account's first budget (see
+   * `useStartDayGate`): onboarding's question as the title, and if the fresh
+   * profile turns out to hold a day already (chosen on another device) the
+   * sheet skips straight to `onSaved` without asking.
+   */
+  firstTime?: boolean;
+  /**
+   * Called once the day is stored and the current-period query has re-read
+   * IDB, right before `onClose` — the caller resumes what the pick gated.
+   */
+  onSaved?: () => void;
 }
 
 /**
@@ -64,13 +83,19 @@ interface BudgetCycleSheetProps {
  * Save runs the server action directly (never queued, never optimistic) and
  * then re-pulls the affected tables.
  */
-export function BudgetCycleSheet({ open, onClose, nested = false }: BudgetCycleSheetProps) {
+export function BudgetCycleSheet({
+  open,
+  onClose,
+  nested = false,
+  firstTime = false,
+  onSaved,
+}: BudgetCycleSheetProps) {
   const onOpenChange = (o: boolean) => {
     if (!o) onClose();
   };
   const content = (
     <DrawerContent className="max-h-[90dvh]">
-      <CycleSheetBody onClose={onClose} />
+      <CycleSheetBody onClose={onClose} firstTime={firstTime} onSaved={onSaved} />
     </DrawerContent>
   );
   if (nested) {
@@ -88,24 +113,47 @@ export function BudgetCycleSheet({ open, onClose, nested = false }: BudgetCycleS
 }
 
 /** Mounted only while the sheet is open, so every open starts fresh. */
-function CycleSheetBody({ onClose }: { onClose: () => void }) {
+function CycleSheetBody({
+  onClose,
+  firstTime,
+  onSaved,
+}: {
+  onClose: () => void;
+  firstTime: boolean;
+  onSaved?: () => void;
+}) {
   const qc = useQueryClient();
   const haptic = useHaptic();
-  const [loaded, setLoaded] = useState<{ startDay: number; budgets: StoredBudgetPeriod[] } | null>(null);
+  const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Latest callbacks for the async load below (it must not re-run on re-render).
+  const callbacks = useRef({ onClose, onSaved });
+  useEffect(() => {
+    callbacks.current = { onClose, onSaved };
+  });
+
   useEffect(() => {
     let cancelled = false;
-    void loadFresh().then((fresh) => {
-      if (!cancelled) setLoaded(fresh);
+    void loadFresh().then(async (fresh) => {
+      if (cancelled) return;
+      if (firstTime && fresh.choice !== null) {
+        // Already chosen (another device / a lagging cache): never ask again.
+        await qc.invalidateQueries({ queryKey: CURRENT_PERIOD_KEY });
+        if (cancelled) return;
+        callbacks.current.onSaved?.();
+        callbacks.current.onClose();
+        return;
+      }
+      setLoaded(fresh);
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [firstTime, qc]);
 
   // A queued op could target a budget the switch deletes — wait for the drain.
   useEffect(() => {
@@ -116,21 +164,25 @@ function CycleSheetBody({ onClose }: { onClose: () => void }) {
     return () => sub.unsubscribe();
   }, []);
 
-  const current = loaded?.startDay ?? null;
+  // Unchosen ⇒ no day is pre-selected or marked current: the user picks one.
+  const current = loaded?.choice ?? null;
+  const unchosen = loaded !== null && loaded.choice === null;
   const selected = picked ?? current;
 
   const plan = useMemo(() => {
     if (!loaded || selected === null) return null;
     return planStartDaySwitch({
       today: toISODate(new Date()),
-      oldStartDay: loaded.startDay,
+      oldStartDay: clampStartDay(loaded.choice),
       newStartDay: selected,
       budgets: loaded.budgets,
     });
   }, [loaded, selected]);
+  // A first-time pick is saveable even when it changes no budget (the 1st).
+  const canSave = selected !== null && (plan !== null || unchosen);
 
   const save = async () => {
-    if (!plan || selected === null || syncBusy || saving) return;
+    if (!canSave || selected === null || syncBusy || saving) return;
     setError(null);
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
       setError(OFFLINE_COPY);
@@ -145,8 +197,8 @@ function CycleSheetBody({ onClose }: { onClose: () => void }) {
         return;
       }
       const res = await setBudgetStartDay(selected, toISODate(new Date()), {
-        deleteBudgetIds: plan.deleteBudgetIds,
-        currentEnd: plan.current?.end ?? null,
+        deleteBudgetIds: plan?.deleteBudgetIds ?? [],
+        currentEnd: plan?.current?.end ?? null,
       });
       if (!res.ok) {
         // Server saw budgets this preview didn't: re-pull and re-preview.
@@ -164,8 +216,10 @@ function CycleSheetBody({ onClose }: { onClose: () => void }) {
         forceRefreshTable("budget_items"),
         forceRefreshTable("sms_transactions"),
       ]).catch((e) => console.warn("Budget cycle refresh failed:", e));
+      // The current period first and awaited: a resumed create (onSaved) must
+      // see the cycle under the new day.
+      await qc.invalidateQueries({ queryKey: CURRENT_PERIOD_KEY }).catch(() => {});
       for (const queryKey of [
-        CURRENT_PERIOD_KEY,
         PROFILE_KEY,
         DASHBOARD_KEY,
         ["budget"],
@@ -178,6 +232,7 @@ function CycleSheetBody({ onClose }: { onClose: () => void }) {
       }
       void pushSmsMirrorToNative();
       track("budget_cycle_changed");
+      onSaved?.();
       onClose();
     } catch {
       setError("Couldn't reach AlloCat. Check your connection and try again.");
@@ -191,6 +246,14 @@ function CycleSheetBody({ onClose }: { onClose: () => void }) {
     preview = (
       <div className="rounded-2xl bg-tile px-4 py-3 text-[12.5px] font-medium text-muted-foreground animate-pulse">
         Checking your budgets…
+      </div>
+    );
+  } else if (!plan && unchosen && selected !== null) {
+    preview = (
+      <div className="rounded-2xl bg-tile px-4 py-3">
+        <p className="text-[12.5px] font-medium leading-snug text-foreground">
+          Your budgets will run {cycleRangeText(selected)}.
+        </p>
       </div>
     );
   } else if (plan) {
@@ -215,8 +278,12 @@ function CycleSheetBody({ onClose }: { onClose: () => void }) {
   return (
     <div className="flex flex-col overflow-y-auto overscroll-contain">
       <DrawerHeader className="text-left">
-        <DrawerTitle>Budget cycle</DrawerTitle>
-        <DrawerDescription>Pick the day each budget starts — usually your payday.</DrawerDescription>
+        <DrawerTitle>{firstTime ? "When does your salary arrive?" : "Budget cycle"}</DrawerTitle>
+        <DrawerDescription>
+          {firstTime
+            ? "Your budget will start on this day. You can change it later in Profile."
+            : "Pick the day each budget starts — usually your payday."}
+        </DrawerDescription>
       </DrawerHeader>
 
       <div className="px-4 pb-6 space-y-4">
@@ -260,7 +327,7 @@ function CycleSheetBody({ onClose }: { onClose: () => void }) {
 
         {preview}
 
-        {syncBusy && plan && (
+        {syncBusy && canSave && (
           <p className="text-[12px] font-medium text-muted-foreground">{SYNC_BLOCK_COPY}</p>
         )}
         {error && <p className="text-[12px] font-semibold text-neg">{error}</p>}
@@ -269,7 +336,7 @@ function CycleSheetBody({ onClose }: { onClose: () => void }) {
           variant="lime"
           block
           loading={saving}
-          disabled={!plan || syncBusy || saving}
+          disabled={!canSave || syncBusy || saving}
           onClick={() => void save()}
         >
           Save

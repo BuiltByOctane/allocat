@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Drawer } from "vaul";
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState, type FormEvent } from "react";
 import { Receipt } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useHaptic } from "@/lib/hooks/useHaptic";
@@ -34,6 +34,7 @@ import { BudgetSetupSheet } from "@/components/budget/BudgetSetupSheet";
 import { BudgetQuickSetup } from "@/components/budget/BudgetQuickSetup";
 import { readDraftPlan, type QuizDraft } from "@/lib/budget/quizDraft";
 import { budgetMeter, OVER_SURFACE_STYLE } from "@/lib/budget/meter";
+import type { StartDayGate } from "@/components/budget/useStartDayGate";
 
 const DETAIL_HINT_KEY = "allocat-budget-detail-hint-dismissed";
 
@@ -134,13 +135,21 @@ interface BudgetData {
   categories: CategoryData[];
 }
 
+/** A budget-creating action held while a new account picks its start day. */
+export type BudgetCreateIntent =
+  | { kind: "setup" }
+  | { kind: "carry" }
+  | { kind: "total"; amount: number };
+
 interface BudgetPageProps {
   data: BudgetData;
   defaultMonth: number;
   defaultYear: number;
+  /** Asks a never-chosen account for its start day before the first row is created. */
+  startDayGate: StartDayGate<BudgetCreateIntent>;
 }
 
-export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPageProps) {
+export default function BudgetPage({ data, defaultMonth, defaultYear, startDayGate }: BudgetPageProps) {
   const router = useRouter();
   const haptic = useHaptic();
   const qc = useQueryClient();
@@ -164,6 +173,9 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
   // budget). Shown next to whichever action triggered it.
   const [ensureError, setEnsureError] = useState<{ at: "total" | "category"; message: string } | null>(null);
   const effectiveBudgetId = data.id || resolvedId;
+  // No budget row yet ⇒ the next action creates one: a never-chosen account
+  // picks its start day first (startDayGate), then the action resumes.
+  const needsRow = !effectiveBudgetId;
 
   // A budget plan the onboarding quiz built but the user deferred ("Not now
   // — keep it for later"). Only relevant while no budget row exists yet.
@@ -200,8 +212,11 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
   // (the row is ensured lazily on save).
   const openSetup = useCallback(() => {
     haptic.light();
-    setIsQuickSetupOpen(true);
-  }, [haptic]);
+    void (async () => {
+      if (needsRow && !(await startDayGate.request({ kind: "setup" }))) return;
+      setIsQuickSetupOpen(true);
+    })();
+  }, [haptic, needsRow, startDayGate]);
 
   // Edit a custom template from the quick-setup picker.
   const openEditTemplateFromPicker = useCallback(
@@ -258,13 +273,19 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
   const carryMutation = useCarryBudget();
   const carrySource = useCarrySource(defaultMonth, defaultYear);
   const isEmpty = data.categories.length === 0 && data.totalBudget === 0;
-  const handleCarry = useCallback(() => {
-    haptic.light();
+  const runCarry = useCallback(() => {
     carryMutation.mutate(
       { month: defaultMonth, year: defaultYear, auto: false },
       { onSuccess: (r) => (r.carried ? haptic.success() : haptic.error()) }
     );
   }, [haptic, carryMutation, defaultMonth, defaultYear]);
+  const handleCarry = useCallback(() => {
+    haptic.light();
+    void (async () => {
+      if (needsRow && !(await startDayGate.request({ kind: "carry" }))) return;
+      runCarry();
+    })();
+  }, [haptic, needsRow, startDayGate, runCarry]);
 
   const totalAllocated = data.categories.reduce((s, c) => s + c.allocated, 0);
   const totalSpent = data.categories.reduce((s, c) => s + c.spent, 0);
@@ -322,6 +343,13 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
 
   function handleUpdateBudget(totalAmount: number) {
     void (async () => {
+      if (needsRow && !(await startDayGate.request({ kind: "total", amount: totalAmount }))) return;
+      runUpdateBudget(totalAmount);
+    })();
+  }
+
+  function runUpdateBudget(totalAmount: number) {
+    void (async () => {
       setEnsureError(null);
       let budgetId: string;
       try {
@@ -368,6 +396,21 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
       haptic.error();
     }
   }
+
+  // Replay the action the start-day pick interrupted. Runs after the render
+  // that carries the re-resolved period, so it targets the cycle under the
+  // chosen day (this page may have re-mounted in between).
+  const replayCreate = useEffectEvent((intent: BudgetCreateIntent) => {
+    if (intent.kind === "setup") setIsQuickSetupOpen(true);
+    else if (intent.kind === "carry") runCarry();
+    else runUpdateBudget(intent.amount);
+  });
+  const { resume, clearResume } = startDayGate;
+  useEffect(() => {
+    if (!resume) return;
+    clearResume();
+    replayCreate(resume.intent);
+  }, [resume, clearResume]);
 
   const addCategoryError = addCategoryMutation.isError
     ? addCategoryMutation.error instanceof Error

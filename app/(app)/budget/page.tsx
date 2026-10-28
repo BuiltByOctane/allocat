@@ -2,7 +2,8 @@
 
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import BudgetPage from "@/components/budget/BudgetPage";
+import BudgetPage, { type BudgetCreateIntent } from "@/components/budget/BudgetPage";
+import { useStartDayGate } from "@/components/budget/useStartDayGate";
 import { useBudgetData } from "@/lib/hooks/useBudget";
 import { useTour } from "@/lib/tour/useTour";
 import { useTourDriver } from "@/lib/tour/useTourDriver";
@@ -60,6 +61,10 @@ function BudgetContent() {
 
   const router = useRouter();
   const { isHydrated } = useSync();
+  // Held here, not in BudgetPage: picking a start day can change the current
+  // label, which shows the skeleton and re-mounts BudgetPage — the picker and
+  // the gated action must survive that.
+  const startDayGate = useStartDayGate<BudgetCreateIntent>();
   // Default = the budget cycle containing today (the same label prefetch
   // warmed), not the calendar month.
   const { period: current, isLoading: periodLoading } = useCurrentPeriod();
@@ -96,8 +101,8 @@ function BudgetContent() {
 
   // Without a URL label, wait for the resolved cycle so the calendar-month
   // fallback never fetches (and flashes) the wrong budget.
-  if (waitForPeriod && !tourActive) return <BudgetSkeleton />;
-  if (isLoading && !tourActive) return <BudgetSkeleton />;
+  if (waitForPeriod && !tourActive) return <><BudgetSkeleton />{startDayGate.sheet}</>;
+  if (isLoading && !tourActive) return <><BudgetSkeleton />{startDayGate.sheet}</>;
 
   if (isError || (!data && !tourActive)) {
     return (
@@ -112,11 +117,15 @@ function BudgetContent() {
     : data!;
 
   return (
-    <BudgetPage
-      data={displayData}
-      defaultMonth={selectedMonth}
-      defaultYear={selectedYear}
-    />
+    <>
+      <BudgetPage
+        data={displayData}
+        defaultMonth={selectedMonth}
+        defaultYear={selectedYear}
+        startDayGate={startDayGate}
+      />
+      {startDayGate.sheet}
+    </>
   );
 }
 

@@ -10,7 +10,7 @@ import {
   useDismissCarryBanner,
 } from "@/lib/hooks/useBudgetCarry";
 import { useHaptic } from "@/lib/hooks/useHaptic";
-import { resolvePeriodIDB } from "@/lib/budget/periodIDB";
+import { getStartDayChoiceIDB, resolvePeriodIDB } from "@/lib/budget/periodIDB";
 
 /**
  * Global auto-carry: once IDB is hydrated, copy the most recent prior budget
@@ -19,6 +19,10 @@ import { resolvePeriodIDB } from "@/lib/budget/periodIDB";
  * The current cycle is resolved from IDB on every fire (start-day aware).
  * Other (peeked-at) months never auto-carry; they get an explicit CTA in the
  * budget empty state instead. Mounted once in app/(app)/layout.tsx.
+ *
+ * A never-chosen start day (new account that skipped the question) skips the
+ * auto-carry entirely — no prompt, no budget: a 1st-based cycle stamped now is
+ * one the user's later pick would have to stretch. The budget page asks.
  */
 export function CarryController() {
   const { isHydrated } = useSync();
@@ -47,6 +51,8 @@ export function CarryController() {
     let cancelled = false;
 
     const fire = async () => {
+      // Not marked as fired: the next visibility check retries once chosen.
+      if ((await getStartDayChoiceIDB()) === null) return;
       const resolved = await resolvePeriodIDB();
       if (cancelled) return;
       const p = { month: resolved.month, year: resolved.year };

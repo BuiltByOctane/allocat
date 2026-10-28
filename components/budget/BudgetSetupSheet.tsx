@@ -154,7 +154,7 @@ export function BudgetSetupSheet({
   const haptic = useHaptic();
   const fmt = useFormatCurrency();
   const enqueue = useEnqueue();
-  const { startDay } = useCurrentPeriod();
+  const { startDay, startDayChosen } = useCurrentPeriod();
   const [cycleOpen, setCycleOpen] = useState(false);
 
   const [step, setStep] = useState<1 | 2>(1);
@@ -1017,8 +1017,10 @@ export function BudgetSetupSheet({
                     calendar_month
                   </span>
                   <span className="flex-1 min-w-0">
-                    Budget cycle: {cycleRangeText(startDay)} ·{" "}
-                    <span className="underline underline-offset-2">Change</span>
+                    Budget cycle: {startDayChosen ? cycleRangeText(startDay) : "Not set"} ·{" "}
+                    <span className="underline underline-offset-2">
+                      {startDayChosen ? "Change" : "Set"}
+                    </span>
                   </span>
                 </button>
               </div>

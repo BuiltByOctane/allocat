@@ -18,10 +18,14 @@ function isDismissed(): boolean {
 
 /**
  * Dashboard discovery row for the budget-cycle start day. Shown only while the
- * user is still on start day 1 and hasn't dismissed it (per-device).
+ * user is still on start day 1 (or has never chosen one) and hasn't dismissed
+ * it (per-device). A never-chosen account is also asked by the budget setup
+ * gate, so dismissal is respected for them too.
  */
 export function BudgetCycleCard() {
-  const { startDay, isLoading } = useCurrentPeriod();
+  const { startDay, startDayChosen, isLoading } = useCurrentPeriod();
+  // Unchosen accounts compute as day 1 anyway; spelled out so the intent holds.
+  const eligible = !startDayChosen || startDay === 1;
   const haptic = useHaptic();
   const [dismissed, setDismissed] = useState(false);
   const [open, setOpen] = useState(false);
@@ -34,7 +38,7 @@ export function BudgetCycleCard() {
   );
 
   // Keep the sheet mounted while open even if a save flips startDay off 1.
-  if (!open && (isLoading || startDay !== 1 || dismissed || storedDismissed)) return null;
+  if (!open && (isLoading || !eligible || dismissed || storedDismissed)) return null;
 
   const dismiss = () => {
     haptic.light();
@@ -46,7 +50,7 @@ export function BudgetCycleCard() {
 
   return (
     <>
-      {!dismissed && !storedDismissed && startDay === 1 && (
+      {!dismissed && !storedDismissed && eligible && (
         <div className="relative flex items-center gap-2.5 rounded-card border border-border bg-card px-3 py-2.5">
           <button
             type="button"

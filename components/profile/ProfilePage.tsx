@@ -506,7 +506,7 @@ export default function ProfilePage() {
 
 /** Preferences row: the budget-cycle start day, opening the switch sheet. */
 function BudgetCycleSetting() {
-  const { startDay } = useCurrentPeriod();
+  const { startDay, startDayChosen } = useCurrentPeriod();
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -522,7 +522,13 @@ function BudgetCycleSetting() {
           <div className="flex-1 min-w-0">
             <div className="text-[13.5px] font-bold text-foreground">Budget cycle</div>
             <div className="text-[10.5px] font-medium text-muted-foreground mt-0.5">
-              Each budget runs {cycleRangeText(startDay)}
+              {startDayChosen ? (
+                <>Each budget runs {cycleRangeText(startDay)}</>
+              ) : (
+                <>
+                  Not set · <span className="underline underline-offset-2">Set</span>
+                </>
+              )}
             </div>
           </div>
           <ChevronRight size={16} strokeWidth={2} className="text-muted-foreground" />

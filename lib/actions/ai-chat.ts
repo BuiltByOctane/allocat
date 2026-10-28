@@ -1,6 +1,8 @@
 "use server";
 
 import { createClient, getAuthedUser } from "@/lib/supabase/server";
+import { resolveServerPeriod, getServerStartDay } from "@/lib/server/budget-period";
+import { formatPeriodLabel } from "@/lib/budget/period";
 import type { FinanceTopic } from "@/lib/ai-utils";
 import { fmt as fmtCurrency, getUserCurrency } from "@/lib/server/activity-logger";
 
@@ -34,20 +36,20 @@ export async function getBudgetContext(): Promise<string> {
 }
 
 async function getBudgetContextWith({ supabase, userId, fmt }: Ctx): Promise<string> {
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
-  const monthName = now.toLocaleString("en-US", { month: "long" });
+  const period = await resolveServerPeriod(supabase, userId);
+  const startDay = await getServerStartDay(supabase, userId);
+  const periodLabel = formatPeriodLabel(period, startDay);
 
-  const { data: budget } = await supabase
+  let budgetQuery = supabase
     .from("budgets")
     .select("*, categories(*, budget_items(*))")
-    .eq("user_id", userId)
-    .eq("month", month)
-    .eq("year", year)
-    .maybeSingle();
+    .eq("user_id", userId);
+  budgetQuery = period.budgetId
+    ? budgetQuery.eq("id", period.budgetId)
+    : budgetQuery.eq("month", period.month).eq("year", period.year);
+  const { data: budget } = await budgetQuery.maybeSingle();
 
-  if (!budget) return `=== BUDGET - ${monthName} ${year} ===\nNot set yet.`;
+  if (!budget) return `=== BUDGET - ${periodLabel} ===\nNot set yet.`;
 
   const total = Number(budget.total_budget || 0);
   let totalSpent = 0;
@@ -81,7 +83,7 @@ async function getBudgetContextWith({ supabase, userId, fmt }: Ctx): Promise<str
   const remaining = total - totalSpent;
 
   return [
-    `=== BUDGET - ${monthName} ${year} ===`,
+    `=== BUDGET - ${periodLabel} ===`,
     `Total Budget: ${fmt(total)}`,
     `Total Spent:  ${fmt(totalSpent)}`,
     `Remaining:    ${fmt(remaining)}${remaining < 0 ? " [OVERSPENT]" : ""}`,

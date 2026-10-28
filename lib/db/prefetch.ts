@@ -21,9 +21,7 @@ import { DEBT_KEY } from "@/lib/hooks/useDebt";
  * to skip already-cached entries, serving stale data across page loads.
  */
 export async function prefetchAllQueries(qc: QueryClient): Promise<void> {
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
+  const { month, year } = await resolvePeriodIDB();
 
   await Promise.all([
     // Current budget cycle (start-day aware)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore, type CSSProperties } from "react";
+import { useMemo, useSyncExternalStore, type CSSProperties } from "react";
 import Link from "next/link";
 import { TrendingUp } from "lucide-react";
 import ManualSpendButton from "@/components/dashboard/ManualSpendButton";
@@ -17,6 +17,8 @@ import { CrownBadge } from "@/components/ui/CrownBadge";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import { getTimeGreeting } from "@/lib/utils/greeting";
 import { projectMonthSpend } from "@/lib/sms/insightStats";
+import { useCurrentPeriod } from "@/lib/hooks/useCurrentPeriod";
+import { daysElapsed, daysLeft, periodDays, toISODate } from "@/lib/budget/period";
 import { budgetMeter } from "@/lib/budget/meter";
 import type { DashboardCategory, DashboardItem } from "@/lib/hooks/useDashboard";
 
@@ -43,24 +45,19 @@ function getGreetingSnapshot(): string {
 }
 const subscribeNoop = () => () => {};
 
-// Current-month day math (day-of-month, days in month, days remaining).
-// Date-dependent + impure, so it lives in a module fn served through
-// useSyncExternalStore (null on server/first paint) to avoid an SSR/client
-// hydration mismatch. Mirrors the math in lib/sms/insightStats.ts.
-interface MonthSnapshot {
+// Today's date (ISO). Date-dependent + impure, so it lives in a module fn
+// served through useSyncExternalStore (null on server/first paint) to avoid an
+// SSR/client hydration mismatch. The day math is derived from the current
+// budget cycle (useCurrentPeriod) inside the component.
+interface PeriodSnapshot {
   daysElapsed: number;
-  daysInMonth: number;
+  daysInPeriod: number;
   daysLeft: number;
 }
-let monthCache: MonthSnapshot | null = null;
-function getMonthSnapshot(): MonthSnapshot {
-  if (!monthCache) {
-    const now = new Date();
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const daysElapsed = now.getDate();
-    monthCache = { daysElapsed, daysInMonth, daysLeft: daysInMonth - daysElapsed };
-  }
-  return monthCache;
+let todayCache: string | null = null;
+function getTodaySnapshot(): string {
+  if (!todayCache) todayCache = toISODate(new Date());
+  return todayCache;
 }
 
 function daysLeftLabel(daysLeft: number): string {
@@ -80,7 +77,19 @@ export default function DashboardPage({ data }: DashboardProps) {
   // synchronous setState-in-effect, so React 19's cascading-render warning
   // never fires.
   const greeting = useSyncExternalStore(subscribeNoop, getGreetingSnapshot, () => null);
-  const month = useSyncExternalStore(subscribeNoop, getMonthSnapshot, () => null);
+  const today = useSyncExternalStore(subscribeNoop, getTodaySnapshot, () => null);
+  const { period } = useCurrentPeriod();
+  const month = useMemo<PeriodSnapshot | null>(
+    () =>
+      today
+        ? {
+            daysElapsed: daysElapsed(period, today),
+            daysInPeriod: periodDays(period),
+            daysLeft: daysLeft(period, today),
+          }
+        : null,
+    [today, period],
+  );
 
   const currentNetWorth =
     data.netWorthHistory.length > 0
@@ -104,7 +113,7 @@ export default function DashboardPage({ data }: DashboardProps) {
   let projected: number | null = null;
   let offPace = false;
   if (month && data.budget && data.budget.totalBudget > 0 && data.budget.spent > 0) {
-    projected = projectMonthSpend(data.budget.spent, month.daysElapsed, month.daysInMonth);
+    projected = projectMonthSpend(data.budget.spent, month.daysElapsed, month.daysInPeriod);
     offPace = !overBudget && projected > data.budget.totalBudget;
   }
   const paceOverBy = projected !== null && data.budget ? projected - data.budget.totalBudget : 0;

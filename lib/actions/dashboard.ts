@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient, getAuthedUser } from "@/lib/supabase/server";
+import { resolveServerPeriod } from "@/lib/server/budget-period";
 import type { Database } from "@/lib/types/database";
 
 type CategoryRow = Database["public"]["Tables"]["categories"]["Row"];
@@ -12,17 +13,16 @@ export async function getDashboardData() {
   const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
+  const period = await resolveServerPeriod(supabase, user.id);
 
-  const { data: budget } = await supabase
+  let budgetQuery = supabase
     .from("budgets")
     .select("*, categories(*, budget_items(*))")
-    .eq("user_id", user.id)
-    .eq("month", month)
-    .eq("year", year)
-    .maybeSingle();
+    .eq("user_id", user.id);
+  budgetQuery = period.budgetId
+    ? budgetQuery.eq("id", period.budgetId)
+    : budgetQuery.eq("month", period.month).eq("year", period.year);
+  const { data: budget } = await budgetQuery.maybeSingle();
 
   let formattedBudget = null;
   const summaryCategories: { id: string; name: string; icon?: string | null }[] = [];

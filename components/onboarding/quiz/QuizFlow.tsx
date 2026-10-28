@@ -11,6 +11,7 @@ import { Q5Amount } from "./screens/Q5Amount";
 import { RevealScreen } from "./screens/RevealScreen";
 import { quizPlanToServerCategories, type QuizPlan } from "@/lib/budget/quizMapping";
 import { saveDraftPlan } from "@/lib/budget/quizDraft";
+import { labelForDate, toISODate } from "@/lib/budget/period";
 import { getBudgetForPeriod, setupBudgetFromTemplate } from "@/lib/actions/budget";
 import { markUserAsOnboarded } from "@/lib/actions/profile";
 
@@ -44,8 +45,9 @@ export function QuizFlow({ onDone }: QuizFlowProps) {
 
   async function handleSave(plan: QuizPlan) {
     try {
-      const now = new Date();
-      const budget = await getBudgetForPeriod(now.getMonth() + 1, now.getFullYear());
+      // Start day 1 until the quiz asks for a payday answer (Task 9).
+      const label = labelForDate(toISODate(new Date()), 1);
+      const budget = await getBudgetForPeriod(label.month, label.year);
       await setupBudgetFromTemplate(
         budget.id,
         plan.total,

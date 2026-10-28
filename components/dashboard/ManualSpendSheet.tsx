@@ -9,6 +9,7 @@ import { useCurrency } from "@/lib/providers/CurrencyProvider";
 import { useQuickLogSpend } from "@/lib/hooks/useDashboard";
 import { useAddBudgetItem } from "@/lib/hooks/useBudget";
 import { useHaptic } from "@/lib/hooks/useHaptic";
+import { useCurrentPeriod } from "@/lib/hooks/useCurrentPeriod";
 import {
   ALLOCATE_PICKER_KEY,
   useAllocatePicker,
@@ -107,6 +108,7 @@ export function ManualSpendSheet({
   const linkTargets = useLinkTargets();
   const spend = useQuickLogSpend();
   const addItem = useAddBudgetItem();
+  const { period } = useCurrentPeriod();
 
   const [step, setStep] = useState<Step>("amount");
   const [amountText, setAmountText] = useState("");
@@ -215,15 +217,14 @@ export function ManualSpendSheet({
     if (memo && memo.categoryId === createCategoryId) {
       itemId = memo.itemId;
     } else {
-      const now = new Date();
       const created = await addItem.mutateAsync({
         categoryId: createCategoryId,
         name: data.name,
         emoji: data.emoji ?? null,
         planned: data.planned_amount,
         link,
-        month: now.getMonth() + 1,
-        year: now.getFullYear(),
+        month: period.month,
+        year: period.year,
       });
       itemId = created.id;
       createdItemRef.current = { categoryId: createCategoryId, itemId };

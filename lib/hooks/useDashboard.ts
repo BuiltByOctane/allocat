@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getDashboardData } from "@/lib/actions/dashboard";
 import { updateBudgetTotal, getCategoryItems } from "@/lib/actions/budget";
 import { getDB } from "@/lib/db";
+import { resolvePeriodIDB } from "@/lib/budget/periodIDB";
 import { isHydrated } from "@/lib/db/hydrate";
 import { useEnqueue } from "@/lib/hooks/useSync";
 import { computeMonthlyHistory } from "@/lib/utils/netWorthHistory";
@@ -37,9 +38,7 @@ export interface DashboardItem {
 export async function getDashboardFromIDB() {
   const db = getDB();
 
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
+  const period = await resolvePeriodIDB();
 
   // Independent table reads — kick off in parallel with the budget chain below.
   const independent = Promise.all([
@@ -48,10 +47,13 @@ export async function getDashboardFromIDB() {
     db.debts.toArray(),
   ]);
 
-  const budget = await db.budgets
-    .where("[month+year]")
-    .equals([month, year])
-    .first();
+  // Prefer the resolved budget id; label lookup only when no budget covers today.
+  const budget = period.budgetId
+    ? await db.budgets.get(period.budgetId)
+    : await db.budgets
+        .where("[month+year]")
+        .equals([period.month, period.year])
+        .first();
 
   let formattedBudget = null;
   const summaryCategories: DashboardCategory[] = [];

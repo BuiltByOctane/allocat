@@ -22,6 +22,8 @@ function budget(over: Partial<BudgetRow>): BudgetRow {
     total_budget: 50000,
     is_locked: false,
     template_id: TPL,
+    period_start: "2026-07-01",
+    period_end: "2026-07-31",
     created_at: "",
     updated_at: "",
     ...over,

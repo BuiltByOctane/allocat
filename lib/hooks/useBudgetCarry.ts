@@ -12,6 +12,7 @@ import {
 } from "@/lib/budget/carry";
 import { budgetKey } from "./useBudget";
 import { DASHBOARD_KEY } from "./useDashboard";
+import { rangeForLabelIDB } from "@/lib/budget/periodIDB";
 
 export type CarryMarker = NonNullable<SyncMetaEntry["carry"]>;
 
@@ -174,6 +175,7 @@ export function useCarryBudget() {
             const now = new Date().toISOString();
             const budgetId = payload.budgetId ?? payload.budgetTempId!;
             if (payload.budgetTempId) {
+              const range = await rangeForLabelIDB({ month, year });
               await db.budgets.add({
                 id: payload.budgetTempId,
                 user_id: "__pending__",
@@ -182,6 +184,8 @@ export function useCarryBudget() {
                 total_budget: payload.totalBudget,
                 is_locked: false,
                 template_id: payload.templateId,
+                period_start: range.start,
+                period_end: range.end,
                 created_at: now,
                 updated_at: now,
               });

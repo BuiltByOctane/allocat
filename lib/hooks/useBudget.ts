@@ -19,6 +19,7 @@ import { DASHBOARD_KEY } from "./useDashboard";
 import { NET_WORTH_KEY } from "./useNetWorth";
 import { GOALS_KEY } from "./useGoals";
 import { DEBT_KEY } from "./useDebt";
+import { rangeForLabelIDB } from "@/lib/budget/periodIDB";
 
 type LinkType = "asset" | "debt";
 
@@ -230,6 +231,7 @@ export function useEnsureBudgetRow() {
       // Offline (or the action failed): create locally and queue the INSERT.
       const tempId = `temp_${crypto.randomUUID()}`;
       const now = new Date().toISOString();
+      const range = await rangeForLabelIDB({ month, year });
       await db.budgets.add({
         id: tempId,
         user_id: "__pending__",
@@ -238,6 +240,8 @@ export function useEnsureBudgetRow() {
         total_budget: 0,
         is_locked: false,
         template_id: null,
+        period_start: range.start,
+        period_end: range.end,
         created_at: now,
         updated_at: now,
       });

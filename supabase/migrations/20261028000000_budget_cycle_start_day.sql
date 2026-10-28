@@ -35,6 +35,10 @@ alter table public.budgets
   alter column period_start set not null,
   alter column period_end   set not null;
 
+alter table public.budgets drop constraint if exists budgets_period_order;
+alter table public.budgets
+  add constraint budgets_period_order check (period_start <= period_end);
+
 -- ─── period range ────────────────────────────────────────────────────────────
 -- The cycle labelled (month, year) starts on day `p_day` of that month and
 -- ends the day before the same day of the next month. p_day <= 28 keeps
@@ -50,17 +54,24 @@ as $$
 $$;
 
 -- ─── stamp + overlap guard ───────────────────────────────────────────────────
--- security definer: reads the owner's profile and every one of their budgets
--- regardless of the caller's RLS view.
+-- security invoker: RLS hands an authenticated caller exactly their own
+-- profile and budgets, which is all this needs; service-role bypasses RLS.
+-- A BEFORE ROW trigger runs before the RLS WITH CHECK, so a row written for
+-- someone else's user_id is passed through untouched — RLS then rejects it,
+-- and the trigger never leaks whether the victim has a budget in that range.
 create or replace function public.budgets_stamp_period()
 returns trigger
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $$
 declare
   v_day int;
 begin
+  if auth.uid() is not null and new.user_id is distinct from auth.uid() then
+    return new;
+  end if;
+
   if tg_op = 'INSERT' and new.period_start is null then
     select coalesce(
       (select p.budget_start_day from public.profiles p where p.id = new.user_id),
@@ -71,6 +82,9 @@ begin
       into new.period_start, new.period_end
       from public.budget_period_range(new.month, new.year, v_day) r;
   end if;
+
+  -- Serialize per user so two concurrent writes can't both pass the check.
+  perform pg_advisory_xact_lock(hashtext(new.user_id::text));
 
   if exists (
     select 1
@@ -89,7 +103,7 @@ $$;
 
 drop trigger if exists budgets_stamp_period on public.budgets;
 create trigger budgets_stamp_period
-  before insert or update of period_start, period_end on public.budgets
+  before insert or update of period_start, period_end, month, year on public.budgets
   for each row execute function public.budgets_stamp_period();
 
 -- ─── start-day switch ────────────────────────────────────────────────────────
@@ -131,6 +145,9 @@ begin
     raise exception 'not authenticated' using errcode = '28000';
   end if;
 
+  -- One switch (and its trigger checks) per user at a time.
+  perform pg_advisory_xact_lock(hashtext(uid::text));
+
   v_day := (p_plan ->> 'startDay')::int;
   if v_day is null or v_day < 1 or v_day > 28 then
     raise exception 'invalid startDay' using errcode = '22023';
@@ -145,13 +162,19 @@ begin
   update public.profiles
   set budget_start_day = v_day
   where id = uid;
+  if not found then
+    raise exception 'profile_not_found';
+  end if;
 
   -- 2. deletes
   delete from public.budgets
   where user_id = uid
     and id in (
       select (e #>> '{}')::uuid
-      from jsonb_array_elements(coalesce(p_plan -> 'deleteBudgetIds', '[]'::jsonb)) e
+      from jsonb_array_elements(
+        case when jsonb_typeof(p_plan -> 'deleteBudgetIds') = 'array'
+             then p_plan -> 'deleteBudgetIds' else '[]'::jsonb end
+      ) e
     );
 
   -- 3a. current budget first when its range shrinks
@@ -178,7 +201,10 @@ begin
       select (e ->> 'budgetId')::uuid as id,
              (e ->> 'start')::date    as new_start,
              (e ->> 'end')::date      as new_end
-      from jsonb_array_elements(coalesce(p_plan -> 'redate', '[]'::jsonb)) e
+      from jsonb_array_elements(
+        case when jsonb_typeof(p_plan -> 'redate') = 'array'
+             then p_plan -> 'redate' else '[]'::jsonb end
+      ) e
     ) x
     join public.budgets b on b.id = x.id and b.user_id = uid
     order by
@@ -235,4 +261,56 @@ grant execute on function public.apply_budget_cycle_switch(jsonb) to authenticat
 --   insert into public.budgets (user_id, month, year, total_budget)
 --   values ('<user>', 12, 2026, 0)
 --   returning period_start, period_end;
+-- rollback;
+--
+-- begin;
+--   -- 3a. day 15, October re-dated to Oct 1 – Nov 14 (a 1 → 15 switch), then a
+--   --     null-dated November: stamped Nov 15 – Dec 14, contiguous ⇒ succeeds.
+--   update public.profiles set budget_start_day = 15 where id = '<user>';
+--   insert into public.budgets (user_id, month, year, total_budget, period_start, period_end)
+--   values ('<user>', 10, 2099, 0, '2099-10-01', '2099-10-31');
+--   update public.budgets set period_end = '2099-11-14'
+--   where user_id = '<user>' and month = 10 and year = 2099;
+--   insert into public.budgets (user_id, month, year, total_budget)
+--   values ('<user>', 11, 2099, 0)
+--   returning period_start, period_end;          -- 2099-11-15 / 2099-12-14
+-- rollback;
+--
+-- begin;
+--   -- 3b. the same with October stretched one day further (Oct 1 – Nov 15):
+--   --     the null-dated November (Nov 15 – Dec 14) ⇒ ERROR: budget_period_overlap
+--   update public.profiles set budget_start_day = 15 where id = '<user>';
+--   insert into public.budgets (user_id, month, year, total_budget, period_start, period_end)
+--   values ('<user>', 10, 2099, 0, '2099-10-01', '2099-11-15');
+--   insert into public.budgets (user_id, month, year, total_budget)
+--   values ('<user>', 11, 2099, 0);
+-- rollback;
+--
+-- begin;
+--   -- 3c. a 15 → 1 switch: October stretched to Oct 15 – Nov 30, day 1; a
+--   --     null-dated November (Nov 1 – 30) ⇒ ERROR: budget_period_overlap.
+--   --     Re-labelling an existing row is re-checked too (month/year in the
+--   --     trigger's column list).
+--   update public.profiles set budget_start_day = 1 where id = '<user>';
+--   insert into public.budgets (user_id, month, year, total_budget, period_start, period_end)
+--   values ('<user>', 10, 2099, 0, '2099-10-15', '2099-11-30');
+--   insert into public.budgets (user_id, month, year, total_budget)
+--   values ('<user>', 11, 2099, 0);
+-- rollback;
+--
+-- -- 4. (I1) run as an authenticated user A (set request.jwt.claims / role
+-- --    authenticated), inserting a row with user B's id overlapping one of B's
+-- --    budgets ⇒ ERROR: new row violates row-level security policy — NOT
+-- --    budget_period_overlap (the trigger passes foreign rows through).
+-- begin;
+--   set local role authenticated;
+--   select set_config('request.jwt.claims', '{"sub":"<userA>","role":"authenticated"}', true);
+--   insert into public.budgets (user_id, month, year, total_budget, period_start, period_end)
+--   values ('<userB>', 10, 2026, 0, '2026-10-01', '2026-10-31');
+-- rollback;
+--
+-- begin;
+--   -- 5. (M4) inverted range ⇒ ERROR: violates check constraint "budgets_period_order"
+--   insert into public.budgets (user_id, month, year, total_budget, period_start, period_end)
+--   values ('<user>', 1, 2099, 0, '2099-01-31', '2099-01-01');
 -- rollback;

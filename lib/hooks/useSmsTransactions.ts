@@ -11,6 +11,8 @@ import {
 import { nearLimitFromIDB } from "@/lib/sms/nearLimit";
 import { groupAllocationsForMonth, type AllocatedGroup } from "@/lib/sms/monthAllocations";
 import { randomUUID } from "@/lib/utils/uuid";
+import { rangeForLabelIDB } from "@/lib/budget/periodIDB";
+import type { PeriodRange } from "@/lib/budget/period";
 import { emitNotification } from "@/lib/notify/history";
 import { pushSmsMirrorToNative } from "@/lib/sms/nativeMirror";
 import { formatCurrency } from "@/lib/number-format";
@@ -33,9 +35,15 @@ export function itemTxKey(itemId: string) {
  * (the default partial-match behavior) already covers every month's key —
  * `invalidateSmsCaches` needs no changes to also refresh this.
  */
-export function monthAllocationsKey(month: number, year: number) {
-  return [...SMS_CATEGORIZED_KEY, month, year] as const;
+/** Optional range keeps a clipped/stretched cycle distinct from its label's. */
+export function monthAllocationsKey(month: number, year: number, range?: PeriodRange) {
+  return range
+    ? ([...SMS_CATEGORIZED_KEY, month, year, range.start, range.end] as const)
+    : ([...SMS_CATEGORIZED_KEY, month, year] as const);
 }
+
+/** A budget cycle as the Allocated tab needs it (range + optional stored row). */
+type AllocPeriodRange = PeriodRange & { budgetId?: string | null };
 
 /** Invalidate every query that an allocate/reverse touches. */
 export function invalidateSmsCaches(qc: ReturnType<typeof useQueryClient>) {
@@ -147,7 +155,7 @@ export async function getBlocklistFromIDB(): Promise<SmsBlocklistRow[]> {
 
 /**
  * Categorized SMS transactions grouped by budget item, scoped to a single
- * month's budget — for the Allocated tab's month picker. A txn belongs to the
+ * budget cycle's budget — for the Allocated tab's month picker. A txn belongs to the
  * month of the BUDGET ITEM it's allocated to (authoritative), not its own
  * occurred_at; orphans (unlinked or deleted-item txns) fall back to their own
  * timestamp. See `lib/sms/monthAllocations.ts` for the grouping rules.
@@ -155,13 +163,14 @@ export async function getBlocklistFromIDB(): Promise<SmsBlocklistRow[]> {
 export async function getMonthAllocationsFromIDB(
   month: number,
   year: number,
+  period?: AllocPeriodRange,
 ): Promise<AllocatedGroup<SmsTransactionRow>[]> {
   const db = getDB();
+  const resolved = period ?? (await rangeForLabelIDB({ month, year }));
 
-  const budget = await db.budgets
-    .where("[month+year]")
-    .equals([month, year])
-    .first();
+  const budget = resolved.budgetId
+    ? await db.budgets.get(resolved.budgetId)
+    : await db.budgets.where("[month+year]").equals([month, year]).first();
 
   const monthCats = budget
     ? await db.categories.where("budget_id").equals(budget.id).toArray()
@@ -180,8 +189,7 @@ export async function getMonthAllocationsFromIDB(
     monthItems,
     monthCats,
     allItemIds,
-    month,
-    year,
+    range: { start: resolved.start, end: resolved.end },
   });
 }
 
@@ -234,11 +242,14 @@ export function useBlocklist() {
   });
 }
 
-/** Categorized transactions grouped by item, scoped to a single month's budget. */
-export function useMonthAllocations(month: number, year: number) {
+/**
+ * Categorized transactions grouped by item, scoped to a single budget cycle.
+ * Pass the cycle's range when known; otherwise it is resolved from the label.
+ */
+export function useMonthAllocations(month: number, year: number, period?: AllocPeriodRange) {
   return useQuery({
-    queryKey: monthAllocationsKey(month, year),
-    queryFn: () => getMonthAllocationsFromIDB(month, year),
+    queryKey: monthAllocationsKey(month, year, period),
+    queryFn: () => getMonthAllocationsFromIDB(month, year, period),
   });
 }
 

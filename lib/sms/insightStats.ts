@@ -6,6 +6,14 @@
  */
 import { getDB } from "@/lib/db";
 import { formatCurrency } from "@/lib/number-format";
+import { resolvePeriodIDB } from "@/lib/budget/periodIDB";
+import {
+  daysElapsed as periodDaysElapsed,
+  daysLeft as periodDaysLeft,
+  periodDays,
+  toISODate,
+  type ResolvedPeriod,
+} from "@/lib/budget/period";
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -30,7 +38,7 @@ export interface InsightStats {
   lastWeekTotal: number;
   topCat: string;
   topCatAmt: number;
-  // ── This month's budget pace ──
+  // ── This budget cycle's pace (field names kept for the AI action) ──
   monthBudget: number;
   monthSpent: number;
   daysElapsed: number;
@@ -56,23 +64,65 @@ export function projectMonthSpend(
   return Math.round((spent / daysElapsed) * daysInMonth);
 }
 
+/** Narrow row shapes so the pure builder is testable with plain objects. */
+export interface InsightStatsInput {
+  sms: Array<{
+    status: string | null;
+    amount: number | null;
+    created_at: string;
+    budget_item_id: string | null;
+  }>;
+  items: Array<{
+    id: string;
+    category_id: string;
+    planned_amount: number | null;
+    actual_amount: number | null;
+  }>;
+  cats: Array<{ id: string; name: string; budget_id: string }>;
+  budgets: Array<{ id: string; month: number; year: number; total_budget: number | null }>;
+  assets: Array<{
+    name: string;
+    is_goal: boolean | null;
+    achieved_at: string | null;
+    value: number | null;
+    target_amount: number | null;
+  }>;
+  currency: string;
+  now: Date;
+  /** The budget cycle containing `now`; pace + budget come from it. */
+  period: ResolvedPeriod;
+}
+
 export async function computeInsightStats(): Promise<InsightStats | null> {
   const db = getDB();
-  const now = new Date();
-  const nowMs = now.getTime();
-  const weekAgo = new Date(nowMs - WEEK_MS).toISOString();
-  const twoWeeksAgo = new Date(nowMs - 2 * WEEK_MS).toISOString();
-
-  const [sms, items, cats, budgets, assets, profiles] = await Promise.all([
+  const [sms, items, cats, budgets, assets, profiles, period] = await Promise.all([
     db.sms_transactions.toArray(),
     db.budget_items.toArray(),
     db.categories.toArray(),
     db.budgets.toArray(),
     db.assets.toArray(),
     db.profiles.toArray(),
+    resolvePeriodIDB(),
   ]);
 
-  const currency = profiles[0]?.currency ?? "INR";
+  return buildInsightStats({
+    sms,
+    items,
+    cats,
+    budgets,
+    assets,
+    currency: profiles[0]?.currency ?? "INR",
+    now: new Date(),
+    period,
+  });
+}
+
+/** Pure core of `computeInsightStats`. */
+export function buildInsightStats(input: InsightStatsInput): InsightStats | null {
+  const { sms, items, cats, budgets, assets, currency, now, period } = input;
+  const nowMs = now.getTime();
+  const weekAgo = new Date(nowMs - WEEK_MS).toISOString();
+  const twoWeeksAgo = new Date(nowMs - 2 * WEEK_MS).toISOString();
 
   const categorized = sms.filter(
     (t) => t.status === "categorized" && typeof t.amount === "number",
@@ -100,14 +150,15 @@ export async function computeInsightStats(): Promise<InsightStats | null> {
     }
   }
 
-  // ── Current-month budget pace ──
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
-  const budget = budgets.find((b) => b.month === month && b.year === year);
+  // ── Current budget-cycle pace ──
+  const budget = period.budgetId
+    ? budgets.find((b) => b.id === period.budgetId)
+    : budgets.find((b) => b.month === period.month && b.year === period.year);
 
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const daysElapsed = now.getDate();
-  const daysLeft = daysInMonth - daysElapsed;
+  const today = toISODate(now);
+  const daysInMonth = periodDays(period);
+  const daysElapsed = periodDaysElapsed(period, today);
+  const daysLeft = periodDaysLeft(period, today);
 
   let monthBudget = 0;
   let monthSpent = 0;

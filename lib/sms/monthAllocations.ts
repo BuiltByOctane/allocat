@@ -8,8 +8,8 @@
  *
  * Orphans (null budget_item_id, or an item id that no longer exists anywhere —
  * i.e. the item was deleted) have no month of their own, so they fall back to
- * their occurred_at (or created_at) timestamp to decide which month's list
- * they show up in.
+ * their occurred_at (or created_at) timestamp to decide which budget cycle's
+ * list they show up in (by the cycle's date range, not the calendar month).
  *
  * A txn allocated to an item that exists but belongs to a DIFFERENT month's
  * budget is excluded entirely from this month's view (it'll show up when that
@@ -18,6 +18,8 @@
  * Uses narrow structural types (mirrors `lib/sms/resolveRuleItem.ts`) so this
  * stays testable with plain objects — no IDB/Dexie needed.
  */
+
+import { toISODate, type PeriodRange } from "@/lib/budget/period";
 
 const UNKNOWN_GROUP_ID = "__unknown__";
 
@@ -60,28 +62,29 @@ export interface AllocatedGroup<T extends AllocTxnRow = AllocTxnRow> {
   txns: T[];
 }
 
-/** True if `iso` (or its Date) falls within the given calendar month/year. */
-function isInMonth(iso: string | null, month: number, year: number): boolean {
+/** True if `iso`'s local calendar date falls within the inclusive range. */
+function isInRange(iso: string | null, range: PeriodRange): boolean {
   if (!iso) return false;
   const d = new Date(iso);
   if (isNaN(d.getTime())) return false;
-  return d.getFullYear() === year && d.getMonth() + 1 === month;
+  const day = toISODate(d);
+  return range.start <= day && day <= range.end;
 }
 
 export function groupAllocationsForMonth<T extends AllocTxnRow>(input: {
   /** ALL categorized txns (any month). */
   txns: T[];
-  /** Budget items belonging to the SELECTED month's budget. */
+  /** Budget items belonging to the SELECTED period's budget. */
   monthItems: AllocBudgetItemRow[];
-  /** Categories belonging to the selected month's budget. */
+  /** Categories belonging to the selected period's budget. */
   monthCats: AllocCategoryRow[];
   /** Every budget_items id across all months — used to tell "deleted" apart
    * from "belongs to a different month". */
   allItemIds: Set<string>;
-  month: number;
-  year: number;
+  /** The selected budget cycle's date range (orphan membership). */
+  range: PeriodRange;
 }): AllocatedGroup<T>[] {
-  const { txns, monthItems, monthCats, allItemIds, month, year } = input;
+  const { txns, monthItems, monthCats, allItemIds, range } = input;
 
   const monthItemIds = new Set(monthItems.map((i) => i.id));
   const itemsById = new Map(monthItems.map((i) => [i.id, i] as const));
@@ -92,7 +95,7 @@ export function groupAllocationsForMonth<T extends AllocTxnRow>(input: {
     if (bid && monthItemIds.has(bid)) return true;
     if (bid && allItemIds.has(bid)) return false; // belongs to another month
     // Orphan: null budget_item_id, or an item id that exists nowhere (deleted).
-    return isInMonth(t.occurred_at ?? t.created_at, month, year);
+    return isInRange(t.occurred_at ?? t.created_at, range);
   });
 
   // Newest-first, mirroring the existing Allocated tab's ordering

@@ -34,6 +34,8 @@ import {
   useLinkTargets,
 } from "@/lib/hooks/useAllocatePicker";
 import type { SmsTransactionRow } from "@/lib/db";
+import { useCurrentPeriod, usePeriodNavigator } from "@/lib/hooks/useCurrentPeriod";
+import { formatPeriodLabel, type ResolvedPeriod } from "@/lib/budget/period";
 import { Capacitor } from "@capacitor/core";
 import { ShortcutSetup } from "@/components/sms/ShortcutSetup";
 import { isIosDevice, IOS_SHORTCUT_URL } from "@/lib/shortcut/config";
@@ -100,28 +102,25 @@ export default function SmsPage() {
 
   const { data: pickerData } = useAllocatePicker();
 
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
+  // The current budget cycle (start day 1 ⇒ the calendar month).
+  const { period: currentPeriod, startDay } = useCurrentPeriod();
+  const { step: stepPeriod } = usePeriodNavigator();
+  const { month, year } = currentPeriod;
 
-  // Allocated tab's month scope — defaults to the current month. A txn belongs
-  // to the month of the BUDGET ITEM it's allocated to (authoritative), not its
+  // Allocated tab's cycle scope — null follows the current cycle. A txn belongs
+  // to the cycle of the BUDGET ITEM it's allocated to (authoritative), not its
   // occurred_at; see lib/sms/monthAllocations.ts for the grouping rules.
-  const [allocPeriod, setAllocPeriod] = useState(() => ({ month, year }));
+  const [allocOverride, setAllocOverride] = useState<ResolvedPeriod | null>(null);
+  const allocPeriod = allocOverride ?? currentPeriod;
   const isCurrentAllocPeriod =
-    allocPeriod.month === month && allocPeriod.year === year;
+    allocPeriod.start === currentPeriod.start && allocPeriod.end === currentPeriod.end;
   const { data: allocGroups } = useMonthAllocations(
     allocPeriod.month,
     allocPeriod.year,
+    allocPeriod,
   );
-  function shiftAllocPeriod(delta: number) {
-    setAllocPeriod((p) => {
-      let m = p.month + delta;
-      let y = p.year;
-      if (m < 1) { m = 12; y -= 1; }
-      if (m > 12) { m = 1; y += 1; }
-      return { month: m, year: y };
-    });
+  function shiftAllocPeriod(delta: 1 | -1) {
+    void stepPeriod(allocPeriod, delta).then(setAllocOverride);
   }
 
   // Allocate sheet (existing-item flow) + create flow (new item).
@@ -359,8 +358,7 @@ export default function SmsPage() {
     if (!txn.merchant_normalized || !merchantRules?.length) return null;
     return matchMerchantRule(txn.merchant_normalized, merchantRules);
   }
-  const allocMonthLabel = new Date(allocPeriod.year, allocPeriod.month - 1, 1)
-    .toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  const allocMonthLabel = formatPeriodLabel(allocPeriod, startDay);
 
   return (
     <div className="px-4 pt-4 flex flex-col gap-3">

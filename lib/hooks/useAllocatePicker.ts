@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getDB } from "@/lib/db";
+import { resolvePeriodIDB } from "@/lib/budget/periodIDB";
 import type {
   AllocatePickerItem,
   AllocateCategory,
@@ -32,14 +33,16 @@ export interface PickerData {
   metaById: Record<string, CatMeta>;
 }
 
-/** Budget items + categories for the current month, read from IDB. */
+/** Budget items + categories for the current budget cycle, read from IDB. */
 export async function loadPickerData(): Promise<PickerData> {
   const db = getDB();
-  const now = new Date();
-  const budget = await db.budgets
-    .where("[month+year]")
-    .equals([now.getMonth() + 1, now.getFullYear()])
-    .first();
+  const period = await resolvePeriodIDB();
+  const budget = period.budgetId
+    ? await db.budgets.get(period.budgetId)
+    : await db.budgets
+        .where("[month+year]")
+        .equals([period.month, period.year])
+        .first();
   if (!budget) return { items: [], categories: [], metaById: {} };
 
   const categories = await db.categories
@@ -82,7 +85,7 @@ export async function loadPickerData(): Promise<PickerData> {
   };
 }
 
-/** Current-month items + categories for an allocate-style picker. */
+/** Current-cycle items + categories for an allocate-style picker. */
 export function useAllocatePicker(enabled = true) {
   return useQuery({
     queryKey: ALLOCATE_PICKER_KEY,

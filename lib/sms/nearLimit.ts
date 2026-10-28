@@ -1,4 +1,6 @@
 import { getDB } from "@/lib/db";
+import { resolvePeriodIDB } from "@/lib/budget/periodIDB";
+import { addDays, daysElapsed, periodDays, toISODate } from "@/lib/budget/period";
 
 export interface NearLimitInfo {
   name: string;
@@ -9,8 +11,11 @@ export interface NearLimitInfo {
 
 export interface PaceInfo {
   name: string;
-  /** Day-of-month the item is projected to run out. */
+  /** Cycle-day number (1 = cycle start) the item is projected to run out —
+   * equal to the day of month for a start-day-1 cycle. */
   byDay: number;
+  /** Day of month of that cycle day — what the notification copy shows. */
+  byDayOfMonth: number;
 }
 
 const THRESHOLD = 0.9;
@@ -32,7 +37,7 @@ export function ordinal(n: number): string {
 
 /**
  * Predictive pace check: after a spend, is the item on track to run out before
- * month-end (at the current daily rate)? Mirrors the native check in
+ * the current budget cycle ends (at the current daily rate)? Mirrors the native check in
  * SmsTransactionReceiver.java. Returns null when not yet at risk.
  */
 export async function paceFromIDB(budgetItemId: string): Promise<PaceInfo | null> {
@@ -43,13 +48,14 @@ export async function paceFromIDB(budgetItemId: string): Promise<PaceInfo | null
   const actual = Number(item.actual_amount);
   if (!(planned > 0) || !(actual > 0)) return null;
 
-  const now = new Date();
-  const day = now.getDate();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const period = await resolvePeriodIDB();
+  const day = daysElapsed(period, toISODate(new Date()));
+  const len = periodDays(period);
   if (day < 3) return null; // too early to project reliably
   const byDay = Math.ceil((planned * day) / actual);
-  if (byDay > daysInMonth) return null; // on pace to stay within budget
-  return { name: item.name, byDay };
+  if (byDay > len) return null; // on pace to stay within budget
+  const byDayOfMonth = Number(addDays(period.start, byDay - 1).slice(8, 10));
+  return { name: item.name, byDay, byDayOfMonth };
 }
 
 /**

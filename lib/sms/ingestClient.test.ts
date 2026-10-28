@@ -67,6 +67,8 @@ const tables = {
   categories: makeTable(),
   sms_blocklist: makeTable(),
   budgets: makeTable(),
+  // Read by resolvePeriodIDB (start day); empty ⇒ start day 1.
+  profiles: makeTable(),
 };
 
 const dbStub = {

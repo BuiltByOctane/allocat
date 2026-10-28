@@ -6,6 +6,8 @@ import {
   type AllocTxnRow,
 } from "./monthAllocations";
 
+const JULY = { start: "2026-07-01", end: "2026-07-31" };
+
 const CAT_JULY: AllocCategoryRow = { id: "cat-july", name: "Food", icon: "🍔" };
 const CAT_JUNE: AllocCategoryRow = { id: "cat-june", name: "Food (June)", icon: "🍔" };
 
@@ -39,8 +41,7 @@ describe("groupAllocationsForMonth", () => {
       monthItems: [ITEM_JULY],
       monthCats: [CAT_JULY],
       allItemIds: new Set([ITEM_JULY.id]),
-      month: 7,
-      year: 2026,
+      range: JULY,
     });
     expect(groups).toHaveLength(1);
     expect(groups[0].itemId).toBe(ITEM_JULY.id);
@@ -60,8 +61,7 @@ describe("groupAllocationsForMonth", () => {
       monthCats: [CAT_JULY],
       // Both items exist somewhere across all months.
       allItemIds: new Set([ITEM_JULY.id, ITEM_JUNE.id]),
-      month: 7,
-      year: 2026,
+      range: JULY,
     });
     expect(groups).toHaveLength(0);
   });
@@ -78,8 +78,7 @@ describe("groupAllocationsForMonth", () => {
       monthItems: [ITEM_JULY],
       monthCats: [CAT_JULY],
       allItemIds: new Set([ITEM_JULY.id]), // deleted-item not present anywhere
-      month: 7,
-      year: 2026,
+      range: JULY,
     });
     expect(groups).toHaveLength(1);
     expect(groups[0].itemId).toBe("__unknown__");
@@ -99,8 +98,7 @@ describe("groupAllocationsForMonth", () => {
       monthItems: [ITEM_JULY],
       monthCats: [CAT_JULY],
       allItemIds: new Set([ITEM_JULY.id]),
-      month: 7,
-      year: 2026,
+      range: JULY,
     });
     expect(groups).toHaveLength(0);
   });
@@ -117,8 +115,7 @@ describe("groupAllocationsForMonth", () => {
       monthItems: [ITEM_JULY],
       monthCats: [CAT_JULY],
       allItemIds: new Set([ITEM_JULY.id]),
-      month: 7,
-      year: 2026,
+      range: JULY,
     });
     expect(groups).toHaveLength(1);
     expect(groups[0].itemId).toBe("__unknown__");
@@ -132,8 +129,7 @@ describe("groupAllocationsForMonth", () => {
       monthItems: [ITEM_JULY],
       monthCats: [CAT_JULY],
       allItemIds: new Set([ITEM_JULY.id]),
-      month: 7,
-      year: 2026,
+      range: JULY,
     });
     expect(groups[0].txns.map((t) => t.id)).toEqual(["newer", "older"]);
   });
@@ -150,11 +146,36 @@ describe("groupAllocationsForMonth", () => {
       monthItems: [ITEM_JULY],
       monthCats: [CAT_JULY],
       allItemIds: new Set([ITEM_JULY.id]),
-      month: 7,
-      year: 2026,
+      range: JULY,
     });
     expect(groups).toHaveLength(1);
     expect(groups[0].itemId).toBe("__unknown__");
     expect(groups[0].item).toBeNull();
+  });
+
+  it("places an orphan by budget cycle range, not calendar month", () => {
+    const t = txn({
+      id: "t1",
+      budget_item_id: null,
+      occurred_at: "2026-11-10T10:00:00",
+      created_at: "2026-11-10T10:00:00",
+    });
+    const base = {
+      txns: [t],
+      monthItems: [],
+      monthCats: [],
+      allItemIds: new Set<string>(),
+    };
+    const inOct = groupAllocationsForMonth({
+      ...base,
+      range: { start: "2026-10-15", end: "2026-11-14" },
+    });
+    expect(inOct).toHaveLength(1);
+    expect(inOct[0].itemId).toBe("__unknown__");
+    const inNov = groupAllocationsForMonth({
+      ...base,
+      range: { start: "2026-11-15", end: "2026-12-14" },
+    });
+    expect(inNov).toHaveLength(0);
   });
 });

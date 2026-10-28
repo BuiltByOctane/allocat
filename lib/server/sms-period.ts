@@ -2,11 +2,12 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/database";
 import type { RuleResolutionContext } from "@/lib/sms/resolveRuleItem";
+import { resolveServerPeriod } from "@/lib/server/budget-period";
 
 /**
- * Load the resolver context (budget + its items) for the SMS's period — its
- * occurred_at month, falling back to now. Read-only: never creates a budget.
- * See lib/sms/resolveRuleItem.ts.
+ * Load the resolver context (budget + its items) for the SMS's period — the
+ * budget cycle containing its occurred_at, falling back to now. Read-only:
+ * never creates a budget. See lib/sms/resolveRuleItem.ts.
  *
  * Shared by the cookie-authed SMS actions and the iPhone shortcut endpoint,
  * which runs on the service-role client. Every query is therefore scoped by
@@ -18,16 +19,19 @@ export async function loadPeriodContext(
   occurredAt: string | null | undefined,
 ): Promise<RuleResolutionContext> {
   const d = occurredAt ? new Date(occurredAt) : new Date();
-  const month = d.getMonth() + 1;
-  const year = d.getFullYear();
+  const period = await resolveServerPeriod(
+    supabase,
+    userId,
+    isNaN(d.getTime()) ? new Date() : d,
+  );
 
-  const { data: budget } = await supabase
+  const base = supabase
     .from("budgets")
     .select("id, template_id")
-    .eq("user_id", userId)
-    .eq("month", month)
-    .eq("year", year)
-    .maybeSingle();
+    .eq("user_id", userId);
+  const { data: budget } = period.budgetId
+    ? await base.eq("id", period.budgetId).maybeSingle()
+    : await base.eq("month", period.month).eq("year", period.year).maybeSingle();
 
   let items: RuleResolutionContext["items"] = [];
   if (budget) {

@@ -9,6 +9,7 @@
  * SMS content is sent to any third party.
  */
 import { getDB } from "@/lib/db";
+import { resolvePeriodIDB } from "@/lib/budget/periodIDB";
 import type { SyncQueueItem } from "@/lib/db";
 import { parseTransactionSms, isOtpOrVerification } from "@/lib/ai/parseSmsTransaction";
 import { normalizeMerchant, matchMerchantRules, txnDedupeKey, smsTemplateKey } from "@/lib/sms/match";
@@ -43,21 +44,22 @@ const inFlight = new Set<string>();
 
 /**
  * Load the resolver context (budget + its items) for a period from IDB — mirror
- * of the server's loadPeriodContext. Reads the budget for the SMS's occurred_at
- * month (fallback: now) and its items. See lib/sms/resolveRuleItem.ts.
+ * of the server's loadPeriodContext. Reads the budget of the budget cycle
+ * containing the SMS's occurred_at (fallback: now) and its items. See lib/sms/resolveRuleItem.ts.
  */
 async function loadPeriodContextIDB(
   occurredAt: string | null | undefined,
 ): Promise<RuleResolutionContext> {
   const db = getDB();
   const d = occurredAt ? new Date(occurredAt) : new Date();
-  const month = d.getMonth() + 1;
-  const year = d.getFullYear();
+  const period = await resolvePeriodIDB(isNaN(d.getTime()) ? new Date() : d);
 
-  const budget = await db.budgets
-    .where("[month+year]")
-    .equals([month, year])
-    .first();
+  const budget = period.budgetId
+    ? await db.budgets.get(period.budgetId)
+    : await db.budgets
+        .where("[month+year]")
+        .equals([period.month, period.year])
+        .first();
 
   let items: RuleResolutionContext["items"] = [];
   if (budget) {
@@ -314,7 +316,7 @@ export async function ingestSmsClient(
             {
               kind: "pace",
               title: "🐾 Spending fast",
-              body: `${pace.name} is on track to run out around the ${ordinal(pace.byDay)}. Ease up to stay in budget.`,
+              body: `${pace.name} is on track to run out around the ${ordinal(pace.byDayOfMonth)}. Ease up to stay in budget.`,
               url: "/budget",
             },
             { silent },

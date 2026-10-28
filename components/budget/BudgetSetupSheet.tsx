@@ -20,6 +20,9 @@ import {
   type StampTemplateInput,
 } from "@/lib/actions/budget-templates";
 import { saveTemplateDurableId } from "@/lib/budget/saveTemplateDurableId";
+import { BudgetCycleSheet } from "@/components/budget/BudgetCycleSheet";
+import { useCurrentPeriod } from "@/lib/hooks/useCurrentPeriod";
+import { cycleRangeText } from "@/lib/budget/cycleText";
 import {
   diffTemplateToBudget,
   type BudgetSideCategory,
@@ -151,6 +154,8 @@ export function BudgetSetupSheet({
   const haptic = useHaptic();
   const fmt = useFormatCurrency();
   const enqueue = useEnqueue();
+  const { startDay } = useCurrentPeriod();
+  const [cycleOpen, setCycleOpen] = useState(false);
 
   const [step, setStep] = useState<1 | 2>(1);
   const [internalMode, setInternalMode] = useState<SetupMode>("create");
@@ -1003,6 +1008,19 @@ export function BudgetSetupSheet({
                 >
                   Pick a template to get started
                 </p>
+                <button
+                  type="button"
+                  onClick={() => setCycleOpen(true)}
+                  className="mt-3 flex w-full items-center gap-2 rounded-xl bg-tile px-3 py-2.5 text-left text-[12px] font-semibold text-foreground active:scale-[0.99] transition-transform"
+                >
+                  <span className="material-symbols-outlined text-[16px] text-muted-foreground">
+                    calendar_month
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    Budget cycle: {cycleRangeText(startDay)} ·{" "}
+                    <span className="underline underline-offset-2">Change</span>
+                  </span>
+                </button>
               </div>
 
               <div className="overflow-y-auto flex-1 px-5 py-5 space-y-6 pb-8">
@@ -1394,6 +1412,7 @@ export function BudgetSetupSheet({
               </div>
             </div>
           )}
+          <BudgetCycleSheet nested open={cycleOpen} onClose={() => setCycleOpen(false)} />
         </Drawer.Content>
       </Drawer.Portal>
     </Drawer.Root>

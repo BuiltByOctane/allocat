@@ -625,6 +625,7 @@ async function runHydrate(): Promise<void> {
 
 /** Tables the single-table refresh helpers accept. */
 type RefreshableTable =
+  | "profiles"
   | "budgets"
   | "categories"
   | "budget_items"

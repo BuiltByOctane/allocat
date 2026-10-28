@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { Capacitor } from "@capacitor/core";
-import { ChevronRight, History, MessageSquareText, Smartphone, CheckCircle2, Lightbulb, RotateCcw, MessageSquareHeart, Receipt, FileBarChart, Sun, Moon, ShieldCheck, Trash2 } from "lucide-react";
+import { CalendarDays, ChevronRight, History, MessageSquareText, Smartphone, CheckCircle2, Lightbulb, RotateCcw, MessageSquareHeart, Receipt, FileBarChart, Sun, Moon, ShieldCheck, Trash2 } from "lucide-react";
 import UserAvatar from "@/components/profile/UserAvatar";
 import AvatarPickerSheet from "@/components/profile/AvatarPickerSheet";
 import { Card } from "@/components/ui/Card";
@@ -13,6 +13,9 @@ import AccentSelector from "@/components/profile/AccentSelector";
 import SupportCard from "@/components/profile/SupportCard";
 import { useRegisterQuickAction } from "@/lib/providers/QuickActionProvider";
 import CurrencySelector from "@/components/profile/CurrencySelector";
+import { BudgetCycleSheet } from "@/components/budget/BudgetCycleSheet";
+import { useCurrentPeriod } from "@/lib/hooks/useCurrentPeriod";
+import { cycleRangeText } from "@/lib/budget/cycleText";
 import NotificationSoundSelector from "@/components/profile/NotificationSoundSelector";
 import { ConfirmDrawer } from "@/components/ui/ConfirmDrawer";
 import { signOut, deleteAccount } from "@/lib/actions/auth";
@@ -224,6 +227,7 @@ export default function ProfilePage() {
 
       <AccentSelector />
       <CurrencySelector />
+      <BudgetCycleSetting />
 
       {/* Notifications group */}
       <p className="t-label text-muted-foreground mt-1 ml-1">Notifications</p>
@@ -497,5 +501,34 @@ export default function ProfilePage() {
         </p>
       </footer>
     </div>
+  );
+}
+
+/** Preferences row: the budget-cycle start day, opening the switch sheet. */
+function BudgetCycleSetting() {
+  const { startDay } = useCurrentPeriod();
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="block w-full text-left active:scale-[0.99] transition-transform"
+      >
+        <Card compact className="flex items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-tile text-muted-foreground">
+            <CalendarDays size={18} strokeWidth={1.7} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[13.5px] font-bold text-foreground">Budget cycle</div>
+            <div className="text-[10.5px] font-medium text-muted-foreground mt-0.5">
+              Each budget runs {cycleRangeText(startDay)}
+            </div>
+          </div>
+          <ChevronRight size={16} strokeWidth={2} className="text-muted-foreground" />
+        </Card>
+      </button>
+      <BudgetCycleSheet open={open} onClose={() => setOpen(false)} />
+    </>
   );
 }

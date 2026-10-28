@@ -36,6 +36,7 @@ export type AnalyticsEvent =
   | "accent_changed"
   | "theme_changed"
   | "currency_changed"
+  | "budget_cycle_changed"
   | "founding_banner_dismissed"
   | "founding_claimed"
   | "shortcut_setup_opened"

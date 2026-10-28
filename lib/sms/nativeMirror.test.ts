@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildNativeSmsMirror } from "./nativeMirror";
+import type { ResolvedPeriod } from "@/lib/budget/period";
 import type { MerchantRuleRow, CategoryRow, BudgetItemRow, BudgetRow } from "@/lib/db";
 
 /**
@@ -12,6 +13,8 @@ import type { MerchantRuleRow, CategoryRow, BudgetItemRow, BudgetRow } from "@/l
 
 const NOW = new Date("2026-07-15T10:00:00Z"); // July 2026
 const TPL = "tpl-1";
+const JUL: ResolvedPeriod = { month: 7, year: 2026, start: "2026-07-01", end: "2026-07-31", budgetId: "budget-jul" };
+const per = (over: Partial<ResolvedPeriod>): ResolvedPeriod => ({ ...JUL, ...over });
 
 function budget(over: Partial<BudgetRow>): BudgetRow {
   return {
@@ -106,7 +109,7 @@ describe("buildNativeSmsMirror", () => {
       rule({ template_id: TPL, template_item_id: "ti-groceries", pattern: "zomato" }),
     ];
 
-    const result = buildNativeSmsMirror({ rules, cats, items, budgets }, NOW);
+    const result = buildNativeSmsMirror({ rules, cats, items, budgets }, NOW, JUL, 1);
 
     expect(result.rules).toHaveLength(1);
     expect(result.rules[0]).toMatchObject({
@@ -130,7 +133,7 @@ describe("buildNativeSmsMirror", () => {
     ];
     const rules = [rule({ template_id: "tpl-other", template_item_id: "ti-x" })];
 
-    const result = buildNativeSmsMirror({ rules, cats, items, budgets }, NOW);
+    const result = buildNativeSmsMirror({ rules, cats, items, budgets }, NOW, JUL, 1);
 
     expect(result.rules).toHaveLength(0);
   });
@@ -141,7 +144,7 @@ describe("buildNativeSmsMirror", () => {
     const items = [item({ id: "item-jul", name: "Groceries" })];
     const rules = [rule({ budget_item_id: "item-jul" })];
 
-    const result = buildNativeSmsMirror({ rules, cats, items, budgets }, NOW);
+    const result = buildNativeSmsMirror({ rules, cats, items, budgets }, NOW, JUL, 1);
 
     expect(result.rules).toHaveLength(1);
     expect(result.rules[0].itemName).toBe("Groceries");
@@ -156,7 +159,7 @@ describe("buildNativeSmsMirror", () => {
     ];
     const rules = [rule({ budget_item_id: "item-jun" })];
 
-    const result = buildNativeSmsMirror({ rules, cats, items, budgets }, NOW);
+    const result = buildNativeSmsMirror({ rules, cats, items, budgets }, NOW, JUL, 1);
 
     expect(result.rules).toHaveLength(0);
   });
@@ -170,7 +173,7 @@ describe("buildNativeSmsMirror", () => {
     ];
     const rules = [rule({ template_id: TPL, template_item_id: "ti-dup" })];
 
-    const result = buildNativeSmsMirror({ rules, cats, items, budgets }, NOW);
+    const result = buildNativeSmsMirror({ rules, cats, items, budgets }, NOW, JUL, 1);
 
     expect(result.rules).toHaveLength(0);
   });
@@ -187,7 +190,7 @@ describe("buildNativeSmsMirror", () => {
     ];
     const rules: MerchantRuleRow[] = [];
 
-    const result = buildNativeSmsMirror({ rules, cats, items, budgets }, NOW);
+    const result = buildNativeSmsMirror({ rules, cats, items, budgets }, NOW, JUL, 1);
 
     expect(result.targets).toHaveLength(3);
     expect(result.targets.map((t) => t.id)).toEqual(["item-2", "item-3", "item-1"]);
@@ -198,6 +201,8 @@ describe("buildNativeSmsMirror", () => {
     const result = buildNativeSmsMirror(
       { rules: [], cats: [], items: [], budgets: [] },
       new Date("2026-01-05T00:00:00Z"),
+      per({ month: 1, start: "2026-01-01", end: "2026-01-31", budgetId: null }),
+      1,
     );
     expect(result.period).toBe("2026-01");
   });
@@ -211,10 +216,43 @@ describe("buildNativeSmsMirror", () => {
         budgets: [budget({ id: "budget-jun", month: 6, year: 2026 })],
       },
       NOW,
+      per({ budgetId: null }),
+      1,
     );
 
     expect(result.rules).toHaveLength(0);
     expect(result.targets).toHaveLength(0);
     expect(result.period).toBe("2026-07");
+  });
+
+  it("startDay 1 full calendar month keeps the legacy YYYY-MM period", () => {
+    const r = buildNativeSmsMirror({ rules: [], cats: [], items: [], budgets: [] }, NOW, per({ month: 10, start: "2026-10-01", end: "2026-10-31" }), 1);
+    expect(r.period).toBe("2026-10");
+  });
+
+  it("startDay 15 emits a start|end range", () => {
+    const r = buildNativeSmsMirror(
+      { rules: [], cats: [], items: [], budgets: [] },
+      NOW,
+      per({ month: 10, start: "2026-10-15", end: "2026-11-14" }),
+      15,
+    );
+    expect(r.period).toBe("2026-10-15|2026-11-14");
+  });
+
+  it("scopes items to period.budgetId even when now is in the next month", () => {
+    const budgets = [budget({ id: "b-oct", month: 10 }), budget({ id: "b-nov", month: 11 })];
+    const cats = [cat({ id: "c-oct", budget_id: "b-oct" }), cat({ id: "c-nov", budget_id: "b-nov" })];
+    const items = [
+      item({ id: "i-oct", category_id: "c-oct", actual_amount: 10 }),
+      item({ id: "i-nov", category_id: "c-nov", actual_amount: 999 }),
+    ];
+    const r = buildNativeSmsMirror(
+      { rules: [], cats, items, budgets },
+      new Date("2026-11-02T10:00:00Z"),
+      per({ month: 10, start: "2026-10-15", end: "2026-11-14", budgetId: "b-oct" }),
+      15,
+    );
+    expect(r.targets.map((t) => t.id)).toEqual(["i-oct"]);
   });
 });

@@ -23,6 +23,9 @@ import type {
   BudgetItemRow,
   BudgetRow,
 } from "@/lib/db";
+import type { ResolvedPeriod } from "@/lib/budget/period";
+import { computeRange } from "@/lib/budget/period";
+import { resolvePeriodIDB, getStartDayIDB } from "@/lib/budget/periodIDB";
 import { resolveRuleItemId } from "./resolveRuleItem";
 import { SmsReader } from "@/lib/native/SmsReader";
 import { confirmAutoAllocate, notifSound } from "./notifPrefs";
@@ -45,17 +48,24 @@ export interface NativeRulePayload {
 }
 
 export interface NativeMirrorResult {
-  /** Only rules resolvable to a CURRENT-month budget item. */
+  /** Only rules resolvable to a CURRENT-cycle budget item. */
   rules: NativeRulePayload[];
   /** Top-3 current-month items by actual_amount, for quick-allocate buttons. */
   targets: Array<{ id: string; name: string }>;
-  /** Zero-padded "YYYY-MM" of `now`. */
+  /**
+ * Freshness stamp. "YYYY-MM" for a full calendar-month cycle (startDay 1) so
+ * already-installed APKs, which only know that form, stay fresh; otherwise
+ * "YYYY-MM-DD|YYYY-MM-DD" (inclusive start|end).
+ */
   period: string;
 }
 
-function periodOf(now: Date): string {
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  return `${now.getFullYear()}-${month}`;
+function periodStamp(period: ResolvedPeriod, startDay: number): string {
+  const cal = computeRange({ month: period.month, year: period.year }, 1);
+  if (startDay === 1 && period.start === cal.start && period.end === cal.end) {
+    return `${period.year}-${String(period.month).padStart(2, "0")}`;
+  }
+  return `${period.start}|${period.end}`;
 }
 
 /**
@@ -70,14 +80,16 @@ export function buildNativeSmsMirror(
     items: BudgetItemRow[];
     budgets: BudgetRow[];
   },
-  now: Date,
+  _now: Date,
+  period: ResolvedPeriod,
+  startDay: number,
 ): NativeMirrorResult {
   const { rules, cats, items, budgets } = data;
-  const period = periodOf(now);
+  const periodStr = periodStamp(period, startDay);
 
-  const curBudget = budgets.find(
-    (b) => b.month === now.getMonth() + 1 && b.year === now.getFullYear(),
-  );
+  const curBudget =
+    (period.budgetId ? budgets.find((b) => b.id === period.budgetId) : undefined) ??
+    budgets.find((b) => b.month === period.month && b.year === period.year);
   const curCatIds = new Set(
     cats.filter((c) => c.budget_id === curBudget?.id).map((c) => c.id),
   );
@@ -130,7 +142,7 @@ export function buildNativeSmsMirror(
     .slice(0, 3)
     .map((it) => ({ id: it.id, name: it.name }));
 
-  return { rules: rulePayloads, targets, period };
+  return { rules: rulePayloads, targets, period: periodStr };
 }
 
 /** Signature of the last payload pushed, so an unchanged foreground/mutation skips the native IPC. */
@@ -153,11 +165,12 @@ export async function pushSmsMirrorToNative(): Promise<void> {
       db.budget_items.toArray(),
       db.budgets.toArray(),
     ]);
+    const [resolved, startDay] = await Promise.all([resolvePeriodIDB(), getStartDayIDB()]);
     const {
       rules: rulePayloads,
       targets,
       period,
-    } = buildNativeSmsMirror({ rules, cats, items, budgets }, new Date());
+    } = buildNativeSmsMirror({ rules, cats, items, budgets }, new Date(), resolved, startDay);
 
     const rulesStr = JSON.stringify(rulePayloads);
     const targetsStr = JSON.stringify(targets);

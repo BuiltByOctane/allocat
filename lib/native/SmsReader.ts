@@ -16,8 +16,9 @@ export interface SmsReaderPlugin {
    * Rule shape: { match_type, pattern, category, allocated, spent, itemName,
    * itemPlanned, itemActual, itemOverspendCount: number (durable per-item
    * overspend base count; native adds its ephemeral tally on top) }
-   * `period` is the "YYYY-MM" the rules/numbers were mirrored for, so native
-   * can tell a stale mirror apart from the current month.
+   * `period` is what the rules/numbers were mirrored for: "YYYY-MM" (calendar
+   * month) or "YYYY-MM-DD|YYYY-MM-DD" (inclusive budget-cycle range), so native
+   * can tell a stale mirror apart from the current cycle.
    */
   setRules(options: { rules: string; period: string }): Promise<void>;
   /** Push template keys (JSON string[]) the user reported as mistakes; the

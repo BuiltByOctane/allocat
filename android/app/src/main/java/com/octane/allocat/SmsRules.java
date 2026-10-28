@@ -39,12 +39,83 @@ final class SmsRules {
             .apply();
     }
 
-    /** True only when a non-empty stored period stamp matches expectedPeriod.
-     * A missing/empty stamp (mirror pushed by an old app version) is treated as
-     * stale — safe default is a generic notification, not stale budget math. */
-    static boolean isFresh(Context c, String expectedPeriod) {
+    private static final String DATE_FMT = "yyyy-MM-dd";
+
+    private static String stored(Context c) {
         String stored = c.getSharedPreferences(PREF, Context.MODE_PRIVATE).getString(KEY_PERIOD, "");
-        return stored != null && !stored.isEmpty() && stored.equals(expectedPeriod);
+        return stored == null ? "" : stored;
+    }
+
+    private static String fmt(String pattern, long ts) {
+        return new java.text.SimpleDateFormat(pattern, java.util.Locale.US).format(new java.util.Date(ts));
+    }
+
+    /** Parses "yyyy-MM-dd" at local noon (DST-safe), or null when malformed. */
+    private static java.util.Calendar parseDay(String s) {
+        try {
+            java.text.SimpleDateFormat f = new java.text.SimpleDateFormat(DATE_FMT, java.util.Locale.US);
+            f.setLenient(false);
+            java.util.Calendar cal = java.util.Calendar.getInstance();
+            cal.setTime(f.parse(s));
+            cal.set(java.util.Calendar.HOUR_OF_DAY, 12);
+            return cal;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Stored "start|end" range as {start, end} date strings, or null when the
+     * stamp is legacy ("yyyy-MM"), empty or malformed. */
+    private static String[] range(Context c) {
+        String stored = stored(c);
+        int bar = stored.indexOf('|');
+        if (bar < 0) return null;
+        String start = stored.substring(0, bar);
+        String end = stored.substring(bar + 1);
+        if (parseDay(start) == null || parseDay(end) == null) return null;
+        return new String[] { start, end };
+    }
+
+    /** True only when the stored period stamp covers the date of ts. Stamp is
+     * either a budget-cycle range "yyyy-MM-dd|yyyy-MM-dd" (inclusive) or the
+     * legacy calendar month "yyyy-MM". A missing/empty/malformed stamp (mirror
+     * pushed by an old app version) is stale — safe default is a generic
+     * notification, not stale budget math. */
+    static boolean isFresh(Context c, long ts) {
+        String stored = stored(c);
+        if (stored.isEmpty()) return false;
+        if (stored.indexOf('|') >= 0) {
+            String[] r = range(c);
+            if (r == null) return false;
+            String day = fmt(DATE_FMT, ts);
+            return day.compareTo(r[0]) >= 0 && day.compareTo(r[1]) <= 0;
+        }
+        return stored.equals(fmt("yyyy-MM", ts));
+    }
+
+    /** For a range stamp: {day-of-cycle of ts (1-based), cycle length in days}.
+     * Null for a legacy/invalid stamp — callers then use calendar-month math. */
+    static int[] cycleInfo(Context c, long ts) {
+        String[] r = range(c);
+        if (r == null) return null;
+        java.util.Calendar start = parseDay(r[0]);
+        java.util.Calendar end = parseDay(r[1]);
+        java.util.Calendar today = parseDay(fmt(DATE_FMT, ts));
+        if (start == null || end == null || today == null) return null;
+        long ms = 24L * 60 * 60 * 1000;
+        int day = (int) Math.round((today.getTimeInMillis() - start.getTimeInMillis()) / (double) ms) + 1;
+        int len = (int) Math.round((end.getTimeInMillis() - start.getTimeInMillis()) / (double) ms) + 1;
+        return new int[] { day, len };
+    }
+
+    /** Real day-of-month of cycle day n (1-based) of the stored range, or n
+     * when there is no range. */
+    static int dayOfMonthOfCycleDay(Context c, int n) {
+        String[] r = range(c);
+        java.util.Calendar start = r == null ? null : parseDay(r[0]);
+        if (start == null) return n;
+        start.add(java.util.Calendar.DAY_OF_MONTH, n - 1);
+        return start.get(java.util.Calendar.DAY_OF_MONTH);
     }
 
     /** Matched rule's category + budget snapshot, or null when nothing matches. */

@@ -93,9 +93,7 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
             log("queued + emitted (app open)");
         } else if (parsed.amount != null) {
             // App closed → notify natively right now.
-            String period = new java.text.SimpleDateFormat("yyyy-MM", java.util.Locale.US)
-                .format(new java.util.Date(ts));
-            SmsRules.Match mr = SmsRules.isFresh(context, period)
+            SmsRules.Match mr = SmsRules.isFresh(context, ts)
                 ? SmsRules.match(context, parsed.merchantNormalized)
                 : null;
             String merch = parsed.merchant != null ? parsed.merchant : "someone";
@@ -153,13 +151,19 @@ public class SmsTransactionReceiver extends BroadcastReceiver {
                     java.util.Calendar cal = java.util.Calendar.getInstance();
                     int day = cal.get(java.util.Calendar.DAY_OF_MONTH);
                     int dim = cal.getActualMaximum(java.util.Calendar.DAY_OF_MONTH);
+                    // Budget-cycle stamp: measure pace over the cycle, not the calendar month.
+                    int[] cycle = SmsRules.cycleInfo(context, System.currentTimeMillis());
+                    if (cycle != null) {
+                        day = cycle[0];
+                        dim = cycle[1];
+                    }
                     int byDay = (mr.itemPlanned > 0 && newActual > 0)
                         ? (int) Math.ceil(mr.itemPlanned * day / newActual)
                         : Integer.MAX_VALUE;
                     if (mr.itemPlanned > 0 && day >= 3 && byDay <= dim) {
                         notifTitle = "🐾 Spending fast";
                         notifBody = mr.itemName + " is on track to run out around the "
-                            + ordinal(byDay) + ". Ease up to stay in budget.";
+                            + ordinal(cycle != null ? SmsRules.dayOfMonthOfCycleDay(context, byDay) : byDay) + ". Ease up to stay in budget.";
                         url = "/budget";
                     } else if (SmsConfig.confirmEnabled(context)) {
                         // Subtle auto-allocate confirmation (user can disable in

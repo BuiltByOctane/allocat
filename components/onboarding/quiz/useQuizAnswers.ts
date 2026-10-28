@@ -25,8 +25,10 @@ export interface QuizAnswersState extends ResolvedQuizAnswers {
   dreamSkipped: boolean;
   treatSkipped: boolean;
   amountSkipped: boolean;
-  /** Budget cycle start day (1-28). Not a plan input; 1 = calendar month. */
-  payday: number;
+  /** Budget cycle start day (1-28), or null until the user answers. Not a
+   *  plan input; 1 = calendar month. Skipping keeps it null so the day is
+   *  asked at first budget setup instead of silently defaulting to 1. */
+  payday: number | null;
   paydaySkipped: boolean;
 }
 
@@ -41,7 +43,7 @@ export const initialState: QuizAnswersState = {
   treatSkipped: false,
   amount: AMOUNT_DEFAULT,
   amountSkipped: false,
-  payday: 1,
+  payday: null,
   paydaySkipped: false,
 };
 
@@ -88,7 +90,7 @@ export function reducer(state: QuizAnswersState, action: QuizAction): QuizAnswer
     case "SET_PAYDAY":
       return { ...state, payday: clampStartDay(action.payday), paydaySkipped: false };
     case "SKIP_PAYDAY":
-      return { ...state, payday: 1, paydaySkipped: true };
+      return { ...state, payday: null, paydaySkipped: true };
     default:
       return state;
   }

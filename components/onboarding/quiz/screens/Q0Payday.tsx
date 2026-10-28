@@ -18,7 +18,8 @@ const DAYS = Array.from({ length: 28 }, (_, i) => i + 1);
 
 export function Q0Payday({ answers, dispatch, deckNav }: Q0PaydayProps) {
   const haptic = useHaptic();
-  const [picking, setPicking] = useState(answers.payday !== 1);
+  // Nothing is pre-selected: a new account must say which day (the 1st too).
+  const [picking, setPicking] = useState(answers.payday !== null && answers.payday !== 1);
 
   function choose(payday: number) {
     haptic.selection();

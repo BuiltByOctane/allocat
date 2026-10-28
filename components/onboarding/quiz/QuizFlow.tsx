@@ -46,22 +46,36 @@ export function QuizFlow({ onDone }: QuizFlowProps) {
   );
 
   /** Best-effort: a brand-new user has no budgets, so only the profile's
-   *  start day changes. Returns the start day the profile actually holds. */
-  async function applyPayday(): Promise<number> {
-    if (answers.payday === 1) return 1;
+   *  start day changes. Every answer — the 1st and "No fixed salary" (⇒ 1)
+   *  included — is an explicit choice and is saved, so it is never asked
+   *  again. Returns the day the profile now holds, or null when nothing was
+   *  saved (question skipped, or the call failed). */
+  async function applyPayday(): Promise<number | null> {
+    const day = answers.payday;
+    if (day === null) return null;
     try {
-      const res = await setBudgetStartDay(answers.payday, toISODate(new Date()), {
+      const res = await setBudgetStartDay(day, toISODate(new Date()), {
         deleteBudgetIds: [],
         currentEnd: null,
       });
-      return res.ok ? answers.payday : 1;
+      return res.ok ? day : null;
     } catch {
-      return 1;
+      return null;
     }
   }
 
   async function handleSave(plan: QuizPlan) {
-    const startDay = await applyPayday();
+    if (answers.payday === null) {
+      // Payday skipped: creating the budget now would stamp a 1st-based cycle
+      // the user never chose. Keep the plan as a draft instead — the budget
+      // page asks for the day first, then opens setup pre-filled with it.
+      await handleDiscard(plan);
+      return;
+    }
+    const chosenDay = await applyPayday();
+    // A failed save falls back to the effective day 1 (the DB trigger stamps
+    // the same); the budget page asks for the day before the next budget.
+    const startDay = chosenDay ?? 1;
     try {
       // The DB trigger stamps the new budget from the profile's start day.
       const label = labelForDate(toISODate(new Date()), startDay);

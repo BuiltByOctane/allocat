@@ -349,5 +349,14 @@ export class AllocatDB extends Dexie {
     this.version(19).upgrade(async (tx) => {
       await tx.table("sync_meta").delete("profiles");
     });
+
+    // v20: budget cycle start day. `profiles.budget_start_day` and
+    // `budgets.period_start` / `period_end` are new non-indexed columns →
+    // schema strings unchanged; dropping both watermarks forces a full re-pull
+    // so cached rows pick up the new fields.
+    this.version(20).upgrade(async (tx) => {
+      await tx.table("sync_meta").delete("budgets");
+      await tx.table("sync_meta").delete("profiles");
+    });
   }
 }

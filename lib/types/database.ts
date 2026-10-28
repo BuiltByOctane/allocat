@@ -22,6 +22,7 @@ export type Database = {
           founding_member_since: string | null
           last_app_mode: "web" | "android" | null
           last_seen_at: string | null
+          budget_start_day: number
           created_at: string
           updated_at: string
         }
@@ -37,6 +38,7 @@ export type Database = {
           founding_member_since?: string | null
           last_app_mode?: "web" | "android" | null
           last_seen_at?: string | null
+          budget_start_day?: number
           created_at?: string
           updated_at?: string
         }
@@ -51,6 +53,7 @@ export type Database = {
           founding_member_since?: string | null
           last_app_mode?: "web" | "android" | null
           last_seen_at?: string | null
+          budget_start_day?: number
           updated_at?: string
         }
         Relationships: []
@@ -64,6 +67,8 @@ export type Database = {
           total_budget: number
           is_locked: boolean
           template_id: string | null
+          period_start: string
+          period_end: string
           created_at: string
           updated_at: string
         }
@@ -75,6 +80,8 @@ export type Database = {
           total_budget?: number
           is_locked?: boolean
           template_id?: string | null
+          period_start?: string
+          period_end?: string
           created_at?: string
           updated_at?: string
         }
@@ -84,6 +91,8 @@ export type Database = {
           total_budget?: number
           is_locked?: boolean
           template_id?: string | null
+          period_start?: string
+          period_end?: string
           updated_at?: string
         }
         Relationships: []
@@ -941,6 +950,10 @@ export type Database = {
       increment_ai_usage: {
         Args: { p_user: string }
         Returns: number
+      }
+      apply_budget_cycle_switch: {
+        Args: { p_plan: Json }
+        Returns: undefined
       }
       admin_overview: {
         Args: Record<string, never>

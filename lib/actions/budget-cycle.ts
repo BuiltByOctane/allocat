@@ -2,26 +2,25 @@
 
 import { createClient, getAuthedUser } from "@/lib/supabase/server";
 import {
-  addDays,
   clampStartDay,
   planStartDaySwitch,
   type ISODate,
   type SwitchPlan,
 } from "@/lib/budget/period";
+import {
+  DEVICE_DATE_ERROR,
+  STALE_PLAN_ERROR,
+  isAcceptableClientDate,
+  planMatchesExpected,
+  type ExpectedSwitch,
+} from "@/lib/budget/switchGuard";
 import type { Json } from "@/lib/types/database";
 
 export type SetBudgetStartDayResult =
   | { ok: true; plan: SwitchPlan | null }
-  | { ok: false; error: string };
+  | { ok: false; error: string; stale?: true };
 
 const GENERIC_ERROR = "Couldn't change your budget cycle. Please try again.";
-
-/** A real calendar date in strict "YYYY-MM-DD" form. */
-function isRealISODate(s: unknown): s is ISODate {
-  if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
-  // addDays round-trips through a day number, normalising e.g. 2026-02-30.
-  return addDays(s, 0) === s;
-}
 
 /**
  * Switch the user's budget cycle start day (1–28).
@@ -32,15 +31,28 @@ function isRealISODate(s: unknown): s is ISODate {
  * here from the database — a client plan is never trusted.
  *
  * `today` is the client's LOCAL date (the server runs in UTC); it must be
- * within one day of the server's UTC date.
+ * within one day of the server's UTC date. `expected` is what the client
+ * previewed: if the server's own plan would delete other budgets or end the
+ * current one elsewhere (stale IDB, another device), nothing is applied and
+ * `stale: true` asks the client to refresh and re-preview.
  */
-export async function setBudgetStartDay(day: number, today: ISODate): Promise<SetBudgetStartDayResult> {
+export async function setBudgetStartDay(
+  day: number,
+  today: ISODate,
+  expected: ExpectedSwitch,
+): Promise<SetBudgetStartDayResult> {
   if (clampStartDay(day) !== day) return { ok: false, error: "Pick a day between 1 and 28." };
 
-  if (!isRealISODate(today)) return { ok: false, error: "Your device date looks wrong." };
-  const serverToday = new Date().toISOString().slice(0, 10);
-  if (today < addDays(serverToday, -1) || today > addDays(serverToday, 1)) {
-    return { ok: false, error: "Your device date looks wrong. Check it and try again." };
+  if (!isAcceptableClientDate(today, new Date().toISOString().slice(0, 10))) {
+    return { ok: false, error: DEVICE_DATE_ERROR };
+  }
+  if (
+    !expected ||
+    !Array.isArray(expected.deleteBudgetIds) ||
+    !expected.deleteBudgetIds.every((id) => typeof id === "string") ||
+    !(expected.currentEnd === null || typeof expected.currentEnd === "string")
+  ) {
+    return { ok: false, error: STALE_PLAN_ERROR, stale: true };
   }
 
   const user = await getAuthedUser();
@@ -68,6 +80,8 @@ export async function setBudgetStartDay(day: number, today: ISODate): Promise<Se
     newStartDay: day,
     budgets: budgetsRes.data ?? [],
   });
+  // Never delete a budget the user wasn't shown in the preview.
+  if (!planMatchesExpected(plan, expected)) return { ok: false, error: STALE_PLAN_ERROR, stale: true };
   if (!plan) return { ok: true, plan: null };
 
   // The RPC errors on JSON-null arrays — always send arrays.

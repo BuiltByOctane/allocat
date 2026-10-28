@@ -32,6 +32,23 @@ import { useHaptic } from "@/lib/hooks/useHaptic";
 import { track } from "@/lib/analytics/client";
 
 const DAYS = Array.from({ length: 28 }, (_, i) => i + 1);
+/**
+ * Best-effort pull of the rows the preview depends on, then read them from IDB.
+ * Another device may have created budgets this one hasn't seen; the server's
+ * mismatch guard is the backstop if the pull fails.
+ */
+async function loadFresh(): Promise<{ startDay: number; budgets: StoredBudgetPeriod[] }> {
+  await Promise.all([forceRefreshTable("budgets"), forceRefreshTable("profiles")]).catch((e) =>
+    console.warn("Budget cycle preview refresh failed:", e),
+  );
+  const [startDay, budgets] = await Promise.all([getStartDayIDB(), getStoredPeriodsIDB()]);
+  return { startDay, budgets };
+}
+
+function countQueued(): Promise<number> {
+  return getDB().sync_queue.where("status").anyOf("pending", "processing").count();
+}
+
 const SYNC_BLOCK_COPY = "Syncing your changes — try again in a moment.";
 const OFFLINE_COPY = "You're offline. Connect to the internet to change your budget cycle.";
 
@@ -82,8 +99,8 @@ function CycleSheetBody({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([getStartDayIDB(), getStoredPeriodsIDB()]).then(([startDay, budgets]) => {
-      if (!cancelled) setLoaded({ startDay, budgets });
+    void loadFresh().then((fresh) => {
+      if (!cancelled) setLoaded(fresh);
     });
     return () => {
       cancelled = true;
@@ -92,9 +109,7 @@ function CycleSheetBody({ onClose }: { onClose: () => void }) {
 
   // A queued op could target a budget the switch deletes — wait for the drain.
   useEffect(() => {
-    const sub = liveQuery(() =>
-      getDB().sync_queue.where("status").anyOf("pending", "processing").count(),
-    ).subscribe({
+    const sub = liveQuery(countQueued).subscribe({
       next: (n) => setSyncBusy(n > 0),
       error: () => setSyncBusy(false),
     });
@@ -124,8 +139,18 @@ function CycleSheetBody({ onClose }: { onClose: () => void }) {
     haptic.light();
     setSaving(true);
     try {
-      const res = await setBudgetStartDay(selected, toISODate(new Date()));
+      // The liveQuery can lag a just-enqueued op; check the queue at click time.
+      if ((await countQueued()) > 0) {
+        setSyncBusy(true);
+        return;
+      }
+      const res = await setBudgetStartDay(selected, toISODate(new Date()), {
+        deleteBudgetIds: plan.deleteBudgetIds,
+        currentEnd: plan.current?.end ?? null,
+      });
       if (!res.ok) {
+        // Server saw budgets this preview didn't: re-pull and re-preview.
+        if (res.stale) setLoaded(await loadFresh());
         setError(res.error);
         return;
       }
@@ -162,7 +187,13 @@ function CycleSheetBody({ onClose }: { onClose: () => void }) {
   };
 
   let preview: ReactNode = null;
-  if (plan) {
+  if (!loaded) {
+    preview = (
+      <div className="rounded-2xl bg-tile px-4 py-3 text-[12.5px] font-medium text-muted-foreground animate-pulse">
+        Checking your budgets…
+      </div>
+    );
+  } else if (plan) {
     const cur = plan.current;
     preview = (
       <div className="rounded-2xl bg-tile px-4 py-3 space-y-1.5">

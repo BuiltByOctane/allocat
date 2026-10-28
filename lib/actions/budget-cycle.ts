@@ -4,6 +4,7 @@ import { createClient, getAuthedUser } from "@/lib/supabase/server";
 import {
   clampStartDay,
   planStartDaySwitch,
+  startDayChoice,
   type ISODate,
   type SwitchPlan,
 } from "@/lib/budget/period";
@@ -12,6 +13,7 @@ import {
   STALE_PLAN_ERROR,
   isAcceptableClientDate,
   planMatchesExpected,
+  rpcPlanFor,
   type ExpectedSwitch,
 } from "@/lib/budget/switchGuard";
 import type { Json } from "@/lib/types/database";
@@ -23,7 +25,9 @@ export type SetBudgetStartDayResult =
 const GENERIC_ERROR = "Couldn't change your budget cycle. Please try again.";
 
 /**
- * Switch the user's budget cycle start day (1–28).
+ * Switch the user's budget cycle start day (1–28) — or save it for the first
+ * time (a profile created after the start-day migration holds null until the
+ * user picks; picking 1 is still saved so they are never asked again).
  *
  * Called directly, not via the sync queue: the switch deletes and re-dates
  * budgets server-side in one transaction (`apply_budget_cycle_switch`), so it
@@ -74,23 +78,23 @@ export async function setBudgetStartDay(
     return { ok: false, error: GENERIC_ERROR };
   }
 
+  // A never-chosen (null) day plans from the effective day 1 — the same old
+  // day the client's preview used.
+  const storedChoice = startDayChoice(profileRes.data?.budget_start_day);
   const plan = planStartDaySwitch({
     today,
-    oldStartDay: clampStartDay(profileRes.data?.budget_start_day),
+    oldStartDay: clampStartDay(storedChoice),
     newStartDay: day,
     budgets: budgetsRes.data ?? [],
   });
   // Never delete a budget the user wasn't shown in the preview.
   if (!planMatchesExpected(plan, expected)) return { ok: false, error: STALE_PLAN_ERROR, stale: true };
-  if (!plan) return { ok: true, plan: null };
 
-  // The RPC errors on JSON-null arrays — always send arrays.
-  const p_plan = {
-    startDay: plan.startDay,
-    current: plan.current,
-    deleteBudgetIds: plan.deleteBudgetIds ?? [],
-    redate: plan.redate ?? [],
-  } as unknown as Json;
+  // A first-time choice is always saved, even when it changes no budget
+  // (e.g. picking the 1st); an unchanged stored day writes nothing.
+  const rpcPlan = rpcPlanFor(plan, storedChoice, day);
+  if (!rpcPlan) return { ok: true, plan: null };
+  const p_plan = rpcPlan as unknown as Json;
 
   const { error } = await supabase.rpc("apply_budget_cycle_switch", { p_plan });
   if (error) {

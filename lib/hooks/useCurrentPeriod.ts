@@ -1,12 +1,14 @@
 import { useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  getStartDayChoiceIDB,
   getStartDayIDB,
   getStoredPeriodsIDB,
   rangeForLabelIDB,
   resolvePeriodIDB,
 } from "@/lib/budget/periodIDB";
 import {
+  clampStartDay,
   resolvePeriod,
   stepResolved,
   toISODate,
@@ -16,15 +18,28 @@ import {
 
 /** The cycle containing today. Invalidate this prefix after a start-day switch. */
 export const CURRENT_PERIOD_KEY = ["currentPeriod"] as const;
-/** The profile start day. Under CURRENT_PERIOD_KEY so one invalidation covers both. */
+/**
+ * The profile's CHOSEN start day (number | null — null = never chosen). Under
+ * CURRENT_PERIOD_KEY so one invalidation covers both. Its queryFn must stay
+ * `getStartDayChoiceIDB` (prefetch warms the same key).
+ */
 export const START_DAY_KEY = [...CURRENT_PERIOD_KEY, "startDay"] as const;
 
 /**
  * The current budget cycle + the user's start day. Before IDB answers it is the
  * calendar month of today with start day 1 — never undefined. Refetches on
  * window focus so a cycle rollover is picked up while the app stays open.
+ *
+ * `startDay` is the EFFECTIVE day (unchosen ⇒ 1). `startDayChosen` is false
+ * only once IDB has answered that no day is stored; while loading it is true so
+ * nothing flashes a "Not set" state.
  */
-export function useCurrentPeriod(): { period: ResolvedPeriod; startDay: number; isLoading: boolean } {
+export function useCurrentPeriod(): {
+  period: ResolvedPeriod;
+  startDay: number;
+  startDayChosen: boolean;
+  isLoading: boolean;
+} {
   const periodQ = useQuery({
     queryKey: CURRENT_PERIOD_KEY,
     queryFn: () => resolvePeriodIDB(),
@@ -33,7 +48,7 @@ export function useCurrentPeriod(): { period: ResolvedPeriod; startDay: number; 
   });
   const startQ = useQuery({
     queryKey: START_DAY_KEY,
-    queryFn: () => getStartDayIDB(),
+    queryFn: () => getStartDayChoiceIDB(),
     staleTime: 60_000,
     refetchOnWindowFocus: true,
   });
@@ -41,7 +56,8 @@ export function useCurrentPeriod(): { period: ResolvedPeriod; startDay: number; 
   const fallback = useMemo(() => resolvePeriod(toISODate(new Date()), [], 1), []);
   return {
     period: periodQ.data ?? fallback,
-    startDay: startQ.data ?? 1,
+    startDay: clampStartDay(startQ.data),
+    startDayChosen: startQ.data === undefined ? true : startQ.data !== null,
     isLoading: periodQ.isLoading || startQ.isLoading,
   };
 }

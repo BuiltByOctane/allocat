@@ -130,9 +130,27 @@ function resolvedFromStored(b: StoredBudgetPeriod): ResolvedPeriod {
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
-/** Integer 1–28 passes through; anything else (incl. numeric strings) ⇒ 1. */
+/**
+ * The day the user actually chose, or null when none is stored. A profile
+ * created after the start-day migration holds null until the user picks
+ * (onboarding or their first budget setup); existing users were back-filled
+ * with 1. Only an integer 1–28 counts.
+ */
+export function startDayChoice(n: unknown): number | null {
+  return typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= 28 ? n : null;
+}
+
+/** Whether the profile holds a chosen start day (see `startDayChoice`). */
+export function isStartDayChosen(n: unknown): boolean {
+  return startDayChoice(n) !== null;
+}
+
+/**
+ * The EFFECTIVE start day for date maths: the stored choice, else 1. An
+ * unchosen (null) day therefore behaves as calendar months everywhere.
+ */
 export function clampStartDay(n: unknown): number {
-  return typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= 28 ? n : 1;
+  return startDayChoice(n) ?? 1;
 }
 
 /** Local calendar date of `d` (getFullYear/getMonth/getDate, not UTC). */

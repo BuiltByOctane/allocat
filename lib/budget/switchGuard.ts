@@ -25,6 +25,39 @@ export function isAcceptableClientDate(today: unknown, serverToday: ISODate): to
   return today >= addDays(serverToday, -1) && today <= addDays(serverToday, 1);
 }
 
+/** The payload `apply_budget_cycle_switch` reads (the SQL ignores other keys). */
+export interface RpcSwitchPlan {
+  startDay: number;
+  current: SwitchPlan["current"];
+  deleteBudgetIds: string[];
+  redate: SwitchPlan["redate"];
+}
+
+/**
+ * What to send to the RPC, or null when nothing needs writing. `plan` was
+ * computed against the EFFECTIVE old day (null ⇒ 1), so a first-time choice of
+ * 1 plans as "no change" — it must still be persisted, otherwise the user is
+ * asked again. The RPC always writes the profile day, so a plan with no
+ * current budget, deletes or re-dates is exactly "save the choice".
+ */
+export function rpcPlanFor(
+  plan: SwitchPlan | null,
+  storedChoice: number | null,
+  day: number,
+): RpcSwitchPlan | null {
+  if (plan) {
+    // The RPC errors on JSON-null arrays — always send arrays.
+    return {
+      startDay: plan.startDay,
+      current: plan.current,
+      deleteBudgetIds: plan.deleteBudgetIds ?? [],
+      redate: plan.redate ?? [],
+    };
+  }
+  if (storedChoice === null) return { startDay: day, current: null, deleteBudgetIds: [], redate: [] };
+  return null;
+}
+
 /**
  * True when the server's plan deletes exactly the budgets the user was warned
  * about (order-insensitive) and ends the current budget on the previewed day.

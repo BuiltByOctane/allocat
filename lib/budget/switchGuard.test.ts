@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { isAcceptableClientDate, planMatchesExpected } from "@/lib/budget/switchGuard";
-import type { SwitchPlan } from "@/lib/budget/period";
+import { isAcceptableClientDate, planMatchesExpected, rpcPlanFor } from "@/lib/budget/switchGuard";
+import { planStartDaySwitch, type SwitchPlan } from "@/lib/budget/period";
 
 describe("isAcceptableClientDate", () => {
   const server = "2026-10-29";
@@ -56,5 +56,52 @@ describe("planMatchesExpected", () => {
   });
   it("duplicate ids do not fake a match", () => {
     expect(planMatchesExpected(plan(["a", "b"], null), { deleteBudgetIds: ["a", "a"], currentEnd: null })).toBe(false);
+  });
+});
+
+describe("rpcPlanFor", () => {
+  const today = "2026-10-29";
+  const oct = { id: "oct", month: 10, year: 2026, period_start: "2026-10-01", period_end: "2026-10-31" };
+
+  it("first-time choice of 1 (stored null, no budgets) still persists the day", () => {
+    const plan = planStartDaySwitch({ today, oldStartDay: 1, newStartDay: 1, budgets: [] });
+    expect(plan).toBeNull();
+    expect(planMatchesExpected(plan, { deleteBudgetIds: [], currentEnd: null })).toBe(true);
+    expect(rpcPlanFor(plan, null, 1)).toEqual({ startDay: 1, current: null, deleteBudgetIds: [], redate: [] });
+  });
+
+  it("first-time choice of 1 with an existing day-1 budget persists without touching it", () => {
+    const plan = planStartDaySwitch({ today, oldStartDay: 1, newStartDay: 1, budgets: [oct] });
+    expect(rpcPlanFor(plan, null, 1)).toEqual({ startDay: 1, current: null, deleteBudgetIds: [], redate: [] });
+  });
+
+  it("first-time choice of another day plans from the effective old day 1", () => {
+    const plan = planStartDaySwitch({ today, oldStartDay: 1, newStartDay: 15, budgets: [] });
+    expect(rpcPlanFor(plan, null, 15)).toEqual({ startDay: 15, current: null, deleteBudgetIds: [], redate: [] });
+  });
+
+  it("first-time choice with budgets carries the normal switch plan", () => {
+    const plan = planStartDaySwitch({ today, oldStartDay: 1, newStartDay: 15, budgets: [oct] })!;
+    expect(rpcPlanFor(plan, null, 15)).toEqual({
+      startDay: 15,
+      current: plan.current,
+      deleteBudgetIds: [],
+      redate: [],
+    });
+  });
+
+  it("an unchanged stored day writes nothing", () => {
+    expect(rpcPlanFor(null, 1, 1)).toBeNull();
+    expect(rpcPlanFor(null, 15, 15)).toBeNull();
+  });
+
+  it("a real switch from a stored day sends the plan with arrays", () => {
+    const plan = planStartDaySwitch({ today, oldStartDay: 1, newStartDay: 15, budgets: [oct] })!;
+    expect(rpcPlanFor(plan, 1, 15)).toEqual({
+      startDay: 15,
+      current: plan.current,
+      deleteBudgetIds: plan.deleteBudgetIds,
+      redate: plan.redate,
+    });
   });
 });

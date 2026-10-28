@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   addDays,
   clampStartDay,
+  isStartDayChosen,
+  startDayChoice,
   computeRange,
   daysElapsed,
   daysLeft,
@@ -146,6 +148,23 @@ describe("period", () => {
       expect(clampStartDay("15")).toBe(1);
       expect(clampStartDay(null)).toBe(1);
       expect(clampStartDay(15)).toBe(15);
+    });
+  });
+
+  describe("startDayChoice / isStartDayChosen", () => {
+    it("a stored 1..28 integer is a choice", () => {
+      expect(startDayChoice(1)).toBe(1);
+      expect(startDayChoice(15)).toBe(15);
+      expect(startDayChoice(28)).toBe(28);
+      expect(isStartDayChosen(1)).toBe(true);
+      expect(isStartDayChosen(28)).toBe(true);
+    });
+    it("null / missing / invalid means not chosen (effective day stays 1)", () => {
+      for (const v of [null, undefined, 0, 29, 3.5, "15", NaN]) {
+        expect(startDayChoice(v)).toBeNull();
+        expect(isStartDayChosen(v)).toBe(false);
+        expect(clampStartDay(v)).toBe(1);
+      }
     });
   });
 

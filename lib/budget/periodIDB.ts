@@ -5,6 +5,7 @@ import {
   pickBudgetForPeriod,
   rangeForLabel,
   resolvePeriod,
+  startDayChoice,
   toISODate,
   type ISODate,
   type PeriodLabel,
@@ -17,10 +18,19 @@ import {
  * Browser-only (uses `getDB()`); never call on the server.
  */
 
-/** The profile's budget start day (1–28); a missing profile means 1. */
+/** The EFFECTIVE budget start day (1–28) for date maths; unchosen or a missing profile means 1. */
 export async function getStartDayIDB(): Promise<number> {
+  return clampStartDay(await getStartDayChoiceIDB());
+}
+
+/**
+ * The start day the user actually chose, or null when the cached profile is
+ * missing or holds none (a new account that skipped the onboarding question).
+ * Budget-creation flows ask for the day while this is null.
+ */
+export async function getStartDayChoiceIDB(): Promise<number | null> {
   const rows = await getDB().profiles.toArray();
-  return clampStartDay(rows[0]?.budget_start_day);
+  return startDayChoice(rows[0]?.budget_start_day);
 }
 
 /** Every cached budget, reduced to what cycle math needs. */

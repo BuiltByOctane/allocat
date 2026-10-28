@@ -22,7 +22,7 @@ export type Database = {
           founding_member_since: string | null
           last_app_mode: "web" | "android" | null
           last_seen_at: string | null
-          budget_start_day: number
+          budget_start_day: number | null
           created_at: string
           updated_at: string
         }
@@ -38,7 +38,7 @@ export type Database = {
           founding_member_since?: string | null
           last_app_mode?: "web" | "android" | null
           last_seen_at?: string | null
-          budget_start_day?: number
+          budget_start_day?: number | null
           created_at?: string
           updated_at?: string
         }
@@ -53,7 +53,7 @@ export type Database = {
           founding_member_since?: string | null
           last_app_mode?: "web" | "android" | null
           last_seen_at?: string | null
-          budget_start_day?: number
+          budget_start_day?: number | null
           updated_at?: string
         }
         Relationships: []

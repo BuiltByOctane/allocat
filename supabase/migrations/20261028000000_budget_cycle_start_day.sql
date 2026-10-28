@@ -4,7 +4,13 @@
 -- 1st. `budgets` keeps its (user_id, month, year) identity — `month`/`year` is
 -- the label of the cycle — and gains the real date range it covers.
 --
---   profiles.budget_start_day     1..28, default 1 (calendar months).
+--   profiles.budget_start_day     1..28, or null = "not chosen yet". Every
+--                                 profile that exists when this runs is
+--                                 back-filled to 1 (calendar months, today's
+--                                 behaviour); profiles created afterwards
+--                                 start null and the user picks the day
+--                                 (onboarding or first budget setup). Null is
+--                                 computed as 1 everywhere a range is needed.
 --   budgets.period_start / _end   inclusive dates; existing rows are back-filled
 --                                 as calendar months, so nobody's data moves.
 --
@@ -17,9 +23,22 @@
 -- profile, deletions and re-dates land atomically.
 
 -- ─── columns ─────────────────────────────────────────────────────────────────
+-- Nullable, no default: a new profile has not chosen a day yet.
 alter table public.profiles
-  add column if not exists budget_start_day smallint not null default 1
-    check (budget_start_day between 1 and 28);
+  add column if not exists budget_start_day smallint;
+
+alter table public.profiles drop constraint if exists profiles_budget_start_day_range;
+alter table public.profiles
+  add constraint profiles_budget_start_day_range
+    check (budget_start_day is null or budget_start_day between 1 and 28);
+
+-- One-time back-fill: existing users keep calendar months (start day 1).
+update public.profiles set budget_start_day = 1 where budget_start_day is null;
+
+-- Belt and braces for a DB where an earlier draft added the column with
+-- `not null default 1`: new profiles must start unchosen.
+alter table public.profiles alter column budget_start_day drop default;
+alter table public.profiles alter column budget_start_day drop not null;
 
 alter table public.budgets
   add column if not exists period_start date,
@@ -73,6 +92,7 @@ begin
   end if;
 
   if tg_op = 'INSERT' and new.period_start is null then
+    -- A null (unchosen) start day computes as 1; it is never written here.
     select coalesce(
       (select p.budget_start_day from public.profiles p where p.id = new.user_id),
       1
@@ -158,7 +178,9 @@ begin
     v_current := null;
   end if;
 
-  -- 1. profile
+  -- 1. profile — always written, even for a plan with no current budget, no
+  --    deletes and no re-dates: that is a first-time choice being saved
+  --    (a null start day becoming e.g. 1).
   update public.profiles
   set budget_start_day = v_day
   where id = uid;

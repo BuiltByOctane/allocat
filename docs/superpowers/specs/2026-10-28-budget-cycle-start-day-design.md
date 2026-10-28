@@ -16,9 +16,11 @@ day their budget month starts.
 - A per-user **cycle start day** (1–28). A cycle runs from that day to the day
   before the same day next month: start 15 ⇒ 15 Oct – 14 Nov, 15 Nov – 14 Dec.
   Day count per cycle does not matter.
-- Existing users: default start day 1. Their behaviour and numbers are
-  unchanged until they choose otherwise.
-- New users: asked once during onboarding.
+- Existing users: back-filled to start day 1. Their behaviour and numbers are
+  unchanged until they choose otherwise; they are never asked.
+- New users: choose the day themselves — in onboarding, or (if they skipped
+  it) before their first budget is created. No silent default of 1. Once
+  chosen it is the default and is never asked again.
 - Everything that today means "this month" means "this cycle": dashboard,
   budget page, SMS/iPhone/manual spend allocation, insights, near-limit alerts,
   carry-forward, new-month reminder, reports, AI chat context, native SMS mirror.
@@ -43,9 +45,16 @@ day their budget month starts.
 
 ## Data model
 
-- `profiles.budget_start_day smallint not null default 1 check (between 1 and 28)`.
-  The single source of truth for *future* cycles. Mirrored to IDB via the
-  existing profile hydration.
+- `profiles.budget_start_day smallint` — **nullable, no default**, check
+  `(budget_start_day is null or between 1 and 28)`. The migration back-fills
+  every profile that exists when it runs to 1 (one-time), so existing users
+  are "chosen = 1"; profiles created afterwards start null = "not chosen".
+  Null is computed as 1 everywhere a range is needed (`clampStartDay`, the
+  stamp trigger's `coalesce`) but is never written as 1 on the user's behalf.
+  `startDayChoice` / `isStartDayChosen` / `getStartDayChoiceIDB` /
+  `useCurrentPeriod().startDayChosen` expose the stored choice. The single
+  source of truth for *future* cycles. Mirrored to IDB via the existing
+  profile hydration.
 - `budgets.period_start date`, `budgets.period_end date` (inclusive). Written
   once when a budget row is created, from the start day in effect then.
   Only ever changed again by the mid-cycle switch (below), and only on the
@@ -158,17 +167,30 @@ replay against stale budgets on another device and delete the wrong plan.
 
 1. Onboarding quiz gets one new screen: **"When does your salary arrive?"** —
    *1st of the month* / *pick a date (1–28)* / *no fixed salary* (⇒ 1).
+   Nothing is pre-selected. Every answer, the 1st included, is saved
+   (`setBudgetStartDay`) — that is the user's explicit choice.
 2. Profile saved with that day; the first budget is created for the cycle that
    contains today (e.g. signup 28 Oct, day 15 ⇒ budget 15 Oct – 14 Nov,
    "17 days left"). A user who signs up a few days before their payday gets a
    short-remaining first cycle; that is accepted.
-3. The quiz save path (`QuizFlow.handleSave`) uses `periodForDate` instead of
+3. The quiz save path (`QuizFlow.handleSave`) uses `labelForDate` instead of
    the calendar month.
+4. **Skipped the question** ⇒ the day stays null, and the quiz does NOT create
+   the budget (it would stamp a 1st-based cycle the user never chose): the
+   plan is kept as a draft, exactly like "Not now". On the budget page, any
+   action that would create the first budget row (Set up budget, Copy from
+   last month, editing the total) first opens the cycle sheet titled "When
+   does your salary arrive?"; Save stores the day and the original action
+   resumes against the cycle under that day (the draft pre-fills setup).
+   Auto-carry is skipped until a day is chosen; SMS / manual spends only ever
+   write into an existing budget. Profile and the setup sheet show
+   "Budget cycle: Not set · Set" meanwhile.
 
 ### Existing user
 
-1. After release: start day 1, budgets backfilled to calendar months — nothing
-   visibly changes.
+1. After release: start day 1 (back-filled by the migration, so "chosen"),
+   budgets backfilled to calendar months — nothing visibly changes and they
+   are never asked.
 2. Discovery: a one-time, dismissible dashboard card: "Salary not on the 1st?
    Match your budget to payday." Opens the setting.
 3. The setting is reachable from: Profile → Settings, and the budget setup /

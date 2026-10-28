@@ -160,6 +160,9 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
   // real row is created on the first write; resolvedId holds it for this session
   // until the refetched data.id catches up. Always prefer data.id when present.
   const [resolvedId, setResolvedId] = useState("");
+  // Why the budget row could not be created (e.g. the period overlaps another
+  // budget). Shown next to whichever action triggered it.
+  const [ensureError, setEnsureError] = useState<{ at: "total" | "category"; message: string } | null>(null);
   const effectiveBudgetId = data.id || resolvedId;
 
   // A budget plan the onboarding quiz built but the user deferred ("Not now
@@ -312,13 +315,22 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
 
   function openAddCategory() {
     addCategoryMutation.reset();
+    setEnsureError(null);
     haptic.light();
     setIsAddCategoryOpen(true);
   }
 
   function handleUpdateBudget(totalAmount: number) {
     void (async () => {
-      const budgetId = await ensureBudgetId();
+      setEnsureError(null);
+      let budgetId: string;
+      try {
+        budgetId = await ensureBudgetId();
+      } catch (err) {
+        haptic.error();
+        setEnsureError({ at: "total", message: err instanceof Error ? err.message : "Couldn't create the budget." });
+        return;
+      }
       updateBudgetTotalMutation.mutate({
         budgetId,
         totalAmount,
@@ -332,8 +344,16 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
     event?.preventDefault();
     const name = newCategoryName.trim();
     if (!name || addCategoryMutation.isPending) return;
+    setEnsureError(null);
+    let budgetId: string;
     try {
-      const budgetId = await ensureBudgetId();
+      budgetId = await ensureBudgetId();
+    } catch (err) {
+      haptic.error();
+      setEnsureError({ at: "category", message: err instanceof Error ? err.message : "Couldn't create the budget." });
+      return;
+    }
+    try {
       const category = await addCategoryMutation.mutateAsync({
         budgetId,
         name,
@@ -430,8 +450,10 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
                 </div>
               </div>
             </div>
-            {budgetTotalError && (
-              <p className="mt-2 text-[11px] text-neg text-right">{budgetTotalError}</p>
+            {(ensureError?.at === "total" || budgetTotalError) && (
+              <p role="alert" className="mt-2 text-[11px] text-neg text-right">
+                {ensureError?.at === "total" ? ensureError.message : budgetTotalError}
+              </p>
             )}
             <div id="budget-tick-ruler" className="mt-3.5">
               <Progress value={totalMeter.leftPct} state={totalMeter.state} />
@@ -647,8 +669,10 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
                   />
                 </div>
 
-                {addCategoryMutation.isError && (
-                  <p className="text-[11px] font-medium text-neg">{addCategoryError}</p>
+                {(ensureError?.at === "category" || addCategoryMutation.isError) && (
+                  <p role="alert" className="text-[11px] font-medium text-neg">
+                    {ensureError?.at === "category" ? ensureError.message : addCategoryError}
+                  </p>
                 )}
               </div>
 

@@ -19,8 +19,8 @@ import { DASHBOARD_KEY } from "./useDashboard";
 import { NET_WORTH_KEY } from "./useNetWorth";
 import { GOALS_KEY } from "./useGoals";
 import { DEBT_KEY } from "./useDebt";
-import { rangeForLabelIDB } from "@/lib/budget/periodIDB";
-import { isTransientSyncError } from "@/lib/sync/errors";
+import { getStoredPeriodsIDB, rangeForLabelIDB } from "@/lib/budget/periodIDB";
+import { findOverlappingBudget } from "@/lib/budget/period";
 
 type LinkType = "asset" | "debt";
 
@@ -209,6 +209,18 @@ export function useBudgetTemplateHeader({
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
 /**
+ * Creating a budget for this label would overlap another stored budget (the
+ * server would refuse it with `budget_period_overlap`). Thrown before any
+ * network call so the message survives production error masking.
+ */
+export class BudgetPeriodOverlapError extends Error {
+  constructor() {
+    super("This period is part of another budget.");
+    this.name = "BudgetPeriodOverlapError";
+  }
+}
+
+/**
  * Resolve a real-or-temp budget row id for a period before the first write.
  * Online: create-or-get on the server (fast path, real id immediately).
  * Offline: mint a temp_ IDB row + enqueue a plain budgets INSERT — the standard
@@ -225,18 +237,21 @@ export function useEnsureBudgetRow() {
       .first();
     if (existing) return existing.id;
 
+    // Refuse an overlapping period up front — the server trigger would reject
+    // it, and a queued INSERT for it could never sync.
+    const range = await rangeForLabelIDB({ month, year });
+    if (findOverlappingBudget(range, await getStoredPeriodsIDB())) {
+      throw new BudgetPeriodOverlapError();
+    }
+
     try {
       const row = await ensureBudgetRow(month, year);
       await db.budgets.put(row);
       return row.id;
-    } catch (err) {
-      // A real server answer (e.g. budget_period_overlap) would fail again
-      // from the queue — surface it instead of queueing a doomed INSERT.
-      if (!isTransientSyncError(err)) throw err;
-      // Offline / no verdict: create locally and queue the INSERT.
+    } catch {
+      // Offline (or the action failed): create locally and queue the INSERT.
       const tempId = `temp_${crypto.randomUUID()}`;
       const now = new Date().toISOString();
-      const range = await rangeForLabelIDB({ month, year });
       await db.budgets.add({
         id: tempId,
         user_id: "__pending__",

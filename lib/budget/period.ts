@@ -246,7 +246,9 @@ export function formatPeriodLabel(r: ResolvedPeriod, startDay: number): string {
  * its start and is stretched/shrunk to end the day before the first new-style
  * cycle that starts after today. Future labels swallowed by that stretch are
  * deleted; later future budgets are redated to the new start day. Budgets at
- * or before the current label are untouched. `null` when nothing changes.
+ * or before the current label are untouched. If today sits in an unstored gap
+ * whose label already belongs to a stored budget, that budget becomes the
+ * current one and is stretched across the gap. `null` when nothing changes.
  */
 export function planStartDaySwitch(input: {
   today: ISODate;
@@ -263,7 +265,15 @@ export function planStartDaySwitch(input: {
     return { startDay, current: null, deleteBudgetIds: [], deleteLabels: [], redate: [], nextStart: null };
   }
 
-  const cur = resolvePeriod(today, budgets, oldStartDay);
+  let cur = resolvePeriod(today, budgets, oldStartDay);
+  // A clipped gap can carry the label of an existing stored budget (stored
+  // Sep 1–30, start day 15, today Oct 5 ⇒ label Sep). Creating a second row
+  // with that label would collide, so stretch the stored one across the gap
+  // instead — it ends right before the gap, so the result stays contiguous.
+  if (cur.budgetId === null) {
+    const owner = budgets.find((b) => labelIndex(b) === labelIndex(cur) && storedRange(b).end < today);
+    if (owner) cur = { ...cur, budgetId: owner.id, start: storedRange(owner).start };
+  }
   let next = stepLabel(cur, 1);
   let s = computeRange(next, startDay).start;
   while (s <= today) {

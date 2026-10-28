@@ -191,11 +191,12 @@ describe("period", () => {
       expect(plan.deleteBudgetIds).toEqual([]);
     });
 
-    it("starts the current cycle after a clipped past budget", () => {
+    it("extends the stored budget sharing the current label instead of colliding", () => {
       const sep: StoredBudgetPeriod = { id: "sep", month: 9, year: 2026, period_start: "2026-09-01", period_end: "2026-09-30" };
       const plan = planStartDaySwitch({ today: "2026-10-05", oldStartDay: 15, newStartDay: 1, budgets: [sep] })!;
-      expect(plan.current).toEqual({ budgetId: null, month: 9, year: 2026, start: "2026-10-01", end: "2026-10-31" });
+      expect(plan.current).toEqual({ budgetId: "sep", month: 9, year: 2026, start: "2026-09-01", end: "2026-10-31" });
       expect(plan.nextStart).toBe("2026-11-01");
+      expect(plan.deleteBudgetIds).toEqual([]);
     });
 
     it("no budgets → current null; same day → null", () => {

@@ -16,7 +16,8 @@ import {
 
 /** The cycle containing today. Invalidate this prefix after a start-day switch. */
 export const CURRENT_PERIOD_KEY = ["currentPeriod"] as const;
-const START_DAY_KEY = [...CURRENT_PERIOD_KEY, "startDay"] as const;
+/** The profile start day. Under CURRENT_PERIOD_KEY so one invalidation covers both. */
+export const START_DAY_KEY = [...CURRENT_PERIOD_KEY, "startDay"] as const;
 
 /**
  * The current budget cycle + the user's start day. Before IDB answers it is the

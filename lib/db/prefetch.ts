@@ -7,8 +7,8 @@ import { getDashboardData } from "@/lib/actions/dashboard";
 import { getBudgetView } from "@/lib/actions/budget";
 import { getNetWorthData } from "@/lib/actions/net-worth";
 import { getDebtData } from "@/lib/actions/debt";
-import { CURRENT_PERIOD_KEY } from "@/lib/hooks/useCurrentPeriod";
-import { resolvePeriodIDB } from "@/lib/budget/periodIDB";
+import { CURRENT_PERIOD_KEY, START_DAY_KEY } from "@/lib/hooks/useCurrentPeriod";
+import { getStartDayIDB, resolvePeriodIDB } from "@/lib/budget/periodIDB";
 import { isHydrated } from "@/lib/db/hydrate";
 import { DASHBOARD_KEY } from "@/lib/hooks/useDashboard";
 import { NET_WORTH_KEY } from "@/lib/hooks/useNetWorth";
@@ -26,6 +26,7 @@ export async function prefetchAllQueries(qc: QueryClient): Promise<void> {
   await Promise.all([
     // Current budget cycle (start-day aware)
     qc.fetchQuery({ queryKey: CURRENT_PERIOD_KEY, queryFn: () => resolvePeriodIDB() }),
+    qc.fetchQuery({ queryKey: START_DAY_KEY, queryFn: () => getStartDayIDB() }),
 
     // Dashboard
     qc.fetchQuery({

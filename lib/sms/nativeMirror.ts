@@ -24,7 +24,7 @@ import type {
   BudgetRow,
 } from "@/lib/db";
 import type { ResolvedPeriod } from "@/lib/budget/period";
-import { computeRange } from "@/lib/budget/period";
+import { computeRange, pickBudgetForPeriod, toISODate } from "@/lib/budget/period";
 import { resolvePeriodIDB, getStartDayIDB } from "@/lib/budget/periodIDB";
 import { resolveRuleItemId } from "./resolveRuleItem";
 import { SmsReader } from "@/lib/native/SmsReader";
@@ -80,16 +80,14 @@ export function buildNativeSmsMirror(
     items: BudgetItemRow[];
     budgets: BudgetRow[];
   },
-  _now: Date,
+  now: Date,
   period: ResolvedPeriod,
   startDay: number,
 ): NativeMirrorResult {
   const { rules, cats, items, budgets } = data;
   const periodStr = periodStamp(period, startDay);
 
-  const curBudget =
-    (period.budgetId ? budgets.find((b) => b.id === period.budgetId) : undefined) ??
-    budgets.find((b) => b.month === period.month && b.year === period.year);
+  const curBudget = pickBudgetForPeriod(period, budgets, toISODate(now));
   const curCatIds = new Set(
     cats.filter((c) => c.budget_id === curBudget?.id).map((c) => c.id),
   );

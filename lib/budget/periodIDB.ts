@@ -1,9 +1,12 @@
 import { getDB } from "@/lib/db";
+import type { BudgetRow } from "@/lib/db/AllocatDB";
 import {
   clampStartDay,
+  pickBudgetForPeriod,
   rangeForLabel,
   resolvePeriod,
   toISODate,
+  type ISODate,
   type PeriodLabel,
   type ResolvedPeriod,
   type StoredBudgetPeriod,
@@ -43,4 +46,23 @@ export async function resolvePeriodIDB(date?: Date | string | null): Promise<Res
 export async function rangeForLabelIDB(label: PeriodLabel): Promise<ResolvedPeriod> {
   const [startDay, budgets] = await Promise.all([getStartDayIDB(), getStoredPeriodsIDB()]);
   return rangeForLabel(label, budgets, startDay);
+}
+
+/**
+ * The cached budget row behind `period` — by id, falling back to the label
+ * when the id is gone (a temp id swapped by sync) but only if that row's range
+ * contains `date` (the date `period` was resolved for).
+ */
+export async function getBudgetForPeriodIDB(
+  period: ResolvedPeriod,
+  date: ISODate,
+): Promise<BudgetRow | undefined> {
+  const db = getDB();
+  const byId = period.budgetId ? await db.budgets.get(period.budgetId) : undefined;
+  if (byId) return byId;
+  const sameLabel = await db.budgets
+    .where("[month+year]")
+    .equals([period.month, period.year])
+    .toArray();
+  return pickBudgetForPeriod(period, sameLabel, date);
 }

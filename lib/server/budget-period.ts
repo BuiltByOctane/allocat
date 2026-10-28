@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/database";
 import {
   clampStartDay,
+  pickBudgetForPeriod,
   resolvePeriod,
   toISODate,
   type ISODate,
@@ -79,4 +80,25 @@ export async function resolveServerPeriod(
   ]);
   const neighbours = [...(before.data ?? []), ...(after.data ?? [])] as StoredBudgetPeriod[];
   return resolvePeriod(iso, neighbours, startDay);
+}
+
+/**
+ * The id of the budget row behind `period`: `period.budgetId` when set, else a
+ * row with the same label whose stored range contains `date` (the date
+ * `period` was resolved for). Null when no such row exists.
+ */
+export async function serverBudgetIdForPeriod(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  period: ResolvedPeriod,
+  date: ISODate,
+): Promise<string | null> {
+  if (period.budgetId) return period.budgetId;
+  const { data } = await supabase
+    .from("budgets")
+    .select(COLS)
+    .eq("user_id", userId)
+    .eq("month", period.month)
+    .eq("year", period.year);
+  return pickBudgetForPeriod(period, (data ?? []) as StoredBudgetPeriod[], date)?.id ?? null;
 }

@@ -2,7 +2,8 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/database";
 import type { RuleResolutionContext } from "@/lib/sms/resolveRuleItem";
-import { resolveServerPeriod } from "@/lib/server/budget-period";
+import { resolveServerPeriod, serverBudgetIdForPeriod } from "@/lib/server/budget-period";
+import { toISODate } from "@/lib/budget/period";
 
 /**
  * Load the resolver context (budget + its items) for the SMS's period — the
@@ -18,20 +19,19 @@ export async function loadPeriodContext(
   userId: string,
   occurredAt: string | null | undefined,
 ): Promise<RuleResolutionContext> {
-  const d = occurredAt ? new Date(occurredAt) : new Date();
-  const period = await resolveServerPeriod(
-    supabase,
-    userId,
-    isNaN(d.getTime()) ? new Date() : d,
-  );
+  const parsed = occurredAt ? new Date(occurredAt) : new Date();
+  const d = isNaN(parsed.getTime()) ? new Date() : parsed;
+  const period = await resolveServerPeriod(supabase, userId, d);
 
-  const base = supabase
-    .from("budgets")
-    .select("id, template_id")
-    .eq("user_id", userId);
-  const { data: budget } = period.budgetId
-    ? await base.eq("id", period.budgetId).maybeSingle()
-    : await base.eq("month", period.month).eq("year", period.year).maybeSingle();
+  const budgetId = await serverBudgetIdForPeriod(supabase, userId, period, toISODate(d));
+  const { data: budget } = budgetId
+    ? await supabase
+        .from("budgets")
+        .select("id, template_id")
+        .eq("user_id", userId)
+        .eq("id", budgetId)
+        .maybeSingle()
+    : { data: null };
 
   let items: RuleResolutionContext["items"] = [];
   if (budget) {

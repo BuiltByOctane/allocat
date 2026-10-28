@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getDB } from "@/lib/db";
-import { resolvePeriodIDB } from "@/lib/budget/periodIDB";
+import { getBudgetForPeriodIDB, resolvePeriodIDB } from "@/lib/budget/periodIDB";
+import { toISODate } from "@/lib/budget/period";
 import type {
   AllocatePickerItem,
   AllocateCategory,
@@ -36,13 +37,9 @@ export interface PickerData {
 /** Budget items + categories for the current budget cycle, read from IDB. */
 export async function loadPickerData(): Promise<PickerData> {
   const db = getDB();
-  const period = await resolvePeriodIDB();
-  const budget = period.budgetId
-    ? await db.budgets.get(period.budgetId)
-    : await db.budgets
-        .where("[month+year]")
-        .equals([period.month, period.year])
-        .first();
+  const today = toISODate(new Date());
+  const period = await resolvePeriodIDB(today);
+  const budget = await getBudgetForPeriodIDB(period, today);
   if (!budget) return { items: [], categories: [], metaById: {} };
 
   const categories = await db.categories

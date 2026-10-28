@@ -9,7 +9,8 @@
  * SMS content is sent to any third party.
  */
 import { getDB } from "@/lib/db";
-import { resolvePeriodIDB } from "@/lib/budget/periodIDB";
+import { getBudgetForPeriodIDB, resolvePeriodIDB } from "@/lib/budget/periodIDB";
+import { toISODate } from "@/lib/budget/period";
 import type { SyncQueueItem } from "@/lib/db";
 import { parseTransactionSms, isOtpOrVerification } from "@/lib/ai/parseSmsTransaction";
 import { normalizeMerchant, matchMerchantRules, txnDedupeKey, smsTemplateKey } from "@/lib/sms/match";
@@ -51,15 +52,10 @@ async function loadPeriodContextIDB(
   occurredAt: string | null | undefined,
 ): Promise<RuleResolutionContext> {
   const db = getDB();
-  const d = occurredAt ? new Date(occurredAt) : new Date();
-  const period = await resolvePeriodIDB(isNaN(d.getTime()) ? new Date() : d);
-
-  const budget = period.budgetId
-    ? await db.budgets.get(period.budgetId)
-    : await db.budgets
-        .where("[month+year]")
-        .equals([period.month, period.year])
-        .first();
+  const parsed = occurredAt ? new Date(occurredAt) : new Date();
+  const d = isNaN(parsed.getTime()) ? new Date() : parsed;
+  const period = await resolvePeriodIDB(d);
+  const budget = await getBudgetForPeriodIDB(period, toISODate(d));
 
   let items: RuleResolutionContext["items"] = [];
   if (budget) {

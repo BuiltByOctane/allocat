@@ -11,6 +11,7 @@ import {
   daysElapsed as periodDaysElapsed,
   daysLeft as periodDaysLeft,
   periodDays,
+  pickBudgetForPeriod,
   toISODate,
   type ResolvedPeriod,
 } from "@/lib/budget/period";
@@ -151,11 +152,8 @@ export function buildInsightStats(input: InsightStatsInput): InsightStats | null
   }
 
   // ── Current budget-cycle pace ──
-  const budget = period.budgetId
-    ? budgets.find((b) => b.id === period.budgetId)
-    : budgets.find((b) => b.month === period.month && b.year === period.year);
-
   const today = toISODate(now);
+  const budget = pickBudgetForPeriod(period, budgets, today);
   const daysInMonth = periodDays(period);
   const daysElapsed = periodDaysElapsed(period, today);
   const daysLeft = periodDaysLeft(period, today);

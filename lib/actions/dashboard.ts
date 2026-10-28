@@ -1,7 +1,8 @@
 "use server";
 
 import { createClient, getAuthedUser } from "@/lib/supabase/server";
-import { resolveServerPeriod } from "@/lib/server/budget-period";
+import { resolveServerPeriod, serverBudgetIdForPeriod } from "@/lib/server/budget-period";
+import { toISODate } from "@/lib/budget/period";
 import type { Database } from "@/lib/types/database";
 
 type CategoryRow = Database["public"]["Tables"]["categories"]["Row"];
@@ -13,16 +14,18 @@ export async function getDashboardData() {
   const user = await getAuthedUser();
   if (!user) throw new Error("Unauthorized");
 
-  const period = await resolveServerPeriod(supabase, user.id);
+  const today = toISODate(new Date());
+  const period = await resolveServerPeriod(supabase, user.id, today);
 
-  let budgetQuery = supabase
-    .from("budgets")
-    .select("*, categories(*, budget_items(*))")
-    .eq("user_id", user.id);
-  budgetQuery = period.budgetId
-    ? budgetQuery.eq("id", period.budgetId)
-    : budgetQuery.eq("month", period.month).eq("year", period.year);
-  const { data: budget } = await budgetQuery.maybeSingle();
+  const budgetId = await serverBudgetIdForPeriod(supabase, user.id, period, today);
+  const { data: budget } = budgetId
+    ? await supabase
+        .from("budgets")
+        .select("*, categories(*, budget_items(*))")
+        .eq("user_id", user.id)
+        .eq("id", budgetId)
+        .maybeSingle()
+    : { data: null };
 
   let formattedBudget = null;
   const summaryCategories: { id: string; name: string; icon?: string | null }[] = [];

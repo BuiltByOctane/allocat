@@ -11,7 +11,7 @@ import {
 import { nearLimitFromIDB } from "@/lib/sms/nearLimit";
 import { groupAllocationsForMonth, type AllocatedGroup } from "@/lib/sms/monthAllocations";
 import { randomUUID } from "@/lib/utils/uuid";
-import { rangeForLabelIDB } from "@/lib/budget/periodIDB";
+import { getBudgetForPeriodIDB, rangeForLabelIDB } from "@/lib/budget/periodIDB";
 import type { PeriodRange } from "@/lib/budget/period";
 import { emitNotification } from "@/lib/notify/history";
 import { pushSmsMirrorToNative } from "@/lib/sms/nativeMirror";
@@ -168,9 +168,11 @@ export async function getMonthAllocationsFromIDB(
   const db = getDB();
   const resolved = period ?? (await rangeForLabelIDB({ month, year }));
 
-  const budget = resolved.budgetId
-    ? await db.budgets.get(resolved.budgetId)
-    : await db.budgets.where("[month+year]").equals([month, year]).first();
+  // Label-addressed: the date being resolved is the cycle's own start.
+  const budget = await getBudgetForPeriodIDB(
+    { month, year, start: resolved.start, end: resolved.end, budgetId: resolved.budgetId ?? null },
+    resolved.start,
+  );
 
   const monthCats = budget
     ? await db.categories.where("budget_id").equals(budget.id).toArray()

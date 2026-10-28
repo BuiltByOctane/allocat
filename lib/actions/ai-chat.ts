@@ -1,8 +1,12 @@
 "use server";
 
 import { createClient, getAuthedUser } from "@/lib/supabase/server";
-import { resolveServerPeriod, getServerStartDay } from "@/lib/server/budget-period";
-import { formatPeriodLabel } from "@/lib/budget/period";
+import {
+  resolveServerPeriod,
+  getServerStartDay,
+  serverBudgetIdForPeriod,
+} from "@/lib/server/budget-period";
+import { formatPeriodLabel, toISODate } from "@/lib/budget/period";
 import type { FinanceTopic } from "@/lib/ai-utils";
 import { fmt as fmtCurrency, getUserCurrency } from "@/lib/server/activity-logger";
 
@@ -36,18 +40,20 @@ export async function getBudgetContext(): Promise<string> {
 }
 
 async function getBudgetContextWith({ supabase, userId, fmt }: Ctx): Promise<string> {
-  const period = await resolveServerPeriod(supabase, userId);
+  const today = toISODate(new Date());
+  const period = await resolveServerPeriod(supabase, userId, today);
   const startDay = await getServerStartDay(supabase, userId);
   const periodLabel = formatPeriodLabel(period, startDay);
 
-  let budgetQuery = supabase
-    .from("budgets")
-    .select("*, categories(*, budget_items(*))")
-    .eq("user_id", userId);
-  budgetQuery = period.budgetId
-    ? budgetQuery.eq("id", period.budgetId)
-    : budgetQuery.eq("month", period.month).eq("year", period.year);
-  const { data: budget } = await budgetQuery.maybeSingle();
+  const budgetId = await serverBudgetIdForPeriod(supabase, userId, period, today);
+  const { data: budget } = budgetId
+    ? await supabase
+        .from("budgets")
+        .select("*, categories(*, budget_items(*))")
+        .eq("user_id", userId)
+        .eq("id", budgetId)
+        .maybeSingle()
+    : { data: null };
 
   if (!budget) return `=== BUDGET - ${periodLabel} ===\nNot set yet.`;
 

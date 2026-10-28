@@ -56,7 +56,7 @@ See `.env.example` for the full list (web push, FCM, PostHog).
 
 Every page reads from IndexedDB first; the network is a fallback and a background reconciler. Three layers cooperate:
 
-1. **IDB cache** — `lib/db/AllocatDB.ts` defines a Dexie schema mirroring the Supabase tables (`profiles`, `budgets`, `categories`, `budget_items`, `goals`, `assets`, `asset_categories`, `asset_value_history`, `debts`, `reports`, `net_worth_snapshots`, `activity_logs`, `merchant_rules`, `sms_transactions`) plus three sync infra tables: `sync_queue`, `id_map`, `sync_meta`. Currently at schema version 19. The DB is a browser-only singleton via `getDB()` — calling it on the server throws. Schema version bumps live in `AllocatDB.ts` constructor; add a new `.version(N).stores({...})` block, never mutate prior versions.
+1. **IDB cache** — `lib/db/AllocatDB.ts` defines a Dexie schema mirroring the Supabase tables (`profiles`, `budgets`, `categories`, `budget_items`, `goals`, `assets`, `asset_categories`, `asset_value_history`, `debts`, `reports`, `net_worth_snapshots`, `activity_logs`, `merchant_rules`, `sms_transactions`) plus three sync infra tables: `sync_queue`, `id_map`, `sync_meta`. Currently at schema version 20. The DB is a browser-only singleton via `getDB()` — calling it on the server throws. Schema version bumps live in `AllocatDB.ts` constructor; add a new `.version(N).stores({...})` block, never mutate prior versions.
 
 2. **Hydration + prefetch** — on mount, `SyncProvider` (`lib/providers/SyncProvider.tsx`) calls `hydrateAllTables()` (`lib/db/hydrate.ts`), which pulls every table for the current user into IDB. Pulls are **deltas**: each table stores a `watermark` in `sync_meta` (the newest server `updated_at` it has seen) and asks only for `updated_at >= watermark`. Table behaviour is declared once in `TABLE_SPECS` — owner column, first-pull truncation, whether deletions can be reconciled — so adding a table means adding a spec, not another hand-written query. Rules that matter:
    - **Server timestamps only.** A client clock that runs fast would skip rows. `gte` (not `gt`) plus idempotent `bulkPut` makes a microsecond tie harmless.
@@ -82,6 +82,12 @@ Cross-cutting rules:
 - Server actions live in `lib/actions/<domain>.ts` and are the *only* path that talks to Supabase from the client side. They are also called directly during initial fetch (IDB miss) and via SyncEngine on flush.
 - Read hooks live in `lib/hooks/use<Domain>.ts`. The pattern is: `getXFromIDB()` first; on miss, fall back to the server action. Each hook exports its query key constant (e.g. `DASHBOARD_KEY`, `budgetKey(month, year)`) — reuse these for invalidation.
 - Mutation hooks must: (1) write to IDB optimistically, (2) `enqueue` the operation, (3) invalidate matching query keys in `onSuccess`.
+
+### Budget cycles
+
+A budget is a cycle, not necessarily a calendar month. `profiles.budget_start_day` (1–28, per user) sets the cycle's first day; `budgets.period_start/period_end` hold the range. The `budgets_stamp_period` BEFORE INSERT trigger stamps the range from the owner's start day when the insert supplies none, and rejects overlap (`budget_period_overlap`). **Stored ranges win; the start day is only used to compute a range when none is stored.** `lib/budget/period.ts` is the single source of period math (IDB accessors `lib/budget/periodIDB.ts`, hooks `lib/hooks/useCurrentPeriod.ts`, server `lib/server/budget-period.ts`). Never use `getMonth()+1` to pick a budget period; net-worth, the activity log and Transactions grouping stay calendar-based on purpose.
+
+Changing the start day is the direct server action `setBudgetStartDay` (not queued): it re-plans server-side, guards against a stale preview, and applies via the RPC `apply_budget_cycle_switch`. The native SMS mirror stamps `"YYYY-MM"` for start-day-1 calendar months (old-APK compatibility) and `"start|end"` otherwise. Deploy order: migration `20261028000000_budget_cycle_start_day.sql` before the web build.
 
 ### Routing
 

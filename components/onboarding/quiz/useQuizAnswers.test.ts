@@ -11,8 +11,9 @@ describe("quiz payday", () => {
     expect(s.payday).toBe(25);
     expect(s.paydaySkipped).toBe(false);
   });
-  it.each([0, 29, 3.5, NaN])("SET_PAYDAY rejects %s", (n) => {
-    expect(reducer(initialState, { type: "SET_PAYDAY", payday: n }).payday).toBe(1);
+  it.each([0, 29, 3.5, NaN])("SET_PAYDAY ignores %s (never an explicit 1)", (n) => {
+    expect(reducer(initialState, { type: "SET_PAYDAY", payday: n }).payday).toBeNull();
+    expect(reducer({ ...initialState, payday: 15 }, { type: "SET_PAYDAY", payday: n }).payday).toBe(15);
   });
   it("SET_PAYDAY 1 is an explicit choice", () => {
     const s = reducer(initialState, { type: "SET_PAYDAY", payday: 1 });

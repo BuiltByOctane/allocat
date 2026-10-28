@@ -11,7 +11,7 @@ import {
   type DreamId,
   type ResolvedQuizAnswers,
 } from "@/lib/budget/quizMapping";
-import { clampStartDay } from "@/lib/budget/period";
+import { startDayChoice } from "@/lib/budget/period";
 
 /**
  * Quiz answer state. Every `*Skipped` flag is purely informational (e.g. for
@@ -87,8 +87,11 @@ export function reducer(state: QuizAnswersState, action: QuizAction): QuizAnswer
       return { ...state, amount: action.amount, amountSkipped: false };
     case "SKIP_AMOUNT":
       return { ...state, amount: AMOUNT_DEFAULT, amountSkipped: true };
-    case "SET_PAYDAY":
-      return { ...state, payday: clampStartDay(action.payday), paydaySkipped: false };
+    case "SET_PAYDAY": {
+      // An invalid day is ignored — it must never become an explicit 1.
+      const payday = startDayChoice(action.payday);
+      return payday === null ? state : { ...state, payday, paydaySkipped: false };
+    }
     case "SKIP_PAYDAY":
       return { ...state, payday: null, paydaySkipped: true };
     default:

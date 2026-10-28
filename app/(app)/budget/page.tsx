@@ -108,6 +108,7 @@ function BudgetContent() {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4 px-6">
         <p className="text-sm text-muted-foreground">Failed to load budget</p>
+        {startDayGate.sheet}
       </div>
     );
   }

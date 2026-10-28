@@ -140,6 +140,21 @@ export function startDayChoice(n: unknown): number | null {
   return typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= 28 ? n : null;
 }
 
+/**
+ * The choice held by a profile ROW. A row without the `budget_start_day` key
+ * at all predates the column (a cached profile from before the start-day
+ * deploy, or an unmigrated server) and belongs to an existing user, who is
+ * "chosen = 1" by the migration's back-fill. Only an explicit null means
+ * "not chosen yet". No row ⇒ null (unknown; callers re-read the server).
+ */
+export function storedStartDayChoice(
+  row: { budget_start_day?: unknown } | null | undefined,
+): number | null {
+  if (!row) return null;
+  if (!("budget_start_day" in row) || row.budget_start_day === undefined) return 1;
+  return startDayChoice(row.budget_start_day);
+}
+
 /** Whether the profile holds a chosen start day (see `startDayChoice`). */
 export function isStartDayChosen(n: unknown): boolean {
   return startDayChoice(n) !== null;

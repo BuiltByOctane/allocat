@@ -4,7 +4,7 @@ import { createClient, getAuthedUser } from "@/lib/supabase/server";
 import {
   clampStartDay,
   planStartDaySwitch,
-  startDayChoice,
+  storedStartDayChoice,
   type ISODate,
   type SwitchPlan,
 } from "@/lib/budget/period";
@@ -80,7 +80,7 @@ export async function setBudgetStartDay(
 
   // A never-chosen (null) day plans from the effective day 1 — the same old
   // day the client's preview used.
-  const storedChoice = startDayChoice(profileRes.data?.budget_start_day);
+  const storedChoice = storedStartDayChoice(profileRes.data);
   const plan = planStartDaySwitch({
     today,
     oldStartDay: clampStartDay(storedChoice),

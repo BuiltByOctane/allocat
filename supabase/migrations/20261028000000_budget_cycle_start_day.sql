@@ -32,6 +32,7 @@ alter table public.profiles
   add constraint profiles_budget_start_day_range
     check (budget_start_day is null or budget_start_day between 1 and 28);
 
+-- WARNING: do NOT re-apply after launch — this would reset new users' unchosen null to 1.
 -- One-time back-fill: existing users keep calendar months (start day 1).
 update public.profiles set budget_start_day = 1 where budget_start_day is null;
 

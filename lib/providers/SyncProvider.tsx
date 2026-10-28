@@ -306,9 +306,13 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       if (await canHydrateFromCache()) {
         if (!mounted) return;
         await goLive();
-        void hydrateAllTables().catch((err) =>
-          console.warn("[SyncProvider] Background hydration failed:", err)
-        );
+        void hydrateAllTables()
+          // goLive's prefetch cached the period + start-day choice from the
+          // pre-pull IDB; re-read them now the profile/budgets are fresh.
+          .then(() => qc.invalidateQueries({ queryKey: CURRENT_PERIOD_KEY }))
+          .catch((err) =>
+            console.warn("[SyncProvider] Background hydration failed:", err)
+          );
         return;
       }
 

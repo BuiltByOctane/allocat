@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/database";
 import {
   clampStartDay,
+  storedStartDayChoice,
   pickBudgetForPeriod,
   resolvePeriod,
   toISODate,
@@ -28,7 +29,7 @@ export async function getServerStartDay(
     .select("budget_start_day")
     .eq("id", userId)
     .maybeSingle();
-  return clampStartDay(data?.budget_start_day);
+  return clampStartDay(storedStartDayChoice(data));
 }
 
 /**

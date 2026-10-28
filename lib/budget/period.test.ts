@@ -3,6 +3,7 @@ import {
   addDays,
   clampStartDay,
   isStartDayChosen,
+  storedStartDayChoice,
   startDayChoice,
   computeRange,
   daysElapsed,
@@ -165,6 +166,25 @@ describe("period", () => {
         expect(isStartDayChosen(v)).toBe(false);
         expect(clampStartDay(v)).toBe(1);
       }
+    });
+  });
+
+  describe("storedStartDayChoice", () => {
+    it("a row without the key (pre-column cache / unmigrated server) is the legacy 1", () => {
+      expect(storedStartDayChoice({})).toBe(1);
+      expect(storedStartDayChoice({ budget_start_day: undefined })).toBe(1);
+    });
+    it("explicit null means not chosen", () => {
+      expect(storedStartDayChoice({ budget_start_day: null })).toBeNull();
+    });
+    it("a stored day passes through; invalid values are not a choice", () => {
+      expect(storedStartDayChoice({ budget_start_day: 1 })).toBe(1);
+      expect(storedStartDayChoice({ budget_start_day: 15 })).toBe(15);
+      expect(storedStartDayChoice({ budget_start_day: 29 })).toBeNull();
+    });
+    it("no row is unknown (null)", () => {
+      expect(storedStartDayChoice(undefined)).toBeNull();
+      expect(storedStartDayChoice(null)).toBeNull();
     });
   });
 

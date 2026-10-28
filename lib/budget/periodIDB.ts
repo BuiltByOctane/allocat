@@ -5,7 +5,7 @@ import {
   pickBudgetForPeriod,
   rangeForLabel,
   resolvePeriod,
-  startDayChoice,
+  storedStartDayChoice,
   toISODate,
   type ISODate,
   type PeriodLabel,
@@ -25,12 +25,13 @@ export async function getStartDayIDB(): Promise<number> {
 
 /**
  * The start day the user actually chose, or null when the cached profile is
- * missing or holds none (a new account that skipped the onboarding question).
+ * missing or holds an explicit null (a new account that skipped the
+ * onboarding question). A cached row predating the column counts as 1.
  * Budget-creation flows ask for the day while this is null.
  */
 export async function getStartDayChoiceIDB(): Promise<number | null> {
   const rows = await getDB().profiles.toArray();
-  return startDayChoice(rows[0]?.budget_start_day);
+  return storedStartDayChoice(rows[0]);
 }
 
 /** Every cached budget, reduced to what cycle math needs. */

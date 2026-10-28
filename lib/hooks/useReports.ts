@@ -24,9 +24,10 @@ export async function getReportFromIDB(
 
 // ─── Query ────────────────────────────────────────────────────────────────────
 
-export function useMonthlyReport(month: number, year: number) {
+export function useMonthlyReport(month: number, year: number, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: reportKey(month, year),
+    enabled: opts?.enabled ?? true,
     queryFn: async () => {
       const local = await getReportFromIDB(month, year);
       if (local) return local;

@@ -1,12 +1,16 @@
 "use client";
 
-import { Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import BudgetPage from "@/components/budget/BudgetPage";
 import { useBudgetData } from "@/lib/hooks/useBudget";
 import { useTour } from "@/lib/tour/useTour";
 import { useTourDriver } from "@/lib/tour/useTourDriver";
 import { mockBudgetData } from "@/lib/tour/mockData";
+import { useCurrentPeriod } from "@/lib/hooks/useCurrentPeriod";
+import { useSync } from "@/lib/hooks/useSync";
+import { getStartDayIDB, getStoredPeriodsIDB } from "@/lib/budget/periodIDB";
+import { findCoveringBudget, rangeForLabel } from "@/lib/budget/period";
 
 function BudgetSkeleton() {
   return (
@@ -54,18 +58,45 @@ function BudgetContent() {
   const tourActive = tour.isPageTourActive("budget");
   useTourDriver("budget");
 
-  const currentMonth = new Date().getMonth() + 1;
-  const currentYear = new Date().getFullYear();
+  const router = useRouter();
+  const { isHydrated } = useSync();
+  // Default = the budget cycle containing today (the same label prefetch
+  // warmed), not the calendar month.
+  const { period: current, isLoading: periodLoading } = useCurrentPeriod();
 
-  const selectedMonth = searchParams.get("month")
-    ? parseInt(searchParams.get("month")!, 10)
-    : currentMonth;
-  const selectedYear = searchParams.get("year")
-    ? parseInt(searchParams.get("year")!, 10)
-    : currentYear;
+  const monthParam = searchParams.get("month");
+  const yearParam = searchParams.get("year");
+  const hasParams = !!monthParam && !!yearParam;
 
-  const { data, isLoading, isError } = useBudgetData(selectedMonth, selectedYear);
+  const selectedMonth = monthParam ? parseInt(monthParam, 10) : current.month;
+  const selectedYear = yearParam ? parseInt(yearParam, 10) : current.year;
 
+  // An absorbed label (its computed range sits inside a stored budget with
+  // another label, e.g. November after October was stretched to Nov 30) has
+  // no cycle of its own — show the budget that covers it instead.
+  useEffect(() => {
+    if (!hasParams || !isHydrated) return;
+    let cancelled = false;
+    void (async () => {
+      const [budgets, startDay] = await Promise.all([getStoredPeriodsIDB(), getStartDayIDB()]);
+      if (cancelled) return;
+      const range = rangeForLabel({ month: selectedMonth, year: selectedYear }, budgets, startDay);
+      const cover = findCoveringBudget(range, budgets);
+      if (cover) router.replace(`/budget?month=${cover.month}&year=${cover.year}`);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasParams, isHydrated, selectedMonth, selectedYear, router]);
+
+  const waitForPeriod = !hasParams && periodLoading;
+  const { data, isLoading, isError } = useBudgetData(selectedMonth, selectedYear, {
+    enabled: !waitForPeriod,
+  });
+
+  // Without a URL label, wait for the resolved cycle so the calendar-month
+  // fallback never fetches (and flashes) the wrong budget.
+  if (waitForPeriod && !tourActive) return <BudgetSkeleton />;
   if (isLoading && !tourActive) return <BudgetSkeleton />;
 
   if (isError || (!data && !tourActive)) {

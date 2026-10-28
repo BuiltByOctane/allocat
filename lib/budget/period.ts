@@ -197,6 +197,26 @@ export function rangeForLabel(label: PeriodLabel, budgets: StoredBudgetPeriod[],
 }
 
 /**
+ * The stored budget that absorbed `range`'s label: one with a DIFFERENT label
+ * whose range contains `range.start` (e.g. after a 15 → 1 switch, October
+ * stretched to Oct 15 – Nov 30 swallows November). Null when the label has
+ * its own stored row or nothing covers it.
+ */
+export function findCoveringBudget(
+  range: ResolvedPeriod,
+  budgets: StoredBudgetPeriod[],
+): StoredBudgetPeriod | null {
+  if (range.budgetId !== null) return null;
+  return (
+    budgets.find((b) => {
+      if (labelIndex(b) === labelIndex(range)) return false;
+      const r = storedRange(b);
+      return r.start <= range.start && range.start <= r.end;
+    }) ?? null
+  );
+}
+
+/**
  * The adjacent cycle. Steps by date, not label, so a label absorbed into a
  * longer stored budget is skipped by construction.
  */

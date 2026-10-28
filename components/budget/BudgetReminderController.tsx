@@ -7,16 +7,17 @@ import { getDB } from "@/lib/db";
 import { findCarrySource, isEmptyBudget } from "@/lib/budget/carry";
 import { pickBudgetReminderMessage } from "@/lib/notify/messages";
 import { emitNotification } from "@/lib/notify/history";
+import { resolvePeriodIDB } from "@/lib/budget/periodIDB";
 
 /**
- * New-month nudge: if the CURRENT month has no budget set AND there's no prior
+ * New-cycle nudge: if the CURRENT budget cycle (start-day aware) has no budget set AND there's no prior
  * budget to auto-carry from (so CarryController won't silently fill it), post a
  * single cat-voice local notification telling the user to set one up.
  *
  * Native only — web has no local-notification channel (notifyLocal no-ops there,
  * and we don't want to burn the once-per-month flag on a notif nobody sees).
- * Deduped per month via localStorage, re-checked on visibilitychange so a
- * month rollover while the app stays open still fires. Mounted once in
+ * Deduped per cycle label via localStorage, re-checked on visibilitychange so
+ * a rollover on the start day while the app stays open still fires. Mounted once in
  * app/(app)/layout.tsx.
  */
 export function BudgetReminderController() {
@@ -29,9 +30,8 @@ export function BudgetReminderController() {
     let cancelled = false;
 
     const check = async () => {
-      const now = new Date();
-      const month = now.getMonth() + 1;
-      const year = now.getFullYear();
+      const { month, year } = await resolvePeriodIDB();
+      if (cancelled) return;
       const flagKey = `allocat-budget-reminder:${year}-${month}`;
       if (typeof window === "undefined") return;
       if (localStorage.getItem(flagKey)) return;

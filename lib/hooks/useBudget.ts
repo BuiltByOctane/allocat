@@ -20,6 +20,7 @@ import { NET_WORTH_KEY } from "./useNetWorth";
 import { GOALS_KEY } from "./useGoals";
 import { DEBT_KEY } from "./useDebt";
 import { rangeForLabelIDB } from "@/lib/budget/periodIDB";
+import { isTransientSyncError } from "@/lib/sync/errors";
 
 type LinkType = "asset" | "debt";
 
@@ -96,9 +97,10 @@ export async function getBudgetFromIDB(month: number, year: number) {
 
 // ─── Query ────────────────────────────────────────────────────────────────────
 
-export function useBudgetData(month: number, year: number) {
+export function useBudgetData(month: number, year: number, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: budgetKey(month, year),
+    enabled: opts?.enabled ?? true,
     queryFn: async () => {
       // Serve from IDB first — instant, works offline
       const local = await getBudgetFromIDB(month, year);
@@ -227,8 +229,11 @@ export function useEnsureBudgetRow() {
       const row = await ensureBudgetRow(month, year);
       await db.budgets.put(row);
       return row.id;
-    } catch {
-      // Offline (or the action failed): create locally and queue the INSERT.
+    } catch (err) {
+      // A real server answer (e.g. budget_period_overlap) would fail again
+      // from the queue — surface it instead of queueing a doomed INSERT.
+      if (!isTransientSyncError(err)) throw err;
+      // Offline / no verdict: create locally and queue the INSERT.
       const tempId = `temp_${crypto.randomUUID()}`;
       const now = new Date().toISOString();
       const range = await rangeForLabelIDB({ month, year });

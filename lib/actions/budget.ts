@@ -184,15 +184,18 @@ export async function getBudgetForPeriod(month: number, year: number) {
     .maybeSingle();
 
   if (!budget) {
-    const { data: newBudget } = await supabase
+    // The period trigger raises `budget_period_overlap` when this label's
+    // range collides with an existing budget — surface it, never format null.
+    const { data: newBudget, error } = await supabase
       .from("budgets")
       .insert({ user_id: user.id, month, year, total_budget: 0 })
       .select()
       .single();
+    if (error) throw new Error(error.message);
     budget = newBudget;
   }
 
-  return formatBudget(supabase, budget!);
+  return formatBudget(supabase, budget);
 }
 
 type BudgetRow = Database["public"]["Tables"]["budgets"]["Row"];
@@ -1324,6 +1327,9 @@ export async function carryBudgetForward(input: CarryPayload): Promise<{
         .maybeSingle();
       if (created) {
         budget = created;
+      } else if (error && error.code !== "23505") {
+        // A real refusal (e.g. budget_period_overlap) — no row to reselect.
+        throw new Error(error.message);
       } else {
         // Unique violation — another writer inserted concurrently; reselect.
         const { data: raced, error: reselectErr } = await supabase

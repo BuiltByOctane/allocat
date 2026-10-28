@@ -21,6 +21,8 @@ import type { BudgetTemplate } from "@/lib/budget-templates";
 import { DASHBOARD_KEY } from "@/lib/hooks/useDashboard";
 import { useCarryBudget, useCarrySource } from "@/lib/hooks/useBudgetCarry";
 import { stepPeriod } from "@/lib/budget/carry";
+import { formatPeriodLabel, type ResolvedPeriod } from "@/lib/budget/period";
+import { useCurrentPeriod, usePeriodNavigator } from "@/lib/hooks/useCurrentPeriod";
 import { BottomSheetSelect } from "@/components/ui/BottomSheetSelect";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { InlineEditableNumber } from "@/components/ui/InlineEditableNumber";
@@ -41,13 +43,12 @@ const MONTHS = [
 ];
 
 /**
- * Rolling cross-year window for the month picker: 12 months back through 3
- * forward from TODAY, always including the currently-viewed period. Values are
- * "<year>-<month>" so navigation is never year-locked.
+ * Synchronous calendar-month window (12 back through 3 forward from today),
+ * shown until the cycle-aware window below resolves from IDB.
  */
-function monthOptions(viewMonth: number, viewYear: number) {
+function calendarMonthOptions(viewMonth: number, viewYear: number) {
   const now = new Date();
-  const options: Array<{ value: string; label: string }> = [];
+  const options: PeriodOption[] = [];
   const seen = new Set<string>();
   const push = (p: { month: number; year: number }) => {
     const value = `${p.year}-${p.month}`;
@@ -66,12 +67,51 @@ function monthOptions(viewMonth: number, viewYear: number) {
     cursor = stepPeriod(cursor, 1);
   }
   push({ month: viewMonth, year: viewYear });
-  options.sort((a, b) => {
+  return sortOptions(options);
+}
+
+interface PeriodOption {
+  value: string;
+  label: string;
+}
+
+function sortOptions(options: PeriodOption[]): PeriodOption[] {
+  return options.sort((a, b) => {
     const [ay, am] = a.value.split("-").map(Number);
     const [by, bm] = b.value.split("-").map(Number);
     return ay * 12 + am - (by * 12 + bm);
   });
-  return options;
+}
+
+/**
+ * Rolling window for the month picker: 12 budget cycles back through 3 forward
+ * from the CURRENT cycle, always including the viewed one. Steps by date, so
+ * labels absorbed into a longer stored budget never appear. Values stay
+ * "<year>-<month>" (the URL format); labels come from formatPeriodLabel, which
+ * is "October 2026" for start-day-1 calendar months.
+ */
+async function cycleOptions(
+  current: ResolvedPeriod,
+  viewed: ResolvedPeriod,
+  startDay: number,
+  step: (from: ResolvedPeriod, delta: 1 | -1) => Promise<ResolvedPeriod>,
+): Promise<PeriodOption[]> {
+  const options: PeriodOption[] = [];
+  const seen = new Set<string>();
+  const push = (p: ResolvedPeriod) => {
+    const value = `${p.year}-${p.month}`;
+    if (seen.has(value)) return;
+    seen.add(value);
+    options.push({ value, label: formatPeriodLabel(p, startDay) });
+  };
+  let cursor = current;
+  for (let i = 0; i < 12; i++) cursor = await step(cursor, -1);
+  for (let i = 0; i < 16; i++) {
+    push(cursor);
+    if (i < 15) cursor = await step(cursor, 1);
+  }
+  push(viewed);
+  return sortOptions(options);
 }
 
 interface CategoryData {
@@ -230,13 +270,37 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
   const unallocatedBudget = data.totalBudget - totalAllocated;
   const totalMeter = budgetMeter(totalSpent, data.totalBudget);
 
+  const { period: currentPeriod, startDay, isLoading: periodLoading } = useCurrentPeriod();
+  const nav = usePeriodNavigator();
+  const [cycleOpts, setCycleOpts] = useState<{ key: string; options: PeriodOption[] } | null>(null);
+  const optionsKey = `${currentPeriod.year}-${currentPeriod.month}:${currentPeriod.start}:${startDay}:${defaultYear}-${defaultMonth}`;
+  useEffect(() => {
+    if (periodLoading) return;
+    let cancelled = false;
+    void (async () => {
+      const viewed = await nav.rangeFor({ month: defaultMonth, year: defaultYear });
+      const options = await cycleOptions(currentPeriod, viewed, startDay, nav.step);
+      if (!cancelled) setCycleOpts({ key: optionsKey, options });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [periodLoading, currentPeriod, startDay, defaultMonth, defaultYear, nav, optionsKey]);
+  const periodOptions =
+    cycleOpts?.key === optionsKey
+      ? cycleOpts.options
+      : calendarMonthOptions(defaultMonth, defaultYear);
+
   function pushPeriod(month: number, year: number) {
     router.push(`?month=${month}&year=${year}`);
   }
 
-  function stepMonth(delta: 1 | -1) {
+  // Prev/next walk budget cycles by DATE (never label arithmetic), so a label
+  // absorbed into a stretched budget is skipped.
+  async function stepMonth(delta: 1 | -1) {
     haptic.selection();
-    const next = stepPeriod({ month: defaultMonth, year: defaultYear }, delta);
+    const viewed = await nav.rangeFor({ month: defaultMonth, year: defaultYear });
+    const next = await nav.step(viewed, delta);
     pushPeriod(next.month, next.year);
   }
 
@@ -314,7 +378,7 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
             <button
               type="button"
               aria-label="Previous month"
-              onClick={() => stepMonth(-1)}
+              onClick={() => void stepMonth(-1)}
               className="flex h-[38px] w-[34px] items-center justify-center rounded-xl border border-border bg-card text-muted-foreground active:scale-95 transition-transform"
             >
               <span className="material-symbols-outlined text-[18px] leading-none">
@@ -323,7 +387,7 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
             </button>
             <BottomSheetSelect
               title="Select Month"
-              options={monthOptions(defaultMonth, defaultYear)}
+              options={periodOptions}
               value={`${defaultYear}-${defaultMonth}`}
               onChange={(val) => {
                 const [y, m] = val.split("-").map(Number);
@@ -334,7 +398,7 @@ export default function BudgetPage({ data, defaultMonth, defaultYear }: BudgetPa
             <button
               type="button"
               aria-label="Next month"
-              onClick={() => stepMonth(1)}
+              onClick={() => void stepMonth(1)}
               className="flex h-[38px] w-[34px] items-center justify-center rounded-xl border border-border bg-card text-muted-foreground active:scale-95 transition-transform"
             >
               <span className="material-symbols-outlined text-[18px] leading-none">

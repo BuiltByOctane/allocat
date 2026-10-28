@@ -10,11 +10,13 @@ import {
   useDismissCarryBanner,
 } from "@/lib/hooks/useBudgetCarry";
 import { useHaptic } from "@/lib/hooks/useHaptic";
+import { resolvePeriodIDB } from "@/lib/budget/periodIDB";
 
 /**
  * Global auto-carry: once IDB is hydrated, copy the most recent prior budget
- * into the CURRENT month if it's still empty — so the dashboard hero populates
+ * into the CURRENT budget cycle if it's still empty — so the dashboard hero populates
  * without the user ever visiting /budget. Shows a one-tap confirm/undo banner.
+ * The current cycle is resolved from IDB on every fire (start-day aware).
  * Other (peeked-at) months never auto-carry; they get an explicit CTA in the
  * budget empty state instead. Mounted once in app/(app)/layout.tsx.
  */
@@ -36,15 +38,18 @@ export function CarryController() {
   const [undoBlocked, setUndoBlocked] = useState(false);
   const firedRef = useRef<string | null>(null);
 
-  // Fire once per hydration + whenever the month rolls over while the PWA
-  // stays open (visibilitychange re-check). The sync_meta marker + the Dexie
-  // transaction inside useCarryBudget make re-fires idempotent.
+  // Fire once per hydration + whenever the cycle rolls over (on the start
+  // day) while the PWA stays open (visibilitychange re-check). The sync_meta
+  // marker + the Dexie transaction inside useCarryBudget make re-fires
+  // idempotent.
   useEffect(() => {
     if (!isHydrated) return;
+    let cancelled = false;
 
-    const fire = () => {
-      const now = new Date();
-      const p = { month: now.getMonth() + 1, year: now.getFullYear() };
+    const fire = async () => {
+      const resolved = await resolvePeriodIDB();
+      if (cancelled) return;
+      const p = { month: resolved.month, year: resolved.year };
       setPeriod(p);
       const key = `${p.year}-${p.month}`;
       if (firedRef.current === key) return;
@@ -52,12 +57,15 @@ export function CarryController() {
       carry.mutate({ ...p, auto: true });
     };
 
-    fire();
+    void fire();
     const onVisible = () => {
-      if (document.visibilityState === "visible") fire();
+      if (document.visibilityState === "visible") void fire();
     };
     document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+    };
     // carry.mutate is stable; firedRef dedupes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHydrated]);

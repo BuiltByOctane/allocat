@@ -5,6 +5,7 @@ import {
   computeRange,
   daysElapsed,
   daysLeft,
+  findCoveringBudget,
   formatPeriodLabel,
   labelForDate,
   periodDays,
@@ -204,6 +205,38 @@ describe("period", () => {
         startDay: 15, current: null, deleteBudgetIds: [], deleteLabels: [], redate: [], nextStart: null,
       });
       expect(planStartDaySwitch({ today: "2026-10-28", oldStartDay: 15, newStartDay: 15, budgets: [oct1] })).toBeNull();
+    });
+  });
+  describe("findCoveringBudget", () => {
+    // After a 15 → 1 switch on Nov 5: October stretched to Oct 15 – Nov 30.
+    const octStretched: StoredBudgetPeriod = { id: "oct", month: 10, year: 2026, period_start: "2026-10-15", period_end: "2026-11-30" };
+
+    it("returns the stored budget of another label containing the computed start", () => {
+      const nov = rangeForLabel({ month: 11, year: 2026 }, [octStretched], 1);
+      expect(findCoveringBudget(nov, [octStretched])).toBe(octStretched);
+    });
+
+    it("is null when the label has its own stored row", () => {
+      expect(findCoveringBudget(rangeForLabel({ month: 10, year: 2026 }, [octStretched], 1), [octStretched])).toBeNull();
+    });
+
+    it("is null when no stored budget contains the start", () => {
+      const dec = rangeForLabel({ month: 12, year: 2026 }, [octStretched], 1);
+      expect(findCoveringBudget(dec, [octStretched])).toBeNull();
+      expect(findCoveringBudget(rangeForLabel({ month: 11, year: 2026 }, [], 1), [])).toBeNull();
+    });
+
+    it("is null for start-day-1 calendar months next to each other", () => {
+      const nov = rangeForLabel({ month: 11, year: 2026 }, [oct1], 1);
+      expect(findCoveringBudget(nov, [oct1])).toBeNull();
+    });
+
+    it("treats a stored row missing its range as its calendar month", () => {
+      const legacy: StoredBudgetPeriod = { id: "sep", month: 9, year: 2026 };
+      const label = rangeForLabel({ month: 10, year: 2026 }, [legacy], 1);
+      expect(findCoveringBudget(label, [legacy])).toBeNull();
+      const shifted = { ...rangeForLabel({ month: 10, year: 2026 }, [], 1), start: "2026-09-20" };
+      expect(findCoveringBudget(shifted, [legacy])).toBe(legacy);
     });
   });
 });

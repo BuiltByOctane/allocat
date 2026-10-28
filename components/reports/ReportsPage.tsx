@@ -14,11 +14,14 @@ import { useTourDriver } from "@/lib/tour/useTourDriver";
 import { Card } from "@/components/ui/Card";
 import { CurrencyText } from "@/components/ui/CurrencyText";
 import { Progress } from "@/components/ui/Progress";
-
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
+import { rangeForLabelIDB } from "@/lib/budget/periodIDB";
+import {
+  formatPeriodLabel,
+  toISODate,
+  type PeriodLabel,
+  type PeriodRange,
+} from "@/lib/budget/period";
+import { useCurrentPeriod, usePeriodNavigator } from "@/lib/hooks/useCurrentPeriod";
 
 interface CategorySummary {
   id: string;
@@ -48,18 +51,32 @@ interface MonthSummary {
   pendingAmount: number;
 }
 
-/** True when (month, year) is strictly before the current calendar month. */
-function isPastMonth(month: number, year: number): boolean {
-  const now = new Date();
-  return year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1);
+/** True when the cycle ended before today (finished budget cycle). */
+function isPastPeriod(range: PeriodRange): boolean {
+  return range.end < toISODate(new Date());
 }
 
-function summaryKey(month: number, year: number) {
-  return ["report-summary", month, year] as const;
+/** True when a txn timestamp's LOCAL date falls inside the cycle range. */
+function inRange(iso: string, range: PeriodRange): boolean {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return false;
+  const day = toISODate(d);
+  return range.start <= day && day <= range.end;
 }
 
-/** Compute the month summary from IDB (budget + categories + items + SMS spend). */
-async function computeSummary(month: number, year: number): Promise<MonthSummary> {
+function rangeKey(month: number, year: number) {
+  return ["report-range", month, year] as const;
+}
+
+function summaryKey(month: number, year: number, range: PeriodRange | undefined) {
+  return ["report-summary", month, year, range?.start, range?.end] as const;
+}
+
+/**
+ * Compute the cycle summary from IDB (budget + categories + items + SMS
+ * spend). Transactions are bucketed by the label's budget-cycle range.
+ */
+async function computeSummary(month: number, year: number, range: PeriodRange): Promise<MonthSummary> {
   let budget = await getBudgetFromIDB(month, year);
   if (!budget) {
     // IDB miss (new month / first open) — read-only fetch; never create a row
@@ -86,7 +103,7 @@ async function computeSummary(month: number, year: number): Promise<MonthSummary
   const totalAllocated = categories.reduce((s, c) => s + c.allocated, 0);
   const totalSpent = categories.reduce((s, c) => s + c.spent, 0);
 
-  // Top spends from categorized transactions that occurred in this month.
+  // Top spends from categorized transactions that occurred in this cycle.
   const txns = await db.sms_transactions
     .where("status")
     .equals("categorized")
@@ -98,8 +115,7 @@ async function computeSummary(month: number, year: number): Promise<MonthSummary
     if (t.direction === "credit") continue;
     const when = t.occurred_at ?? t.created_at;
     if (!when) continue;
-    const d = new Date(when);
-    if (d.getFullYear() !== year || d.getMonth() + 1 !== month) continue;
+    if (!inRange(when, range)) continue;
     const amount = Number(t.amount ?? 0);
     if (!amount) continue;
     txnCount += 1;
@@ -111,7 +127,7 @@ async function computeSummary(month: number, year: number): Promise<MonthSummary
     merchantTotals.set(label, (merchantTotals.get(label) ?? 0) + amount);
   }
 
-  // Pending (uncategorized) spends that occurred this month — drives the
+  // Pending (uncategorized) spends that occurred this cycle — drives the
   // "were all transactions allocated" line in the AI summary.
   const pendingTxns = await db.sms_transactions
     .where("status")
@@ -123,8 +139,7 @@ async function computeSummary(month: number, year: number): Promise<MonthSummary
     if (t.direction === "credit") continue;
     const when = t.occurred_at ?? t.created_at;
     if (!when) continue;
-    const d = new Date(when);
-    if (d.getFullYear() !== year || d.getMonth() + 1 !== month) continue;
+    if (!inRange(when, range)) continue;
     pendingCount += 1;
     pendingAmount += Number(t.amount ?? 0);
   }
@@ -153,16 +168,28 @@ export default function ReportsPage() {
   const { code: currencyCode } = useCurrency();
   useTourDriver("reports");
 
-  const now = new Date();
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const [year, setYear] = useState(now.getFullYear());
+  // Default = the budget cycle containing today; null until the user steps.
+  const { period: current, startDay, isLoading: periodLoading } = useCurrentPeriod();
+  const nav = usePeriodNavigator();
+  const [picked, setPicked] = useState<PeriodLabel | null>(null);
+  const month = picked?.month ?? current.month;
+  const year = picked?.year ?? current.year;
+  const labelReady = picked !== null || !periodLoading;
 
-  const { data: summary, isLoading } = useQuery({
-    queryKey: summaryKey(month, year),
-    queryFn: () => computeSummary(month, year),
+  const { data: range } = useQuery({
+    queryKey: rangeKey(month, year),
+    queryFn: () => rangeForLabelIDB({ month, year }),
+    enabled: labelReady,
   });
 
-  const { data: report } = useMonthlyReport(month, year);
+  const { data: summary, isLoading: summaryLoading } = useQuery({
+    queryKey: summaryKey(month, year, range),
+    queryFn: () => computeSummary(month, year, range!),
+    enabled: !!range,
+  });
+  const isLoading = !range || summaryLoading;
+
+  const { data: report } = useMonthlyReport(month, year, { enabled: labelReady });
   const saveNotes = useSaveReportNotes();
 
   const [notes, setNotes] = useState("");
@@ -204,19 +231,18 @@ export default function ReportsPage() {
     setGenError(false);
   }
 
+  // "October 2026" for start-day-1 calendar months, else "Oct 15 – Nov 14".
   const monthLabel = useMemo(
-    () => `${MONTH_NAMES[month - 1]} ${year}`,
-    [month, year],
+    () => (range ? formatPeriodLabel(range, startDay) : ""),
+    [range, startDay],
   );
 
-  function shiftMonth(delta: number) {
+  // Step by DATE through budget cycles, so absorbed labels are skipped.
+  async function shiftMonth(delta: 1 | -1) {
     haptic.light();
-    let m = month + delta;
-    let y = year;
-    if (m < 1) { m = 12; y -= 1; }
-    if (m > 12) { m = 1; y += 1; }
-    setMonth(m);
-    setYear(y);
+    const from = range ?? (await rangeForLabelIDB({ month, year }));
+    const next = await nav.step(from, delta);
+    setPicked({ month: next.month, year: next.year });
   }
 
   async function handleSave() {
@@ -271,7 +297,7 @@ export default function ReportsPage() {
   // AI recap is offered only for a finished month with a budget and an empty
   // note (a written summary means "no need"). Keeps the call rare and opt-in.
   const canGenerate =
-    !!summary?.budgetId && isPastMonth(month, year) && notes.trim().length === 0;
+    !!summary?.budgetId && !!range && isPastPeriod(range) && notes.trim().length === 0;
 
   const maxCatValue = Math.max(
     1,
@@ -304,7 +330,7 @@ export default function ReportsPage() {
       {/* Month picker */}
       <div id="reports-month" className="flex items-center justify-between rounded-card border border-border bg-card px-2 py-2">
         <button
-          onClick={() => shiftMonth(-1)}
+          onClick={() => void shiftMonth(-1)}
           aria-label="Previous month"
           className="flex size-9 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground transition-colors active:scale-95"
         >
@@ -314,7 +340,7 @@ export default function ReportsPage() {
           {monthLabel}
         </span>
         <button
-          onClick={() => shiftMonth(1)}
+          onClick={() => void shiftMonth(1)}
           aria-label="Next month"
           className="flex size-9 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground transition-colors active:scale-95"
         >

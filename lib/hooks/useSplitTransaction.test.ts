@@ -186,4 +186,62 @@ describe("applySplit", () => {
     ).rejects.toThrow();
     expect(enqueue).not.toHaveBeenCalled();
   });
+
+  it("missing part item throws before any write", async () => {
+    dbStub.budget_items.rows.splice(2, 1); // drop "c"
+    const enqueue = vi.fn(async () => {});
+    await expect(
+      applySplit(
+        {
+          sourceTxnId: "t1",
+          total: 2400,
+          label: null,
+          parts: [
+            { budgetItemId: "a", amount: 1500 },
+            { budgetItemId: "b", amount: 600 },
+            { budgetItemId: "c", amount: null },
+          ],
+        },
+        { enqueue, uuid: seq() },
+      ),
+    ).rejects.toThrow("Split item not found");
+    expect(dbStub.sms_transactions.rows).toHaveLength(1);
+    expect(dbStub.sms_transactions.rows[0].status).toBe("pending");
+    expect(dbStub.budget_items.rows.map((r) => r.actual_amount)).toEqual([100, 100]);
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it("retries the item write when it swapped temp -> real mid-split", async () => {
+    dbStub.budget_items.rows.push({ ...item("temp_x"), id: "temp_x" });
+    const realUpdate = dbStub.budget_items.update.bind(dbStub.budget_items);
+    let swapped = false;
+    dbStub.budget_items.update = async (id: string, changes: Record<string, unknown>) => {
+      if (id === "temp_x" && !swapped) {
+        swapped = true;
+        const row = dbStub.budget_items.rows.find((r) => r.id === "temp_x")!;
+        row.id = "real_x";
+        dbStub.id_map.rows.push({ id: "m", tempId: "temp_x", realId: "real_x" });
+        return 0;
+      }
+      return realUpdate(id, changes);
+    };
+    const enqueue = vi.fn(async () => {});
+    await applySplit(
+      {
+        sourceTxnId: null,
+        total: 100,
+        label: null,
+        parts: [
+          { budgetItemId: "a", amount: 40 },
+          { budgetItemId: "temp_x", amount: null },
+        ],
+      },
+      { enqueue, uuid: seq() },
+    );
+    expect(dbStub.budget_items.rows.find((r) => r.id === "real_x")!.actual_amount).toBe(160);
+    const call = (enqueue.mock.calls[0] as unknown[])[0] as {
+      payload: { parts: Array<{ budgetItemId: string }> };
+    };
+    expect(call.payload.parts[1].budgetItemId).toBe("real_x");
+  });
 });

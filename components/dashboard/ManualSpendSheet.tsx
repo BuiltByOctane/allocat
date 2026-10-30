@@ -569,7 +569,8 @@ export function ManualSpendSheet({
           open && createCategoryId && createMeta
             ? {
                 id: NEW_ITEM_ID,
-                name: labelTrimmed,
+                // A split part's item is not the whole spend — don't prefill its label.
+                name: createPartIndex !== null ? "" : labelTrimmed,
                 planned: 0,
                 actual: 0,
                 is_completed: false,

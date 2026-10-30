@@ -49,8 +49,19 @@ export async function applySplit(
   const db = getDB();
   const now = new Date().toISOString();
 
-  // Resolve budget item ids (a just-created item may have swapped temp -> real).
+  // Resolve budget item ids (a just-created item may have swapped temp -> real)
+  // and require every part's item up front: a missing one must fail the whole
+  // split before any row is written, never silently drop a part.
   const itemIds = await Promise.all(input.parts.map((p) => resolveId(p.budgetItemId)));
+  for (let i = 0; i < itemIds.length; i++) {
+    let found = await db.budget_items.get(itemIds[i]);
+    if (!found) {
+      // Swapped temp -> real between resolve and read: re-resolve once.
+      itemIds[i] = await resolveId(input.parts[i].budgetItemId);
+      found = await db.budget_items.get(itemIds[i]);
+    }
+    if (!found) throw new Error("Split item not found");
+  }
 
   // Source row (SMS) or profile currency (manual). Validate before any write.
   let source: SmsTransactionRow | undefined;
@@ -117,27 +128,47 @@ export async function applySplit(
     });
   }
 
-  // Budget item actuals, linked cascade, near-limit alerts.
+  // Budget item actuals, linked cascade, near-limit alerts. An item created
+  // moments ago can swap temp -> real between the read and the write (the
+  // update then hits no row), so re-resolve and retry like applyQuickSpend.
   for (let i = 0; i < itemIds.length; i++) {
-    const item = await db.budget_items.get(itemIds[i]);
-    if (!item) continue;
-    const newActual = Number(item.actual_amount) + amounts[i];
-    const planned = Number(item.planned_amount);
-    const patch: {
-      actual_amount: number;
-      is_completed: boolean;
-      overspend_count?: number;
-      updated_at: string;
-    } = {
-      actual_amount: newActual,
-      is_completed: computeAutoCompletion(planned, newActual),
-      updated_at: now,
-    };
-    if (planned > 0 && newActual > planned) {
-      patch.overspend_count = Number(item.overspend_count ?? 0) + 1;
+    let applied = false;
+    for (let attempt = 0; attempt < 2 && !applied; attempt++) {
+      const item = await db.budget_items.get(itemIds[i]);
+      if (!item) {
+        const next = await resolveId(input.parts[i].budgetItemId);
+        if (next === itemIds[i]) break;
+        itemIds[i] = next;
+        payloadParts[i].budgetItemId = next;
+        continue;
+      }
+      const newActual = Number(item.actual_amount) + amounts[i];
+      const planned = Number(item.planned_amount);
+      const patch: {
+        actual_amount: number;
+        is_completed: boolean;
+        overspend_count?: number;
+        updated_at: string;
+      } = {
+        actual_amount: newActual,
+        is_completed: computeAutoCompletion(planned, newActual),
+        updated_at: now,
+      };
+      if (planned > 0 && newActual > planned) {
+        patch.overspend_count = Number(item.overspend_count ?? 0) + 1;
+      }
+      const updated = await db.budget_items.update(itemIds[i], patch);
+      if (updated === 0) {
+        const next = await resolveId(input.parts[i].budgetItemId);
+        if (next !== itemIds[i]) {
+          itemIds[i] = next;
+          payloadParts[i].budgetItemId = next;
+        }
+        continue;
+      }
+      await applyLinkedSpendCascadeIDB(item, { actual_amount: newActual });
+      applied = true;
     }
-    await db.budget_items.update(itemIds[i], patch);
-    await applyLinkedSpendCascadeIDB(item, { actual_amount: newActual });
     await notifyNearLimitForItem(itemIds[i], currency);
   }
 

@@ -4,6 +4,8 @@ type Row = Record<string, unknown>;
 const state: Record<string, Map<string, Row>> = {
   sms_transactions: new Map(),
   budget_items: new Map(),
+  assets: new Map(),
+  debts: new Map(),
 };
 const touched = new Set<string>();
 let seq = 0;
@@ -110,6 +112,8 @@ const smsPayload = (): SplitTxnPayload => ({
 beforeEach(() => {
   state.sms_transactions.clear();
   state.budget_items.clear();
+  state.assets.clear();
+  state.debts.clear();
   touched.clear();
   quickLogSpend.mockClear();
   logActivity.mockClear();
@@ -236,5 +240,28 @@ describe("splitTransaction", () => {
   it("never touches merchant_rules", async () => {
     await splitTransaction(smsPayload());
     expect(touched.has("merchant_rules")).toBe(false);
+  });
+
+  it("missing part item throws before any write", async () => {
+    state.budget_items.delete("c");
+    await expect(splitTransaction(smsPayload())).rejects.toThrow("Split item not found");
+    expect(quickLogSpend).not.toHaveBeenCalled();
+    expect(state.sms_transactions.size).toBe(1);
+    expect(state.sms_transactions.get("t1")!.status).toBe("pending");
+    expect(logActivity).not.toHaveBeenCalled();
+  });
+
+  it("missing linked target throws before any write", async () => {
+    Object.assign(state.budget_items.get("c")!, { link_type: "debt", link_id: "d1" });
+    Object.assign(state.budget_items.get("b")!, { link_type: "asset", link_id: "as1" });
+    state.assets.set("as1", { id: "as1", user_id: "u1", name: "Savings" });
+    await expect(splitTransaction(smsPayload())).rejects.toThrow("Linked debt missing");
+    expect(quickLogSpend).not.toHaveBeenCalled();
+    expect(state.sms_transactions.size).toBe(1);
+    expect(state.sms_transactions.get("t1")!.status).toBe("pending");
+
+    state.debts.set("d1", { id: "d1", user_id: "u1", name: "Card" });
+    await splitTransaction(smsPayload());
+    expect(quickLogSpend).toHaveBeenCalledTimes(3);
   });
 });

@@ -21,6 +21,8 @@ import {
   type BulkIngestOutcome,
 } from "@/lib/sms/bulkIngest";
 
+import { roundMoney, type SplitTxnPayload, type SplitResult } from "@/lib/sms/split";
+
 /** Notify when a category crosses 90% / 100% of its allocation. */
 const NEAR_LIMIT_RATIO = 0.9;
 
@@ -449,6 +451,212 @@ export async function categorizeSmsTransaction(input: CategorizeSmsInput) {
   await notifyIfNearLimit(supabase, user.id, input.budgetItemId, cur);
 
   return { ok: true, ruleCreated: Boolean(ruleId) };
+}
+
+/**
+ * Every split item must exist for this user, and so must any asset/debt it is
+ * linked to (the targets quickLogSpend cascades into). Throws before a split
+ * writes anything, so it never half-applies on a permanent failure.
+ */
+async function assertSplitTargetsExist(
+  supabase: Supa,
+  userId: string,
+  itemIds: string[],
+): Promise<void> {
+  const { data: items, error } = await supabase
+    .from("budget_items")
+    .select("id, link_type, link_id")
+    .in("id", itemIds)
+    .eq("user_id", userId);
+  if (error) throw new Error(error.message);
+  const rows = (items ?? []) as Array<{
+    id: string;
+    link_type: string | null;
+    link_id: string | null;
+  }>;
+  const found = new Set(rows.map((r) => r.id));
+  if (itemIds.some((id) => !found.has(id))) throw new Error("Split item not found");
+
+  const linked = (kind: string) => [
+    ...new Set(
+      rows.filter((r) => r.link_type === kind && r.link_id).map((r) => r.link_id as string),
+    ),
+  ];
+  for (const [kind, table] of [
+    ["asset", "assets"],
+    ["debt", "debts"],
+  ] as const) {
+    const ids = linked(kind);
+    if (ids.length === 0) continue;
+    const { data: targets, error: tErr } = await supabase
+      .from(table)
+      .select("id")
+      .in("id", ids)
+      .eq("user_id", userId);
+    if (tErr) throw new Error(tErr.message);
+    const have = new Set((targets ?? []).map((t) => (t as { id: string }).id));
+    if (ids.some((id) => !have.has(id))) {
+      throw new Error(kind === "asset" ? "Linked asset missing" : "Linked debt missing");
+    }
+  }
+}
+
+/**
+ * Split one pending transaction (SMS) or a manual spend across 2+ budget items.
+ * SMS part 1 reuses the source row; every other part is a new categorized row
+ * keyed by a deterministic dedupe key, so a retry skips what already landed.
+ * Never creates or touches a merchant rule.
+ */
+export async function splitTransaction(
+  input: SplitTxnPayload,
+): Promise<SplitResult> {
+  const { supabase, user } = await getAuthed();
+  const isSms = input.sourceTxnId != null;
+
+  const amounts = input.parts.map((p) => roundMoney(p.amount));
+  const itemKeys = input.parts.map((p) => p.budgetItemId);
+  if (
+    input.parts.length < 2 ||
+    amounts.some((a) => !(a > 0)) ||
+    new Set(itemKeys).size !== itemKeys.length ||
+    roundMoney(amounts.reduce((s, a) => s + a, 0)) !== roundMoney(input.total)
+  ) {
+    throw new Error("Invalid split");
+  }
+
+  let sourcePending = false;
+  if (isSms) {
+    const { data: src } = await supabase
+      .from("sms_transactions")
+      .select("id, status")
+      .eq("id", input.sourceTxnId as string)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!src) throw new Error("Transaction is no longer pending");
+    if (src.status === "pending") {
+      sourcePending = true;
+    } else {
+      // Already categorized: only valid if THIS split already ran (part 2 exists).
+      const second = input.parts[1];
+      const { data: done } = second
+        ? await supabase
+            .from("sms_transactions")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("dedupe_key", second.dedupeKey)
+            .maybeSingle()
+        : { data: null };
+      if (!done) throw new Error("Transaction is no longer pending");
+    }
+  }
+
+  // Pre-check every part's item and linked asset/debt BEFORE any write.
+  // quickLogSpend throws a real (non-transient) error for a missing item or
+  // link target; hitting that on part 3 after part 2 applied would exhaust the
+  // retries, roll the source back to pending at full amount and leave part 2
+  // counted on the server — a later re-allocation would double-count it.
+  await assertSplitTargetsExist(supabase, user.id, itemKeys);
+
+  const merchant = input.merchantRaw || input.merchantNormalized || null;
+  const partIdMap: SplitResult["partIdMap"] = [];
+
+  // SMS: parts 2..n first, the source row (part 1) LAST, so "source categorized"
+  // means every other part already landed and a crashed request is retryable.
+  const order = input.parts.map((_, i) => i);
+  if (isSms) order.push(order.shift() as number);
+  let applied = 0;
+
+  for (const i of order) {
+    const part = input.parts[i];
+    const amount = amounts[i];
+
+    if (isSms && i === 0) {
+      if (!sourcePending) continue;
+      await quickLogSpend(part.budgetItemId, amount, { kind: "sms", merchant });
+      const { error: updErr } = await supabase
+        .from("sms_transactions")
+        .update({
+          status: "categorized",
+          budget_item_id: part.budgetItemId,
+          amount,
+          label: input.label,
+          matched_rule_id: null,
+        })
+        .eq("id", input.sourceTxnId as string)
+        .eq("user_id", user.id);
+      if (updErr) throw new Error(updErr.message);
+      applied++;
+      continue;
+    }
+
+    const { data: existing } = await supabase
+      .from("sms_transactions")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("dedupe_key", part.dedupeKey)
+      .maybeSingle();
+    let row = existing as Record<string, unknown> | null;
+    if (!row) {
+      if (isSms) {
+        await quickLogSpend(part.budgetItemId, amount, { kind: "sms", merchant });
+      } else {
+        await quickLogSpend(part.budgetItemId, amount);
+      }
+      const { data: inserted, error } = await supabase
+        .from("sms_transactions")
+        .insert({
+          user_id: user.id,
+          amount,
+          currency: input.currency,
+          merchant_raw: input.merchantRaw,
+          merchant_normalized: input.merchantNormalized,
+          direction: "debit",
+          occurred_at: input.occurredAt,
+          dedupe_key: part.dedupeKey,
+          status: "categorized",
+          budget_item_id: part.budgetItemId,
+          label: input.label,
+          source: isSms ? "sms" : "manual",
+          matched_rule_id: null,
+          original_amount: null,
+          raw_text: null,
+          sender: null,
+          template_key: null,
+        })
+        .select()
+        .single();
+      if (error || !inserted) throw new Error(error?.message ?? "Split insert failed");
+      row = inserted as Record<string, unknown>;
+      applied++;
+    }
+    if (part.tempId) {
+      partIdMap.push({ tempId: part.tempId, realId: row.id as string, record: row });
+    }
+  }
+
+  // Full retry: nothing new landed, so the first run already notified + logged.
+  if (applied === 0) return { ok: true, partIdMap };
+
+  const cur = await getUserCurrency(supabase, user.id);
+  const itemIds = [...new Set(input.parts.map((p) => p.budgetItemId))];
+  for (const id of itemIds) await notifyIfNearLimit(supabase, user.id, id, cur);
+
+  const { data: items } = await supabase
+    .from("budget_items")
+    .select("id, name")
+    .eq("user_id", user.id)
+    .in("id", itemIds);
+  const names = new Map((items ?? []).map((r) => [r.id as string, r.name as string]));
+  await logActivity(supabase, user.id, {
+    action_type: isSms ? "sms_txn_split" : "manual_spend_split",
+    category: "budget",
+    title: `Split ${merchant || input.label || "transaction"} ${fmt(input.total, cur)}`,
+    description: input.parts
+      .map((p) => `${names.get(p.budgetItemId) ?? "Item"} ${fmt(roundMoney(p.amount), cur)}`)
+      .join(", "),
+  });
+
+  return { ok: true, partIdMap };
 }
 
 export interface RecategorizeSmsInput {

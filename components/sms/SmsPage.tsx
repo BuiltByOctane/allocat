@@ -71,6 +71,7 @@ export default function SmsPage() {
   const { data: pending, isLoading } = usePendingSms();
   const categorize = useCategorizeSms();
   const split = useSplitTransaction();
+  const splittingRef = useRef(false);
   const ignore = useIgnoreSms();
   const del = useDeleteSms();
   const unallocate = useUnallocateSms();
@@ -236,7 +237,10 @@ export default function SmsPage() {
     label: string | null,
     total: number,
   ) {
-    if (!allocateTxn) return;
+    // isPending flips a render late; two fast taps would both pass applySplit's
+    // async pending check and write the split twice. Guard synchronously.
+    if (!allocateTxn || splittingRef.current) return;
+    splittingRef.current = true;
     setAllocError(null);
     try {
       await split.mutateAsync({
@@ -252,6 +256,9 @@ export default function SmsPage() {
         err instanceof Error ? err.message : "Couldn't split. Try again.",
       );
     }
+    // Not a `finally`: React Compiler bails on try/finally, which would turn
+    // off its lints for this whole component.
+    splittingRef.current = false;
   }
 
   // Create-new from inside the split view: the allocate sheet stays open (it
@@ -750,7 +757,10 @@ export default function SmsPage() {
           createFlow && createMeta
             ? {
                 id: NEW_ITEM_ID,
-                name: createFlow.txn.merchant_raw ?? "",
+                name:
+                  createFlow.splitPartIndex !== undefined
+                    ? ""
+                    : (createFlow.txn.merchant_raw ?? ""),
                 planned: 0,
                 actual: 0,
                 is_completed: false,

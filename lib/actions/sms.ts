@@ -465,6 +465,17 @@ export async function splitTransaction(
   const { supabase, user } = await getAuthed();
   const isSms = input.sourceTxnId != null;
 
+  const amounts = input.parts.map((p) => roundMoney(p.amount));
+  const itemKeys = input.parts.map((p) => p.budgetItemId);
+  if (
+    input.parts.length < 2 ||
+    amounts.some((a) => !(a > 0)) ||
+    new Set(itemKeys).size !== itemKeys.length ||
+    roundMoney(amounts.reduce((s, a) => s + a, 0)) !== roundMoney(input.total)
+  ) {
+    throw new Error("Invalid split");
+  }
+
   let sourcePending = false;
   if (isSms) {
     const { data: src } = await supabase
@@ -494,14 +505,20 @@ export async function splitTransaction(
   const merchant = input.merchantRaw || input.merchantNormalized || null;
   const partIdMap: SplitResult["partIdMap"] = [];
 
-  for (let i = 0; i < input.parts.length; i++) {
+  // SMS: parts 2..n first, the source row (part 1) LAST, so "source categorized"
+  // means every other part already landed and a crashed request is retryable.
+  const order = input.parts.map((_, i) => i);
+  if (isSms) order.push(order.shift() as number);
+  let applied = 0;
+
+  for (const i of order) {
     const part = input.parts[i];
-    const amount = roundMoney(part.amount);
+    const amount = amounts[i];
 
     if (isSms && i === 0) {
       if (!sourcePending) continue;
       await quickLogSpend(part.budgetItemId, amount, { kind: "sms", merchant });
-      await supabase
+      const { error: updErr } = await supabase
         .from("sms_transactions")
         .update({
           status: "categorized",
@@ -512,6 +529,8 @@ export async function splitTransaction(
         })
         .eq("id", input.sourceTxnId as string)
         .eq("user_id", user.id);
+      if (updErr) throw new Error(updErr.message);
+      applied++;
       continue;
     }
 
@@ -553,11 +572,15 @@ export async function splitTransaction(
         .single();
       if (error || !inserted) throw new Error(error?.message ?? "Split insert failed");
       row = inserted as Record<string, unknown>;
+      applied++;
     }
     if (part.tempId) {
       partIdMap.push({ tempId: part.tempId, realId: row.id as string, record: row });
     }
   }
+
+  // Full retry: nothing new landed, so the first run already notified + logged.
+  if (applied === 0) return { ok: true, partIdMap };
 
   const cur = await getUserCurrency(supabase, user.id);
   const itemIds = [...new Set(input.parts.map((p) => p.budgetItemId))];

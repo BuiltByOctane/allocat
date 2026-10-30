@@ -134,7 +134,7 @@ beforeEach(() => {
 describe("splitTransaction", () => {
   it("sms split applies each part once", async () => {
     const res = await splitTransaction(smsPayload());
-    expect(quickLogSpend.mock.calls.map((c) => c[1])).toEqual([1500, 600, 300]);
+    expect(quickLogSpend.mock.calls.map((c) => c[1]).sort()).toEqual([1500, 300, 600].sort());
     const src = state.sms_transactions.get("t1")!;
     expect(src.status).toBe("categorized");
     expect(src.amount).toBe(1500);
@@ -191,6 +191,46 @@ describe("splitTransaction", () => {
       action_type: "sms_txn_split",
       category: "budget",
     });
+  });
+
+  it("recovers when the request dies mid-split", async () => {
+    quickLogSpend.mockImplementationOnce(async () => {});
+    quickLogSpend.mockImplementationOnce(async () => {
+      throw new Error("boom");
+    });
+    await expect(splitTransaction(smsPayload())).rejects.toThrow("boom");
+    await splitTransaction(smsPayload());
+    // 1 ok + 1 failed + retry applies the failed part + the remaining part + source
+    expect(quickLogSpend).toHaveBeenCalledTimes(4);
+    expect(state.sms_transactions.size).toBe(3);
+    expect(state.sms_transactions.get("t1")!.status).toBe("categorized");
+  });
+
+  it("rejects duplicate items", async () => {
+    const p = smsPayload();
+    p.parts[1].budgetItemId = "a";
+    await expect(splitTransaction(p)).rejects.toThrow("Invalid split");
+    expect(quickLogSpend).not.toHaveBeenCalled();
+  });
+
+  it("rejects a sum that differs from total", async () => {
+    const p = smsPayload();
+    p.total = 2500;
+    await expect(splitTransaction(p)).rejects.toThrow("Invalid split");
+    expect(quickLogSpend).not.toHaveBeenCalled();
+  });
+
+  it("retry after full success logs activity once", async () => {
+    await splitTransaction(smsPayload());
+    await splitTransaction(smsPayload());
+    expect(logActivity).toHaveBeenCalledTimes(1);
+  });
+
+  it("missing source row throws", async () => {
+    state.sms_transactions.clear();
+    await expect(splitTransaction(smsPayload())).rejects.toThrow(
+      "Transaction is no longer pending",
+    );
   });
 
   it("never touches merchant_rules", async () => {

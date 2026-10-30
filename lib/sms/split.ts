@@ -82,3 +82,64 @@ export function smsSplitDedupeKey(baseKey: string, splitId: string, n: number): 
 export function manualSplitDedupeKey(splitId: string, n: number): string {
   return `manual_split:${splitId}:${n}`;
 }
+
+// ── SplitParts view state ──────────────────────────────────────────────────
+
+export interface SplitPartsState {
+  parts: SplitPartDraft[];
+}
+
+export type SplitPartsAction =
+  | { type: "add"; total: number }
+  | { type: "remove"; index: number }
+  | { type: "setItem"; index: number; itemId: string }
+  | { type: "setAmount"; index: number; amount: number | null };
+
+export function initSplitParts(initialItemId?: string): SplitPartsState {
+  return {
+    parts: [
+      { budgetItemId: initialItemId ?? "", amount: null },
+      { budgetItemId: "", amount: null },
+    ],
+  };
+}
+
+export function splitPartsReducer(
+  state: SplitPartsState,
+  action: SplitPartsAction,
+): SplitPartsState {
+  switch (action.type) {
+    case "add": {
+      const last = state.parts.length - 1;
+      const typed = state.parts
+        .slice(0, -1)
+        .map((p) => p.amount)
+        .filter((a): a is number => a != null && Number.isFinite(a));
+      const remainder = splitRemainder(action.total, typed);
+      const parts = state.parts.map((p, i) =>
+        i === last ? { ...p, amount: remainder } : p,
+      );
+      return { parts: [...parts, { budgetItemId: "", amount: null }] };
+    }
+    case "remove": {
+      if (state.parts.length <= 2) return state;
+      if (action.index < 0 || action.index >= state.parts.length) return state;
+      const parts = state.parts.filter((_, i) => i !== action.index);
+      // The last row is always the auto row.
+      parts[parts.length - 1] = { ...parts[parts.length - 1], amount: null };
+      return { parts };
+    }
+    case "setItem":
+      return {
+        parts: state.parts.map((p, i) =>
+          i === action.index ? { ...p, budgetItemId: action.itemId } : p,
+        ),
+      };
+    case "setAmount":
+      return {
+        parts: state.parts.map((p, i) =>
+          i === action.index ? { ...p, amount: action.amount } : p,
+        ),
+      };
+  }
+}

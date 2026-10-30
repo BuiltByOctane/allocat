@@ -344,6 +344,44 @@ async function forgetRuleIDB(
   });
 }
 
+/**
+ * Device-visible near-limit / overspend alert for a budget item (native; no-op
+ * on web). Shared by categorize and split.
+ */
+export async function notifyNearLimitForItem(
+  itemId: string,
+  currency: string,
+): Promise<void> {
+  const db = getDB();
+  const nl = await nearLimitFromIDB(itemId);
+  if (!nl) return;
+  if (nl.over) {
+    const fresh = await db.budget_items.get(itemId);
+    const count = Number(fresh?.overspend_count ?? 1) || 1;
+    const msg = pickOverspendMessage({
+      itemName: nl.name,
+      tier: tierForCount(count),
+      count,
+      over: Math.max(0, Number(fresh?.actual_amount ?? 0) - Number(fresh?.planned_amount ?? 0)),
+      currency,
+      firstOverspend: count === 1,
+      seed: `${itemId}:${count}`,
+    });
+    await emitNotification({ kind: "overspend", title: msg.title, body: msg.body, url: "/budget" });
+  } else {
+    const left = formatCurrency(nl.remaining, {
+      code: currency,
+      maximumFractionDigits: 0,
+    });
+    await emitNotification({
+      kind: "near-limit",
+      title: "😼 Budget's getting thin",
+      body: `${nl.name} at ${Math.round(nl.ratio * 100)}%, only ${left} left. Tread softly.`,
+      url: "/budget",
+    });
+  }
+}
+
 export function useCategorizeSms() {
   const qc = useQueryClient();
   const enqueue = useEnqueue();
@@ -417,34 +455,7 @@ export function useCategorizeSms() {
       }
 
       // Device-visible near-limit alert (native; no-op on web).
-      const nl = await nearLimitFromIDB(input.budgetItemId);
-      if (nl) {
-        if (nl.over) {
-          const fresh = await db.budget_items.get(input.budgetItemId);
-          const count = Number(fresh?.overspend_count ?? 1) || 1;
-          const msg = pickOverspendMessage({
-            itemName: nl.name,
-            tier: tierForCount(count),
-            count,
-            over: Math.max(0, Number(fresh?.actual_amount ?? 0) - Number(fresh?.planned_amount ?? 0)),
-            currency: txn.currency ?? "INR",
-            firstOverspend: count === 1,
-            seed: `${input.budgetItemId}:${count}`,
-          });
-          await emitNotification({ kind: "overspend", title: msg.title, body: msg.body, url: "/budget" });
-        } else {
-          const left = formatCurrency(nl.remaining, {
-            code: txn.currency ?? "INR",
-            maximumFractionDigits: 0,
-          });
-          await emitNotification({
-            kind: "near-limit",
-            title: "😼 Budget's getting thin",
-            body: `${nl.name} at ${Math.round(nl.ratio * 100)}%, only ${left} left. Tread softly.`,
-            url: "/budget",
-          });
-        }
-      }
+      await notifyNearLimitForItem(input.budgetItemId, txn.currency ?? "INR");
 
       await enqueue({
         table: "sms_transactions",

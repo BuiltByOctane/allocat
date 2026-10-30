@@ -86,6 +86,7 @@ import {
   deleteSmsTransaction,
   unallocateSmsTransaction,
   recategorizeSmsTransaction,
+  splitTransaction,
   reportSmsMistake,
   deleteBlocklistEntry,
   deleteMerchantRule,
@@ -93,6 +94,7 @@ import {
   type CategorizeSmsInput,
   type RecategorizeSmsInput,
 } from "@/lib/actions/sms";
+import type { SplitTxnPayload, SplitResult } from "@/lib/sms/split";
 
 const MAX_RETRIES = 3;
 
@@ -246,6 +248,21 @@ function bulkSetupDeclares(item: SyncQueueItem, tempId: string): boolean {
     }
   }
   return false;
+}
+
+/**
+ * True when `item` itself creates `tempId`, so it must not wait on it.
+ * Nested bulk ops declare theirs under categories[]/items[] (see
+ * bulkSetupDeclares); a SPLIT declares one per new part in `parts[].tempId`.
+ * A SPLIT's `sourceTxnId` is NOT declared — a temp source is a real dependency
+ * on the source row's INSERT.
+ */
+function declaresTempId(item: SyncQueueItem, tempId: string): boolean {
+  if (item.operation === "SPLIT") {
+    const parts = (item.payload as unknown as Partial<SplitTxnPayload>).parts;
+    return (parts ?? []).some((p) => p.tempId === tempId);
+  }
+  return bulkSetupDeclares(item, tempId);
 }
 
 type Payload = Record<string, unknown>;
@@ -425,6 +442,7 @@ export class SyncEngine {
       UNALLOCATE: (p) => unallocateSmsTransaction(p.txnId as string),
       RECATEGORIZE: (p) =>
         recategorizeSmsTransaction(p as unknown as RecategorizeSmsInput),
+      SPLIT: (p) => splitTransaction(p as unknown as SplitTxnPayload),
     },
     sms_blocklist: {
       INSERT: (p) =>
@@ -825,6 +843,21 @@ export class SyncEngine {
         );
       } else if (item.operation === "CARRY_SETUP") {
         await this.applyCarrySetupResult(item, result as CarrySetupResult);
+      } else if (item.operation === "SPLIT") {
+        for (const m of (result as SplitResult | undefined)?.partIdMap ?? []) {
+          if (m.realId === m.tempId) continue;
+          await db.id_map.put({
+            tempId: m.tempId,
+            realId: m.realId,
+            table: "sms_transactions",
+          });
+          await this.replaceIDBRecord(
+            "sms_transactions",
+            m.tempId,
+            m.realId,
+            m.record
+          );
+        }
       }
     }
 
@@ -918,13 +951,16 @@ export class SyncEngine {
 
   /**
    * Temp ids in the payload the item depends on someone ELSE to produce.
-   * Nested bulk ops (BULK_SETUP/CARRY_SETUP) declare their own temp ids —
-   * those are excluded, leaving only external refs (linkId, stampSourceItemId).
+   * Nested bulk ops (BULK_SETUP/CARRY_SETUP) and SPLIT declare their own temp
+   * ids — those are excluded, leaving only external refs (linkId,
+   * stampSourceItemId, a SPLIT's temp sourceTxnId).
    */
   private dependencyTempIds(item: SyncQueueItem): string[] {
     const tempIds = extractTempIds(item.payload);
-    if (!isNestedBulkOp(item.operation)) return tempIds;
-    return tempIds.filter((id) => !bulkSetupDeclares(item, id));
+    if (!isNestedBulkOp(item.operation) && item.operation !== "SPLIT") {
+      return tempIds;
+    }
+    return tempIds.filter((id) => !declaresTempId(item, id));
   }
 
   private async hasUnresolvedDependencies(
@@ -955,7 +991,7 @@ export class SyncEngine {
       const producer = await db.sync_queue
         .filter(
           (q) =>
-            (q.tempId === tempId || bulkSetupDeclares(q, tempId)) &&
+            (q.tempId === tempId || declaresTempId(q, tempId)) &&
             (q.status === "pending" || q.status === "processing")
         )
         .first();
@@ -1195,6 +1231,16 @@ export class SyncEngine {
     const db = getDB();
     if (item.operation === "INSERT") {
       await db.table(item.table).delete(item.recordId);
+      return;
+    }
+    if (item.operation === "SPLIT") {
+      // Drop the optimistic new part rows. The source row's own optimistic
+      // edit (and the budget bumps) are reverted by the provider's forced
+      // refresh in handleRollback.
+      const payload = item.payload as unknown as Partial<SplitTxnPayload>;
+      for (const p of payload.parts ?? []) {
+        if (p.tempId) await db.sms_transactions.delete(p.tempId);
+      }
       return;
     }
     if (isNestedBulkOp(item.operation)) {

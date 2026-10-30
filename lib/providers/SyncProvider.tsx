@@ -224,7 +224,11 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       // → pull fresh budget state so IDB matches the server.
       if (item.table === "sms_transactions") {
         qc.invalidateQueries({ queryKey: ["sms-transactions"] });
-        if (item.operation === "INSERT" || item.operation === "CATEGORIZE") {
+        if (
+          item.operation === "INSERT" ||
+          item.operation === "CATEGORIZE" ||
+          item.operation === "SPLIT"
+        ) {
           scheduleForcedRefresh(
             ["budget_items", "assets", "debts"],
             ["budget", "dashboard", "sms-transactions"]
@@ -262,6 +266,14 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       if (item.table === "debts") {
         qc.invalidateQueries({ queryKey: ["debt"] });
       }
+      // A failed SMS op (e.g. a SPLIT whose source is no longer pending) leaves
+      // optimistic budget bumps and source-row edits behind — pull server truth.
+      if (item.table === "sms_transactions") {
+        scheduleForcedRefresh(
+          ["sms_transactions", "budget_items", "assets", "debts"],
+          ["sms-transactions", "budget", "dashboard"]
+        );
+      }
       // TODO: surface a toast with `error`
       console.error("[SyncEngine] Permanent failure — rolled back", {
         table: item.table,
@@ -269,7 +281,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         error,
       });
     },
-    [qc]
+    [qc, scheduleForcedRefresh]
   );
 
   // Register callbacks in an effect (safe — never during render)

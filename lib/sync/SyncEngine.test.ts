@@ -128,6 +128,14 @@ function resetDB() {
 // `server-only` shim; stub it (executeItem is overridden, so they never run).
 vi.mock("server-only", () => ({}));
 
+// `splitTransaction` is mocked so the dispatcher wiring can be asserted
+// without a server round trip.
+const splitTransactionMock = vi.fn();
+vi.mock("@/lib/actions/sms", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  splitTransaction: (...args: unknown[]) => splitTransactionMock(...args),
+}));
+
 vi.mock("@/lib/db", () => ({
   getDB: () => ({
     ...tables,
@@ -983,5 +991,175 @@ describe("SyncEngine transient failures never roll back", () => {
       "real_n"
     );
     expect(tables.assets.rows.map((r) => r.id)).toEqual(["real_n"]);
+  });
+});
+
+describe("SyncEngine SPLIT", () => {
+  beforeEach(() => {
+    resetDB();
+    splitTransactionMock.mockReset();
+    vi.stubGlobal("navigator", { onLine: true });
+  });
+
+  const splitPayload = (sourceTxnId: string | null, partTempIds: Array<string | null>) => ({
+    splitId: "s1",
+    sourceTxnId,
+    total: 100,
+    currency: "INR",
+    label: null,
+    merchantRaw: null,
+    merchantNormalized: null,
+    occurredAt: "2026-10-30T00:00:00Z",
+    parts: partTempIds.map((tempId, i) => ({
+      budgetItemId: `item${i + 1}`,
+      amount: 50,
+      dedupeKey: `k#${i + 1}`,
+      tempId,
+    })),
+  });
+
+  it("dispatches SPLIT to splitTransaction", async () => {
+    splitTransactionMock.mockResolvedValue({ ok: true, partIdMap: [] });
+    const engine = new SyncEngine() as unknown as {
+      dispatch: Record<string, Record<string, (p: unknown) => Promise<unknown>>>;
+    };
+    const p = splitPayload("real_src", [null, "temp_p2"]);
+    await engine.dispatch.sms_transactions.SPLIT(p);
+    expect(splitTransactionMock).toHaveBeenCalledWith(p);
+  });
+
+  it("SPLIT waits for source temp id but not its own part temp ids", async () => {
+    tables.sms_transactions.rows.push({ id: "temp_src" });
+    seed([
+      {
+        table: "sms_transactions",
+        operation: "INSERT",
+        recordId: "temp_src",
+        tempId: "temp_src",
+        payload: {},
+        createdAt: 0,
+      },
+      {
+        table: "sms_transactions",
+        operation: "SPLIT",
+        recordId: "temp_src",
+        payload: splitPayload("temp_src", [null, "temp_p2"]) as never,
+        createdAt: 1,
+      },
+    ]);
+    const engine = new TestEngine({
+      latency: 5,
+      respond: (item) =>
+        item.operation === "SPLIT"
+          ? { ok: true, partIdMap: [] }
+          : { id: "real_src" },
+    });
+
+    await engine.processQueue();
+
+    // The SPLIT ran only after the source INSERT mapped temp_src.
+    expect(engine.order).toEqual(["INSERT:temp_src#1", "SPLIT:temp_src#2"]);
+    const resolved = engine.resolvedPayloads["temp_src"] as {
+      sourceTxnId: string;
+      parts: Array<{ tempId: string | null }>;
+    };
+    expect(resolved.sourceTxnId).toBe("real_src");
+    // Own part temp id is passed through untouched (not in id_map).
+    expect(resolved.parts[1].tempId).toBe("temp_p2");
+    const split = tables.sync_queue.rows.find((r) => r.operation === "SPLIT");
+    expect(split?.status).toBe("done");
+  });
+
+  it("SPLIT with only own temp ids dispatches immediately", async () => {
+    seed([
+      {
+        table: "sms_transactions",
+        operation: "SPLIT",
+        recordId: "split_s1",
+        payload: splitPayload(null, ["temp_p1", "temp_p2"]) as never,
+        createdAt: 0,
+      },
+    ]);
+    const engine = new TestEngine({
+      latency: 0,
+      respond: () => ({ ok: true, partIdMap: [] }),
+    });
+
+    await engine.processQueue();
+
+    expect(engine.order).toEqual(["SPLIT:split_s1#1"]);
+    const split = tables.sync_queue.rows.find((r) => r.operation === "SPLIT");
+    expect(split?.status).toBe("done");
+  });
+
+  it("SPLIT success maps part temp ids", async () => {
+    tables.sms_transactions.rows.push({ id: "real_src", status: "categorized" });
+    tables.sms_transactions.rows.push({ id: "temp_p2", status: "categorized" });
+    seed([
+      {
+        table: "sms_transactions",
+        operation: "SPLIT",
+        recordId: "real_src",
+        payload: splitPayload("real_src", [null, "temp_p2"]) as never,
+        createdAt: 0,
+      },
+    ]);
+    const engine = new TestEngine({
+      latency: 0,
+      respond: () => ({
+        ok: true,
+        partIdMap: [
+          {
+            tempId: "temp_p2",
+            realId: "real2",
+            record: { id: "real2", status: "categorized", amount: 50 },
+          },
+        ],
+      }),
+    });
+
+    await engine.processQueue();
+
+    expect(tables.id_map.rows.find((r) => r.tempId === "temp_p2")?.realId).toBe("real2");
+    const ids = tables.sms_transactions.rows.map((r) => r.id);
+    expect(ids).toContain("real2");
+    expect(ids).not.toContain("temp_p2");
+    expect(ids).toContain("real_src");
+  });
+
+  it("SPLIT rollback deletes part temp rows", async () => {
+    tables.sms_transactions.rows.push({ id: "real_src", status: "categorized" });
+    tables.sms_transactions.rows.push({ id: "temp_p2", status: "categorized" });
+    tables.sms_transactions.rows.push({ id: "temp_p3", status: "categorized" });
+    seed([
+      {
+        table: "sms_transactions",
+        operation: "SPLIT",
+        recordId: "real_src",
+        payload: splitPayload("real_src", [null, "temp_p2", "temp_p3"]) as never,
+        createdAt: 0,
+      },
+    ]);
+    const rolledBack: string[] = [];
+    const engine = new TestEngine({
+      latency: 0,
+      respond: () => {
+        throw new Error("Transaction is no longer pending");
+      },
+    });
+    engine.setCallbacks({
+      onRollback: (item: SyncQueueItem) => rolledBack.push(item.operation),
+    });
+
+    await engine.processQueue();
+    await waitFor(() => rolledBack.length > 0, 2000);
+
+    const ids = tables.sms_transactions.rows.map((r) => r.id);
+    expect(ids).not.toContain("temp_p2");
+    expect(ids).not.toContain("temp_p3");
+    // The source row is left for the forced refresh to restore.
+    expect(ids).toContain("real_src");
+    const split = tables.sync_queue.rows.find((r) => r.operation === "SPLIT");
+    expect(split?.status).toBe("failed");
   });
 });

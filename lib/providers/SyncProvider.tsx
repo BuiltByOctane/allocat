@@ -17,6 +17,7 @@ import {
   refreshTables,
   canHydrateFromCache,
   isReconcileStale,
+  clearWatermarks,
 } from "@/lib/db/hydrate";
 import { prefetchAllQueries } from "@/lib/db/prefetch";
 import { CURRENT_PERIOD_KEY } from "@/lib/hooks/useCurrentPeriod";
@@ -268,11 +269,26 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       }
       // A failed SMS op (e.g. a SPLIT whose source is no longer pending) leaves
       // optimistic budget bumps and source-row edits behind — pull server truth.
+      // The rejection changed no server row, so a delta pull would miss them:
+      // drop the watermarks first so the refresh is a full pull.
       if (item.table === "sms_transactions") {
-        scheduleForcedRefresh(
-          ["sms_transactions", "budget_items", "assets", "debts"],
-          ["sms-transactions", "budget", "dashboard"]
-        );
+        const tables: RefreshTable[] = [
+          "sms_transactions",
+          "budget_items",
+          "assets",
+          "debts",
+        ];
+        void clearWatermarks(tables)
+          .catch((err) =>
+            console.warn("[SyncEngine] Clearing watermarks failed:", err)
+          )
+          .then(() =>
+            scheduleForcedRefresh(tables, [
+              "sms-transactions",
+              "budget",
+              "dashboard",
+            ])
+          );
       }
       // TODO: surface a toast with `error`
       console.error("[SyncEngine] Permanent failure — rolled back", {

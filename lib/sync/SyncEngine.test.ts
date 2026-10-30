@@ -1042,7 +1042,7 @@ describe("SyncEngine SPLIT", () => {
       {
         table: "sms_transactions",
         operation: "SPLIT",
-        recordId: "temp_src",
+        recordId: "split_s1",
         payload: splitPayload("temp_src", [null, "temp_p2"]) as never,
         createdAt: 1,
       },
@@ -1058,8 +1058,8 @@ describe("SyncEngine SPLIT", () => {
     await engine.processQueue();
 
     // The SPLIT ran only after the source INSERT mapped temp_src.
-    expect(engine.order).toEqual(["INSERT:temp_src#1", "SPLIT:temp_src#2"]);
-    const resolved = engine.resolvedPayloads["temp_src"] as {
+    expect(engine.order).toEqual(["INSERT:temp_src#1", "SPLIT:split_s1#2"]);
+    const resolved = engine.resolvedPayloads["split_s1"] as {
       sourceTxnId: string;
       parts: Array<{ tempId: string | null }>;
     };

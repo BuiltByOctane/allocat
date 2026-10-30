@@ -670,6 +670,23 @@ export async function forceRefreshTable(
   await pullTable(spec, userId, gen, await buildProtectedIds());
 }
 
+/**
+ * Drop the delta watermark of `tables` so their next pull is a full pull.
+ * A server rejection changes no server row, so a delta pull would never
+ * overwrite optimistic local state the server refused (e.g. a failed SPLIT's
+ * budget bumps). The sync_meta row itself stays: the table is still hydrated.
+ */
+export async function clearWatermarks(tables: RefreshableTable[]): Promise<void> {
+  const db = getDB();
+  for (const t of tables) {
+    const meta = await db.sync_meta.get(t);
+    if (!meta?.watermark) continue;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { watermark, ...rest } = meta;
+    await db.sync_meta.put(rest);
+  }
+}
+
 /** Wipes all user data from IDB — also called when a different user logs in. */
 export async function clearDB(): Promise<void> {
   // Invalidate every pull that is already in flight (see dbGeneration).

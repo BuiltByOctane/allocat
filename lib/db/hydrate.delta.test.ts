@@ -170,6 +170,7 @@ const {
   selectDeltaWatermark,
   needsPull,
   isHydrated,
+  clearWatermarks,
 } = await import("./hydrate");
 
 function queriesFor(table: string) {
@@ -356,6 +357,39 @@ describe("hydrate delta pulls", () => {
     ]);
     // Server says the account has no assets left → the local row goes.
     expect(db.assets.rows).toHaveLength(0);
+  });
+
+  it("clearWatermarks turns the next pull into a full pull", async () => {
+    responses["budget_items:*"] = [
+      { id: "i1", user_id: "u1", spent: 10, updated_at: "2026-09-12T10:00:00Z" },
+    ];
+    responses["budget_items:id"] = [{ id: "i1" }];
+    responses["assets:*"] = [
+      { id: "a1", user_id: "u1", updated_at: "2026-09-12T10:00:00Z" },
+    ];
+    responses["assets:id"] = [{ id: "a1" }];
+    await forceRefreshTable("budget_items");
+    await forceRefreshTable("assets");
+
+    // Optimistic bump the server never accepted (a rejected SPLIT).
+    db.budget_items.rows[0].spent = 60;
+
+    await clearWatermarks(["budget_items"]);
+    // Meta survives (the table still counts as hydrated); only the watermark goes.
+    expect(await db.sync_meta.get("budget_items")).toBeDefined();
+    expect((await db.sync_meta.get("budget_items"))?.watermark).toBeUndefined();
+    // Tables not named keep theirs.
+    expect((await db.sync_meta.get("assets"))?.watermark).toBe(
+      "2026-09-12T10:00:00Z",
+    );
+
+    queries = [];
+    await forceRefreshTable("budget_items");
+    expect(
+      queriesFor("budget_items")[0].filters.some(([op]) => op === "gte"),
+    ).toBe(false);
+    // The unchanged server row overwrites the optimistic bump.
+    expect(db.budget_items.rows[0].spent).toBe(10);
   });
 });
 

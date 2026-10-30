@@ -22,6 +22,8 @@ import {
 } from "@/lib/hooks/useSmsTransactions";
 import { matchMerchantRule } from "@/lib/sms/match";
 import { useAddBudgetItem } from "@/lib/hooks/useBudget";
+import { useSplitTransaction } from "@/lib/hooks/useSplitTransaction";
+import type { SplitPartDraft } from "@/lib/sms/split";
 import { useTourDriver } from "@/lib/tour/useTourDriver";
 import {
   ItemDetailSheet,
@@ -68,6 +70,7 @@ export default function SmsPage() {
   useTourDriver("sms");
   const { data: pending, isLoading } = usePendingSms();
   const categorize = useCategorizeSms();
+  const split = useSplitTransaction();
   const ignore = useIgnoreSms();
   const del = useDeleteSms();
   const unallocate = useUnallocateSms();
@@ -125,10 +128,17 @@ export default function SmsPage() {
 
   // Allocate sheet (existing-item flow) + create flow (new item).
   const [allocateTxn, setAllocateTxn] = useState<SmsTransactionRow | null>(null);
+  // `splitPartIndex` set ⇒ the item is for a split part: create it, hand it
+  // back to the still-open split view, and allocate nothing here.
   const [createFlow, setCreateFlow] = useState<{
     txn: SmsTransactionRow;
     categoryId: string;
+    splitPartIndex?: number;
   } | null>(null);
+  // Item created from the split view, applied once by SplitParts (stable identity).
+  const [splitItemOverride, setSplitItemOverride] = useState<
+    { index: number; itemId: string } | undefined
+  >(undefined);
 
   // Surfaced when an allocate (from the sheet or a notification deep-link) fails
   // — AllocateSheet doesn't catch rejections itself, so a dead "Allocate" button
@@ -219,6 +229,38 @@ export default function SmsPage() {
         err instanceof Error ? err.message : "Couldn't allocate. Try again.",
       );
     }
+  }
+
+  async function handleSplit(
+    parts: SplitPartDraft[],
+    label: string | null,
+    total: number,
+  ) {
+    if (!allocateTxn) return;
+    setAllocError(null);
+    try {
+      await split.mutateAsync({
+        sourceTxnId: allocateTxn.id,
+        total,
+        label,
+        parts,
+      });
+      setAllocateTxn(null);
+    } catch (err) {
+      console.error("[SmsPage] split failed:", err);
+      setAllocError(
+        err instanceof Error ? err.message : "Couldn't split. Try again.",
+      );
+    }
+  }
+
+  // Create-new from inside the split view: the allocate sheet stays open (it
+  // holds the split's state) and the item editor stacks on top of it.
+  function handleSplitCreateNew(categoryId: string, partIndex: number) {
+    if (!allocateTxn) return;
+    setAllocError(null);
+    createdItemRef.current = null;
+    setCreateFlow({ txn: allocateTxn, categoryId, splitPartIndex: partIndex });
   }
 
   // Move an already-categorized txn to a different item and/or rename it.
@@ -332,6 +374,13 @@ export default function SmsPage() {
       });
       itemId = created.id;
       createdItemRef.current = { flowTxnId: createFlow.txn.id, itemId };
+    }
+
+    if (createFlow.splitPartIndex !== undefined) {
+      setSplitItemOverride({ index: createFlow.splitPartIndex, itemId });
+      qc.invalidateQueries({ queryKey: ALLOCATE_PICKER_KEY });
+      createdItemRef.current = null;
+      return;
     }
 
     // If categorize throws, the memo above survives so a retry reuses the item.
@@ -674,7 +723,10 @@ export default function SmsPage() {
         onAllocate={handleAllocate}
         onCreateNew={handleCreateNew}
         onClose={() => setAllocateTxn(null)}
-        isPending={categorize.isPending}
+        isPending={categorize.isPending || split.isPending}
+        onSplit={handleSplit}
+        onSplitCreateNew={handleSplitCreateNew}
+        splitItemOverride={splitItemOverride}
       />
 
       {/* Reallocate flow — move/rename an already-allocated txn */}

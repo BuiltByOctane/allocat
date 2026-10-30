@@ -154,8 +154,7 @@ export async function applySplit(
   };
   await deps.enqueue({
     table: "sms_transactions",
-    // TODO(split-merge): drop the cast once "SPLIT" is in SyncOperation.
-    operation: "SPLIT" as SyncQueueItem["operation"],
+    operation: "SPLIT",
     recordId: sourceId ?? `split_${splitId}`,
     payload: payload as unknown as Record<string, unknown>,
   });

@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Drawer } from "vaul";
 import { hasNumericText, formatCurrency } from "@/lib/number-format";
 import type { SmsTransactionRow } from "@/lib/db";
+import type { SplitPartDraft } from "@/lib/sms/split";
+import { SplitParts } from "@/components/sms/SplitParts";
 
 export interface AllocatePickerItem {
   id: string;
@@ -54,9 +56,18 @@ interface AllocateSheetProps {
    * so unticking it there forgets the merchant.
    */
   initialRemember?: boolean;
+  /**
+   * Allocate-mode only: shows "Split this" and submits a split of the edited
+   * amount. Hidden when absent (and always in reallocate mode).
+   */
+  onSplit?: (parts: SplitPartDraft[], label: string | null, total: number) => void;
+  /** Create-new inside the split view; the parent answers via `splitItemOverride`. */
+  onSplitCreateNew?: (categoryId: string, partIndex: number) => void;
+  /** Keep in parent state (stable identity); set once per created item. */
+  splitItemOverride?: { index: number; itemId: string };
 }
 
-type View = "items" | "pick-category";
+type View = "items" | "pick-category" | "split";
 
 export function AllocateSheet({
   txn,
@@ -70,6 +81,9 @@ export function AllocateSheet({
   isPending,
   mode = "allocate",
   initialRemember = true,
+  onSplit,
+  onSplitCreateNew,
+  splitItemOverride,
 }: AllocateSheetProps) {
   const isReallocate = mode === "reallocate";
   const [view, setView] = useState<View>("items");
@@ -102,6 +116,7 @@ export function AllocateSheet({
   const amountValid = hasNumericText(amountText) && parsedAmount > 0;
   const editedAmount =
     amountValid && parsedAmount !== amount ? parsedAmount : undefined;
+  const canSplit = !isReallocate && !!onSplit;
 
   return (
     <Drawer.Root repositionInputs={false}
@@ -147,6 +162,17 @@ export function AllocateSheet({
                 <Drawer.Title className="mt-3 t-label text-muted-foreground m-0">
                   {isReallocate ? "Move to" : "Allocate to"}
                 </Drawer.Title>
+                {canSplit && (
+                  <button
+                    type="button"
+                    disabled={!amountValid}
+                    onClick={() => setView("split")}
+                    className="mt-2 flex items-center gap-1 text-xs font-semibold text-accent-strong disabled:opacity-40"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">call_split</span>
+                    Split this
+                  </button>
+                )}
               </div>
 
               {/* Scrollable list */}
@@ -216,6 +242,24 @@ export function AllocateSheet({
                   </button>
                 </div>
               </div>
+            </>
+          ) : view === "split" && canSplit ? (
+            <>
+              <Drawer.Title className="sr-only">Split transaction</Drawer.Title>
+              <SplitParts
+                total={parsedAmount}
+                currency={currency}
+                merchant={merchant}
+                items={items}
+                categories={categories}
+                initialItemId={chosenItem || undefined}
+                initialLabel={label}
+                isPending={isPending}
+                onBack={() => setView("items")}
+                onCreateNew={onSplitCreateNew}
+                onSubmit={(parts, splitLabel) => onSplit?.(parts, splitLabel, parsedAmount)}
+                partItemOverride={splitItemOverride}
+              />
             </>
           ) : (
             <>

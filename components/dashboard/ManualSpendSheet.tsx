@@ -8,6 +8,9 @@ import { CurrencySymbol } from "@/components/ui/CurrencySymbol";
 import { useCurrency } from "@/lib/providers/CurrencyProvider";
 import { useQuickLogSpend } from "@/lib/hooks/useDashboard";
 import { useAddBudgetItem } from "@/lib/hooks/useBudget";
+import { useSplitTransaction } from "@/lib/hooks/useSplitTransaction";
+import type { SplitPartDraft } from "@/lib/sms/split";
+import { SplitParts } from "@/components/sms/SplitParts";
 import { useHaptic } from "@/lib/hooks/useHaptic";
 import { useCurrentPeriod } from "@/lib/hooks/useCurrentPeriod";
 import {
@@ -34,9 +37,10 @@ interface SpendResult {
 /**
  * amount → item (existing, or category → full item editor for a new one) → done.
  * Mirrors the SMS allocate sheet minus the transaction bits (no merchant, no
- * remember-rule): a manual spend has nothing to learn from.
+ * remember-rule): a manual spend has nothing to learn from. "split" divides the
+ * amount across several items from the item step.
  */
-type Step = "amount" | "item" | "category" | "done";
+type Step = "amount" | "item" | "category" | "split" | "done";
 
 interface ManualSpendSheetProps {
   open: boolean;
@@ -108,6 +112,7 @@ export function ManualSpendSheet({
   const linkTargets = useLinkTargets();
   const spend = useQuickLogSpend();
   const addItem = useAddBudgetItem();
+  const split = useSplitTransaction();
   const { period } = useCurrentPeriod();
 
   const [step, setStep] = useState<Step>("amount");
@@ -118,6 +123,14 @@ export function ManualSpendSheet({
   const [result, setResult] = useState<SpendResult | null>(null);
   // Category of the item being created; the item editor is open while set.
   const [createCategoryId, setCreateCategoryId] = useState<string | null>(null);
+  // Split part the item editor is creating for (null ⇒ a single-item create).
+  const [createPartIndex, setCreatePartIndex] = useState<number | null>(null);
+  // Item created from the split view, applied once by SplitParts (stable identity).
+  const [partItemOverride, setPartItemOverride] = useState<
+    { index: number; itemId: string } | undefined
+  >(undefined);
+  // Number of items the logged spend was split across (done view).
+  const [splitCount, setSplitCount] = useState<number | null>(null);
   // Retry-safety: an item created in this editor session is reused if the spend
   // then fails, so a retry never inserts a duplicate budget item.
   const createdItemRef = useRef<{ categoryId: string; itemId: string } | null>(null);
@@ -141,6 +154,9 @@ export function ManualSpendSheet({
       setError(null);
       setResult(null);
       setCreateCategoryId(null);
+      setCreatePartIndex(null);
+      setPartItemOverride(undefined);
+      setSplitCount(null);
     }
   }
 
@@ -157,6 +173,7 @@ export function ManualSpendSheet({
     setLabel("");
     setError(null);
     setResult(null);
+    setSplitCount(null);
   }
 
   function goNext() {
@@ -197,8 +214,33 @@ export function ManualSpendSheet({
     }
   }
 
-  // Create the item, then log the spend to it. Thrown errors surface in the
-  // item editor, which stays open for a retry.
+  async function handleSplit(parts: SplitPartDraft[], splitLabel: string | null) {
+    if (!amountValid || loggingRef.current) return;
+    loggingRef.current = true;
+    setError(null);
+    try {
+      await split.mutateAsync({
+        sourceTxnId: null,
+        total: parsedAmount,
+        label: splitLabel,
+        parts,
+      });
+      haptic.success();
+      setResult(null);
+      setSplitCount(parts.length);
+      setStep("done");
+    } catch (err) {
+      console.error("[ManualSpendSheet] split failed:", err);
+      haptic.heavy();
+      setError("Couldn't log this split. Try again.");
+    } finally {
+      loggingRef.current = false;
+    }
+  }
+
+  // Create the item, then log the spend to it (or, for a split part, hand it
+  // back to the split view). Thrown errors surface in the item editor, which
+  // stays open for a retry.
   async function handleCreateItem(data: {
     name: string;
     emoji?: string | null;
@@ -230,6 +272,13 @@ export function ManualSpendSheet({
       createdItemRef.current = { categoryId: createCategoryId, itemId };
     }
 
+    if (createPartIndex !== null) {
+      setPartItemOverride({ index: createPartIndex, itemId });
+      qc.invalidateQueries({ queryKey: ALLOCATE_PICKER_KEY });
+      createdItemRef.current = null;
+      return;
+    }
+
     await logTo(itemId);
     createdItemRef.current = null;
   }
@@ -240,7 +289,9 @@ export function ManualSpendSheet({
     <>
       <Drawer.Root
         repositionInputs={false}
-        open={open && !createCategoryId}
+        // A split keeps its sheet open under the item editor: closing it would
+        // unmount SplitParts and lose the parts typed so far.
+        open={open && (!createCategoryId || step === "split")}
         onOpenChange={(next) => {
           if (!next) onOpenChange(false);
         }}
@@ -340,6 +391,19 @@ export function ManualSpendSheet({
                   <Drawer.Title className="mt-3 px-2 t-label text-muted-foreground m-0">
                     Log to
                   </Drawer.Title>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError(null);
+                      setPartItemOverride(undefined);
+                      setStep("split");
+                      haptic.selection();
+                    }}
+                    className="mt-2 px-2 flex items-center gap-1 text-xs font-semibold text-accent-strong"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">call_split</span>
+                    Split this
+                  </button>
                 </div>
 
                 <div className="overflow-y-auto overscroll-contain flex-1">
@@ -417,6 +481,38 @@ export function ManualSpendSheet({
               </>
             )}
 
+            {step === "split" && (
+              <>
+                <Drawer.Title className="sr-only">Split this spend</Drawer.Title>
+                {error && (
+                  <p role="alert" className="px-5 pt-1 text-[11px] font-medium text-neg shrink-0">
+                    {error}
+                  </p>
+                )}
+                <SplitParts
+                  total={parsedAmount}
+                  currency={currency}
+                  merchant={null}
+                  items={items}
+                  categories={categories}
+                  initialItemId={chosenItem || undefined}
+                  initialLabel={label}
+                  isPending={split.isPending}
+                  onBack={() => {
+                    setError(null);
+                    setStep("item");
+                  }}
+                  onCreateNew={(categoryId, partIndex) => {
+                    createdItemRef.current = null;
+                    setCreatePartIndex(partIndex);
+                    setCreateCategoryId(categoryId);
+                  }}
+                  onSubmit={handleSplit}
+                  partItemOverride={partItemOverride}
+                />
+              </>
+            )}
+
             {step === "done" && (
               <>
                 <div className="px-5 pt-2 shrink-0">
@@ -438,6 +534,11 @@ export function ManualSpendSheet({
                     <div className="w-full">
                       <AllocationStatus result={result} />
                     </div>
+                  )}
+                  {splitCount !== null && (
+                    <p className="text-[13px] font-semibold text-muted-foreground">
+                      Split across {splitCount} items
+                    </p>
                   )}
                 </div>
                 <div className="flex gap-2 px-5 pt-2 pb-3 pb-safe shrink-0">
@@ -490,7 +591,8 @@ export function ManualSpendSheet({
           // Either way the editor session is over, so drop the create memo.
           createdItemRef.current = null;
           setCreateCategoryId(null);
-          setStep((s) => (s === "done" ? s : "item"));
+          setCreatePartIndex(null);
+          setStep((s) => (s === "done" || s === "split" ? s : "item"));
         }}
         onCreate={handleCreateItem}
         onSave={async () => {}}

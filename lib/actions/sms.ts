@@ -21,6 +21,8 @@ import {
   type BulkIngestOutcome,
 } from "@/lib/sms/bulkIngest";
 
+import { roundMoney, type SplitTxnPayload, type SplitResult } from "@/lib/sms/split";
+
 /** Notify when a category crosses 90% / 100% of its allocation. */
 const NEAR_LIMIT_RATIO = 0.9;
 
@@ -449,6 +451,134 @@ export async function categorizeSmsTransaction(input: CategorizeSmsInput) {
   await notifyIfNearLimit(supabase, user.id, input.budgetItemId, cur);
 
   return { ok: true, ruleCreated: Boolean(ruleId) };
+}
+
+/**
+ * Split one pending transaction (SMS) or a manual spend across 2+ budget items.
+ * SMS part 1 reuses the source row; every other part is a new categorized row
+ * keyed by a deterministic dedupe key, so a retry skips what already landed.
+ * Never creates or touches a merchant rule.
+ */
+export async function splitTransaction(
+  input: SplitTxnPayload,
+): Promise<SplitResult> {
+  const { supabase, user } = await getAuthed();
+  const isSms = input.sourceTxnId != null;
+
+  let sourcePending = false;
+  if (isSms) {
+    const { data: src } = await supabase
+      .from("sms_transactions")
+      .select("id, status")
+      .eq("id", input.sourceTxnId as string)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!src) throw new Error("Transaction is no longer pending");
+    if (src.status === "pending") {
+      sourcePending = true;
+    } else {
+      // Already categorized: only valid if THIS split already ran (part 2 exists).
+      const second = input.parts[1];
+      const { data: done } = second
+        ? await supabase
+            .from("sms_transactions")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("dedupe_key", second.dedupeKey)
+            .maybeSingle()
+        : { data: null };
+      if (!done) throw new Error("Transaction is no longer pending");
+    }
+  }
+
+  const merchant = input.merchantRaw || input.merchantNormalized || null;
+  const partIdMap: SplitResult["partIdMap"] = [];
+
+  for (let i = 0; i < input.parts.length; i++) {
+    const part = input.parts[i];
+    const amount = roundMoney(part.amount);
+
+    if (isSms && i === 0) {
+      if (!sourcePending) continue;
+      await quickLogSpend(part.budgetItemId, amount, { kind: "sms", merchant });
+      await supabase
+        .from("sms_transactions")
+        .update({
+          status: "categorized",
+          budget_item_id: part.budgetItemId,
+          amount,
+          label: input.label,
+          matched_rule_id: null,
+        })
+        .eq("id", input.sourceTxnId as string)
+        .eq("user_id", user.id);
+      continue;
+    }
+
+    const { data: existing } = await supabase
+      .from("sms_transactions")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("dedupe_key", part.dedupeKey)
+      .maybeSingle();
+    let row = existing as Record<string, unknown> | null;
+    if (!row) {
+      if (isSms) {
+        await quickLogSpend(part.budgetItemId, amount, { kind: "sms", merchant });
+      } else {
+        await quickLogSpend(part.budgetItemId, amount);
+      }
+      const { data: inserted, error } = await supabase
+        .from("sms_transactions")
+        .insert({
+          user_id: user.id,
+          amount,
+          currency: input.currency,
+          merchant_raw: input.merchantRaw,
+          merchant_normalized: input.merchantNormalized,
+          direction: "debit",
+          occurred_at: input.occurredAt,
+          dedupe_key: part.dedupeKey,
+          status: "categorized",
+          budget_item_id: part.budgetItemId,
+          label: input.label,
+          source: isSms ? "sms" : "manual",
+          matched_rule_id: null,
+          original_amount: null,
+          raw_text: null,
+          sender: null,
+          template_key: null,
+        })
+        .select()
+        .single();
+      if (error || !inserted) throw new Error(error?.message ?? "Split insert failed");
+      row = inserted as Record<string, unknown>;
+    }
+    if (part.tempId) {
+      partIdMap.push({ tempId: part.tempId, realId: row.id as string, record: row });
+    }
+  }
+
+  const cur = await getUserCurrency(supabase, user.id);
+  const itemIds = [...new Set(input.parts.map((p) => p.budgetItemId))];
+  for (const id of itemIds) await notifyIfNearLimit(supabase, user.id, id, cur);
+
+  const { data: items } = await supabase
+    .from("budget_items")
+    .select("id, name")
+    .eq("user_id", user.id)
+    .in("id", itemIds);
+  const names = new Map((items ?? []).map((r) => [r.id as string, r.name as string]));
+  await logActivity(supabase, user.id, {
+    action_type: isSms ? "sms_txn_split" : "manual_spend_split",
+    category: "budget",
+    title: `Split ${merchant || input.label || "transaction"} ${fmt(input.total, cur)}`,
+    description: input.parts
+      .map((p) => `${names.get(p.budgetItemId) ?? "Item"} ${fmt(roundMoney(p.amount), cur)}`)
+      .join(", "),
+  });
+
+  return { ok: true, partIdMap };
 }
 
 export interface RecategorizeSmsInput {

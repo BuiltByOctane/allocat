@@ -166,6 +166,18 @@ Native push needs `android/app/google-services.json` (committed; not a secret, i
 
 Server actions write to `activity_logs` via `lib/server/activity-logger.ts` (`logActivity` + `fmt` for INR formatting). Per memory: the SQL migration for the `activity_logs` table still needs to be run on Supabase if missing.
 
+### What's new changelog
+
+In-app changelog, not part of the sync engine. Table `public.whats_new_entries` (title, `body_md`, `tags` ⊆ `new|improved|fixed`, `image_url`, `published_at`, `notified_at`); RLS is authenticated select only, writes are service-role. Public storage bucket `whats-new` (png/jpeg/webp/gif, ≤ 2 MB). Migration `20261031000000_whats_new.sql` — run it before the web build.
+
+- Reads: `getWhatsNewEntries` (`lib/actions/whatsNew.ts`) via `useWhatsNew` (`lib/hooks/useWhatsNew.ts`, React Query + `allocat-whats-new-cache` in localStorage). "Unseen" is per device (`allocat-whats-new-seen`, keyed on the latest `published_at`, so editing an entry never re-triggers "new").
+- Surfaces: `/whats-new` page (in `PROTECTED_PREFIXES`), Profile row with a dot, dashboard `WhatsNewCard`.
+- Inbox: `lib/whats-new/inbox.ts` copies notified entries ≤ 14 days old into the local Notifications inbox as id `whats-new:<entryId>`, kind `whats-new`. Seeded ids are tracked in `allocat-whats-new-inboxed` so a deleted inbox row stays deleted. Native FCM taps with url `/whats-new?e=<id>` map to the same id in `PushRegistration.tsx`.
+- Admin: `/admin/whats-new` (create/edit/delete, markdown preview, image upload via `app/api/admin/whats-new/upload/route.ts`, "Notify everyone" → `broadcast("all", …)` with a two-step confirm and an already-notified warning). Only the admin sends a push.
+- Publishing: `node scripts/whats-new.mjs add --title "<t>" [--tags new,improved] (--body "<md>" | --body-file <path>)`, `… list` (service role from `.env.local`; never sends a push).
+
+**Rule:** after merging a user-facing feature into `main`, add a What's new entry: a short title and 1–3 plain-language markdown lines about what the user can now do, tagged `new`/`improved`/`fixed`, via `node scripts/whats-new.mjs add`. Skip refactors, internal/admin-only changes and invisible fixes. Never send a push — the admin does that from `/admin/whats-new`.
+
 ### Onboarding tour
 
 Driver.js tour managed by `lib/tour/` — `TourContext` persists `{ enabled, seenPages }` in `localStorage` under `allocat-tour-state`. Add new pages by extending `tourSteps.ts` + `types.ts`.

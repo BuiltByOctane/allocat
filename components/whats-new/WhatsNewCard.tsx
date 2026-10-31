@@ -28,23 +28,25 @@ export function WhatsNewCard() {
 
   return (
     <Link href={WHATS_NEW_URL} className="block active:scale-[0.99] transition-transform">
-      <Card compact className="relative flex items-center gap-3 border border-accent/60 bg-accent/10">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-[12px] bg-accent text-accent-ink">
+      <Card compact className="relative overflow-hidden flex items-center gap-3 border border-accent/60">
+        {/* Tint layered over Card's own bg-card (two bg utilities would race on CSS order). */}
+        <span aria-hidden className="pointer-events-none absolute inset-0 bg-accent/10" />
+        <div className="relative flex size-10 shrink-0 items-center justify-center rounded-[12px] bg-accent text-accent-ink">
           <Sparkles size={19} strokeWidth={2} />
         </div>
-        <div className="flex-1 min-w-0">
+        <div className="relative flex-1 min-w-0">
           <div className="t-label text-muted-foreground">New in AlloCat</div>
           <div className="mt-0.5 flex items-center gap-1.5">
             <span className="truncate text-[14px] font-bold text-foreground">{latest.title}</span>
             {tag && <TagPill tag={tag} />}
           </div>
         </div>
-        <ChevronRight size={16} strokeWidth={2} className="shrink-0 text-muted-foreground" />
+        <ChevronRight size={16} strokeWidth={2} className="relative shrink-0 text-muted-foreground" />
         <button
           type="button"
           onClick={dismiss}
           aria-label="Dismiss"
-          className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground active:scale-90 transition-transform"
+          className="relative flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground active:scale-90 transition-transform"
         >
           <X size={14} strokeWidth={2.2} />
         </button>

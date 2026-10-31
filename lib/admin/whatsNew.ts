@@ -1,6 +1,5 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAdmin } from "@/lib/admin/guard";
@@ -23,7 +22,6 @@ type Result<T extends object = object> = ({ ok: true } & T) | { error: string };
 
 const BUCKET = "whats-new";
 const PATH = "/admin/whats-new";
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
 /** `whats_new_entries` is not in the generated Database types; use an untyped client. */
 function db(): SupabaseClient {
@@ -79,29 +77,10 @@ export async function deleteWhatsNewEntry(id: string): Promise<Result> {
   return { ok: true };
 }
 
-export async function uploadWhatsNewImage(form: FormData): Promise<Result<{ url: string }>> {
-  await requireAdmin();
-  const file = form.get("file");
-  if (!(file instanceof File) || file.size === 0) return { error: "No file." };
-  if (!file.type.startsWith("image/")) return { error: "Only images can be uploaded." };
-  if (file.size > MAX_IMAGE_BYTES) return { error: "Image must be ≤ 2 MB." };
-
-  const fromName = file.name.includes(".") ? file.name.split(".").pop() : "";
-  const fromType = file.type.split("/")[1]?.split("+")[0];
-  const ext = (fromName || fromType || "img").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 5) || "img";
-  const path = `${randomUUID()}.${ext}`;
-
-  const storage = db().storage.from(BUCKET);
-  const { error } = await storage.upload(path, file, { contentType: file.type, upsert: false });
-  if (error) return { error: error.message };
-  revalidatePath(PATH);
-  return { ok: true, url: storage.getPublicUrl(path).data.publicUrl };
-}
-
 export async function notifyWhatsNew(
   id: string,
   input: { title: string; body: string },
-): Promise<Result<{ sent: number; recipients: number }>> {
+): Promise<Result<{ sent: number; recipients: number; warning?: string }>> {
   const admin = await requireAdmin();
   const v = validateNotifyInput(input);
   if (!v.ok) return { error: v.error };
@@ -125,8 +104,17 @@ export async function notifyWhatsNew(
       .from("whats_new_entries")
       .update({ notified_at: new Date().toISOString() })
       .eq("id", id);
-    if (error) console.warn("[whats-new] notified_at stamp failed:", error.message);
     revalidatePath(PATH);
+    if (error) {
+      // The push already went out; report success but say the marker is stale.
+      console.warn("[whats-new] notified_at stamp failed:", error.message);
+      return {
+        ok: true,
+        sent: res.sent,
+        recipients: res.recipients,
+        warning: `Sent, but marking it notified failed (${error.message}) — it will still show "Not notified".`,
+      };
+    }
     return { ok: true, sent: res.sent, recipients: res.recipients };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Push failed" };

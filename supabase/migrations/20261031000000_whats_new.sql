@@ -29,6 +29,14 @@ create trigger whats_new_entries_set_updated_at
   for each row execute function public.set_updated_at();
 
 -- Public bucket for entry images; service role uploads, public URL serves reads.
-insert into storage.buckets (id, name, public)
-values ('whats-new', 'whats-new', true)
-on conflict (id) do nothing;
+-- Raster images only (no SVG: script-capable when served publicly), ≤ 2 MB.
+insert into storage.buckets (id, name, public, allowed_mime_types, file_size_limit)
+values (
+  'whats-new', 'whats-new', true,
+  array['image/png','image/jpeg','image/webp','image/gif'],
+  2097152
+)
+on conflict (id) do update set
+  public             = excluded.public,
+  allowed_mime_types = excluded.allowed_mime_types,
+  file_size_limit    = excluded.file_size_limit;

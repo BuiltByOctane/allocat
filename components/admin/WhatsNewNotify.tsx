@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { notifyWhatsNew } from "@/lib/admin/whatsNew";
+import { ago } from "@/lib/admin/format";
 import { excerpt } from "@/lib/whats-new/format";
 import type { WhatsNewEntry } from "@/lib/whats-new/types";
 
@@ -18,7 +19,8 @@ export function WhatsNewNotify({
 }: {
   entry: WhatsNewEntry;
   recipients: number;
-  onDone: () => void;
+  /** Closes the panel; on a successful send it carries the result line to show. */
+  onDone: (result?: string) => void;
 }) {
   const router = useRouter();
   const [title, setTitle] = useState(`What's new: ${entry.title}`.slice(0, 80));
@@ -26,8 +28,12 @@ export function WhatsNewNotify({
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  // State updates are async; a ref closes the double-click window on Confirm.
+  const inFlight = useRef(false);
 
   const send = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setMsg(null);
     try {
@@ -36,15 +42,18 @@ export function WhatsNewNotify({
         setMsg(`✕ ${res.error}`);
         return;
       }
-      setMsg(`✓ Sent ${res.sent} of ${res.recipients} devices.`);
-      setConfirming(false);
+      const line = `✓ Sent ${res.sent} of ${res.recipients} devices.`;
       router.refresh();
+      onDone(res.warning ? `${line} ⚠ ${res.warning}` : line);
     } catch (err) {
       setMsg(`✕ ${err instanceof Error ? err.message : "Push failed"}`);
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   };
+
+  const devices = `${recipients} device${recipients === 1 ? "" : "s"}`;
 
   const valid = title.trim().length > 0 && body.trim().length > 0;
 
@@ -74,7 +83,9 @@ export function WhatsNewNotify({
         {confirming ? (
           <>
             <span className="t-body-sm font-semibold">
-              Send to {recipients} device{recipients === 1 ? "" : "s"}?
+              {entry.notified_at
+                ? `Already notified ${ago(entry.notified_at)} — send again to ${devices}?`
+                : `Send to ${devices}?`}
             </span>
             <Button size="sm" variant="lime" disabled={busy} loading={busy} onClick={send}>
               Confirm
@@ -88,7 +99,7 @@ export function WhatsNewNotify({
             <Button size="sm" variant="lime" disabled={!valid || busy} onClick={() => setConfirming(true)}>
               Send push
             </Button>
-            <Button size="sm" variant="ghost" disabled={busy} onClick={onDone}>
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => onDone()}>
               Close
             </Button>
           </>

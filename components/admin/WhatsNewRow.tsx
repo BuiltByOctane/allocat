@@ -48,10 +48,26 @@ export function WhatsNewRow({ entry, recipients }: { entry: WhatsNewEntry; recip
 
       {mode === "view" && (
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => setMode("edit")}>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => {
+              setMsg(null);
+              setMode("edit");
+            }}
+          >
             Edit
           </Button>
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => setMode("notify")}>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => {
+              setMsg(null);
+              setMode("notify");
+            }}
+          >
             Notify
           </Button>
           <Button size="sm" variant="danger" disabled={busy} loading={busy} onClick={remove}>
@@ -62,7 +78,14 @@ export function WhatsNewRow({ entry, recipients }: { entry: WhatsNewEntry; recip
       )}
       {mode === "edit" && <WhatsNewEditor entry={entry} onDone={() => setMode("view")} />}
       {mode === "notify" && (
-        <WhatsNewNotify entry={entry} recipients={recipients} onDone={() => setMode("view")} />
+        <WhatsNewNotify
+          entry={entry}
+          recipients={recipients}
+          onDone={(result) => {
+            setMsg(result ?? null);
+            setMode("view");
+          }}
+        />
       )}
     </div>
   );

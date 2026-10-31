@@ -6,11 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Markdown } from "@/components/whats-new/Markdown";
 import { TagPill } from "@/components/whats-new/TagPill";
 import { WHATS_NEW_TAGS, type WhatsNewEntry, type WhatsNewTag } from "@/lib/whats-new/types";
-import {
-  createWhatsNewEntry,
-  updateWhatsNewEntry,
-  uploadWhatsNewImage,
-} from "@/lib/admin/whatsNew";
+import { createWhatsNewEntry, updateWhatsNewEntry } from "@/lib/admin/whatsNew";
 
 const field =
   "w-full rounded-tile bg-background px-3.5 py-2.5 t-body-sm border border-border outline-none focus:border-foreground/40";
@@ -46,9 +42,10 @@ export function WhatsNewEditor({
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await uploadWhatsNewImage(fd);
-      if ("error" in res) setMsg(`✕ ${res.error}`);
-      else setImageUrl(res.url);
+      const res = await fetch("/api/admin/whats-new/upload", { method: "POST", body: fd });
+      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+      if (!res.ok || !data.url) setMsg(`✕ ${data.error ?? res.statusText}`);
+      else setImageUrl(data.url);
     } catch (err) {
       setMsg(`✕ ${err instanceof Error ? err.message : "Upload failed"}`);
     } finally {
@@ -138,7 +135,7 @@ export function WhatsNewEditor({
         <input
           ref={fileRef}
           type="file"
-          accept="image/*"
+          accept="image/png,image/jpeg,image/webp,image/gif"
           className="hidden"
           onChange={(e) => upload(e.target.files?.[0])}
         />

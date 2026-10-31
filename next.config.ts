@@ -39,9 +39,6 @@ const nextConfig: NextConfig = {
     ];
   },
   experimental: {
-    // Admin "What's new" image upload goes through a server action (≤2 MB
-    // image + multipart overhead); the 1 MB default would reject it.
-    serverActions: { bodySizeLimit: "3mb" },
     // Next 15+ stopped reusing page segments from the client Router Cache on
     // forward <Link>/router nav (default staleTimes.dynamic = 0). That made
     // every navigation refetch the route's RSC payload (`?_rsc`) from the

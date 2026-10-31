@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { markSeen, readSeenAt, readCache, writeCache, storageAvailable, resetStorageProbe, readInboxed, addInboxed } from "./local";
+import { markSeen, readSeenAt, readCache, writeCache, storageAvailable, resetStorageProbe, readInboxed, addInboxed, clearInboxed } from "./local";
 
 function stubStorage() {
   const m = new Map<string, string>();
@@ -53,6 +53,7 @@ describe("throwing storage", () => {
     expect(() => markSeen("2026-10-01T00:00:00.000Z")).not.toThrow();
     expect(readCache()).toBeUndefined();
     expect(() => writeCache([])).not.toThrow();
+    expect(() => clearInboxed()).not.toThrow();
   });
 });
 
@@ -63,5 +64,15 @@ describe("inboxed ids", () => {
     const r = readInboxed();
     expect(r).toHaveLength(100);
     expect(r[99]).toBe("e119");
+  });
+
+  it("clearInboxed forgets seeded ids (sign-out) and leaves the seen key", () => {
+    const m = stubStorage();
+    addInboxed(["a", "b"]);
+    markSeen("2026-10-01T00:00:00.000Z");
+    clearInboxed();
+    expect(readInboxed()).toEqual([]);
+    expect(m.has("allocat-whats-new-inboxed")).toBe(false);
+    expect(readSeenAt()).toBe("2026-10-01T00:00:00.000Z");
   });
 });

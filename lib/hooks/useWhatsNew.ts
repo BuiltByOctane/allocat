@@ -1,7 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { useSyncExternalStore } from "react";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useEffect, useSyncExternalStore } from "react";
 import { getWhatsNewEntries } from "@/lib/actions/whatsNew";
 import { isUnseen } from "@/lib/whats-new/format";
 import { syncWhatsNewInbox } from "@/lib/whats-new/inbox";
@@ -16,10 +16,11 @@ import type { WhatsNewEntry } from "@/lib/whats-new/types";
 
 export const WHATS_NEW_KEY = ["whats-new"] as const;
 
-export function useWhatsNew() {
-  return useQuery<WhatsNewEntry[]>({
+/** Query options for the changelog; exported so the cache/refetch contract is testable. */
+export function whatsNewQueryOptions() {
+  return {
     queryKey: WHATS_NEW_KEY,
-    queryFn: async () => {
+    queryFn: async (): Promise<WhatsNewEntry[]> => {
       const entries = await getWhatsNewEntries();
       writeCache(entries);
       void syncWhatsNewInbox(entries).catch((err) =>
@@ -27,9 +28,28 @@ export function useWhatsNew() {
       );
       return entries;
     },
-    initialData: () => readCache(),
-    initialDataUpdatedAt: 0,
-  });
+    // The app default is staleTime: Infinity (IDB owns freshness). This query is
+    // not IDB-backed, so it needs its own window or a device would never refetch.
+    staleTime: 5 * 60_000,
+  };
+}
+
+/**
+ * Seed React Query from the localStorage copy so offline / cold starts render
+ * immediately. `updatedAt: 0` marks it stale, so the mount still refetches.
+ * Runs after mount (never during render) to keep SSR and hydration identical.
+ */
+export function seedWhatsNewFromCache(qc: QueryClient): void {
+  if (qc.getQueryData(WHATS_NEW_KEY) !== undefined) return;
+  const cached = readCache();
+  if (cached) qc.setQueryData<WhatsNewEntry[]>(WHATS_NEW_KEY, cached, { updatedAt: 0 });
+}
+
+export function useWhatsNew() {
+  const qc = useQueryClient();
+  // Declared before useQuery so the seed lands before the observer subscribes.
+  useEffect(() => seedWhatsNewFromCache(qc), [qc]);
+  return useQuery<WhatsNewEntry[]>(whatsNewQueryOptions());
 }
 
 function subscribe(cb: () => void) {

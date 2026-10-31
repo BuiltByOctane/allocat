@@ -103,3 +103,15 @@ export function addInboxed(ids: string[]): void {
     /* storage unavailable */
   }
 }
+
+/**
+ * Forget seeded inbox ids. Called on sign-out: the IDB inbox is wiped with the
+ * account, so the next account on this device must be seeded afresh.
+ */
+export function clearInboxed(): void {
+  try {
+    ls()?.removeItem(INBOXED_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+}

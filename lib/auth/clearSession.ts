@@ -1,6 +1,7 @@
 import { clearDB } from "@/lib/db/hydrate";
 import { FCM_TOKEN_KEY } from "@/components/pwa/PushRegistration";
 import { resetAnalytics } from "@/lib/analytics/client";
+import { clearInboxed } from "@/lib/whats-new/local";
 
 /**
  * localStorage keys holding per-account / personal state. Cleared on logout and
@@ -71,6 +72,9 @@ export async function clearClientSession(): Promise<void> {
   } catch {
     /* best effort */
   }
+  // The IDB inbox was just wiped; forget which What's new entries were seeded
+  // into it so the next account gets them. The "seen" key stays (per device).
+  clearInboxed();
   // Fresh anonymous id so the next account on this device is not linked to
   // this one in analytics.
   try {

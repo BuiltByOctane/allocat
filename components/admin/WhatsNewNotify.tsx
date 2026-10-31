@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { notifyWhatsNew } from "@/lib/admin/whatsNew";
 import { ago } from "@/lib/admin/format";
-import { excerpt } from "@/lib/whats-new/format";
+import { pushDefaults } from "@/lib/whats-new/format";
 import type { WhatsNewEntry } from "@/lib/whats-new/types";
 
 const field =
@@ -23,8 +23,10 @@ export function WhatsNewNotify({
   onDone: (result?: string) => void;
 }) {
   const router = useRouter();
-  const [title, setTitle] = useState(`What's new: ${entry.title}`.slice(0, 80));
-  const [body, setBody] = useState(excerpt(entry.body_md, 140) || "Tap to see what changed.");
+  const defaults = pushDefaults(entry);
+  const [pick, setPick] = useState(0);
+  const [title, setTitle] = useState(defaults.title);
+  const [body, setBody] = useState(defaults.body.slice(0, 200));
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -98,6 +100,19 @@ export function WhatsNewNotify({
           <>
             <Button size="sm" variant="lime" disabled={!valid || busy} onClick={() => setConfirming(true)}>
               Send push
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => {
+                const next = pick + 1;
+                setPick(next);
+                setTitle(pushDefaults(entry, next).title);
+                setConfirming(false);
+              }}
+            >
+              Another line
             </Button>
             <Button size="sm" variant="ghost" disabled={busy} onClick={() => onDone()}>
               Close

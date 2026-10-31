@@ -53,3 +53,32 @@ export function isUnseen(
   if (!seenAt) return true;
   return Date.parse(latestPublishedAt) > Date.parse(seenAt);
 }
+
+/** Push titles in Allo the Cat's voice; a fix-only entry gets its own set. */
+export const FEATURE_PUSH_TITLES = [
+  "Psst… Allo brought you something new 🐾",
+  "Meow! A fresh feature just landed 🐱",
+  "Allo dragged in something new. Come see 🐾",
+  "New trick unlocked 😼",
+] as const;
+
+export const FIX_PUSH_TITLES = [
+  "Allo caught a bug 🐾",
+  "Pounced on a pesky bug 😼",
+  "Hairball cleared. Things run smoother now 🐱",
+] as const;
+
+/** Only `fixed` (no new/improved) counts as a fix; untagged reads as a feature. */
+export function pushTitles(tags: WhatsNewTag[]): readonly string[] {
+  const fixOnly = tags.includes("fixed") && !tags.includes("new") && !tags.includes("improved");
+  return fixOnly ? FIX_PUSH_TITLES : FEATURE_PUSH_TITLES;
+}
+
+/** Prefilled push: a cat line as the title, the entry's title as the body. */
+export function pushDefaults(
+  entry: { title: string; tags: WhatsNewTag[] },
+  pick = 0,
+): { title: string; body: string } {
+  const titles = pushTitles(entry.tags);
+  return { title: titles[pick % titles.length], body: entry.title };
+}

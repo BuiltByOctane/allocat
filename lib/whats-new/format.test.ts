@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   excerpt,
+  FEATURE_PUSH_TITLES,
+  FIX_PUSH_TITLES,
   inboxId,
   isUnseen,
   normalizeTags,
+  pushDefaults,
   whatsNewIdFromUrl,
   whatsNewPushUrl,
 } from "./format";
@@ -68,5 +71,27 @@ describe("whatsNewIdFromUrl", () => {
   it("handles missing url or param", () => {
     expect(whatsNewIdFromUrl(undefined)).toBeUndefined();
     expect(whatsNewIdFromUrl("/whats-new")).toBeUndefined();
+  });
+});
+
+describe("pushDefaults", () => {
+  it("uses the entry title as the body", () => {
+    expect(pushDefaults({ title: "Split one spend", tags: ["new"] }).body).toBe("Split one spend");
+  });
+  it("picks a feature line for new/improved and untagged entries", () => {
+    expect(pushDefaults({ title: "x", tags: ["improved"] }).title).toBe(FEATURE_PUSH_TITLES[0]);
+    expect(pushDefaults({ title: "x", tags: [] }).title).toBe(FEATURE_PUSH_TITLES[0]);
+    expect(pushDefaults({ title: "x", tags: ["new", "fixed"] }).title).toBe(FEATURE_PUSH_TITLES[0]);
+  });
+  it("picks a fix line for fix-only entries", () => {
+    expect(pushDefaults({ title: "x", tags: ["fixed"] }).title).toBe(FIX_PUSH_TITLES[0]);
+  });
+  it("cycles through the lines", () => {
+    expect(pushDefaults({ title: "x", tags: ["fixed"] }, FIX_PUSH_TITLES.length + 1).title).toBe(
+      FIX_PUSH_TITLES[1],
+    );
+  });
+  it("keeps every line within the 80-char push title limit", () => {
+    for (const t of [...FEATURE_PUSH_TITLES, ...FIX_PUSH_TITLES]) expect(t.length).toBeLessThanOrEqual(80);
   });
 });

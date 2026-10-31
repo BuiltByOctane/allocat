@@ -30,6 +30,12 @@ describe("excerpt", () => {
     expect(out).toHaveLength(10);
     expect(out.endsWith("…")).toBe(true);
   });
+  it("joins soft-wrapped lines", () => {
+    expect(excerpt("first line\nsecond line")).toBe("first line second line");
+  });
+  it("falls back to heading when only a heading exists", () => {
+    expect(excerpt("## Only heading")).toBe("Only heading");
+  });
   it("handles empty", () => {
     expect(excerpt("")).toBe("");
   });

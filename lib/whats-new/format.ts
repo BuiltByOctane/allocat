@@ -20,7 +20,9 @@ export function excerpt(md: string, max = 120): string {
   // Prefer the first non-heading paragraph; a heading-only body falls back to it.
   const pick = paras.find((p) => !/^#{1,6}\s/.test(p)) ?? paras[0];
   if (!pick) return "";
-  const first = pick.split("\n")[0];
+  // A list yields its first item; prose is a soft-wrapped paragraph, so join lines.
+  const lines = pick.split("\n");
+  const first = /^\s*([-*+]|\d+\.)\s/.test(lines[0]) ? lines[0] : lines.join(" ");
   const text = first
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")

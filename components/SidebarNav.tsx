@@ -5,10 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Smartphone, X } from "lucide-react";
 import { useHaptic } from "@/lib/hooks/useHaptic";
-import { navItems } from "@/lib/nav/navItems";
+import { navItems, hrefForPath } from "@/lib/nav/navItems";
 
 export default function SidebarNav() {
   const pathname = usePathname();
+  const activeHref = hrefForPath(pathname);
   const haptic = useHaptic();
   const router = useRouter();
   const [showMobileHint, setShowMobileHint] = useState(false);
@@ -39,9 +40,7 @@ export default function SidebarNav() {
 
       <nav className="flex-1 px-3 py-2 flex flex-col gap-1">
         {navItems.map((item) => {
-          const isActive =
-            pathname === item.href ||
-            (item.href !== "/dashboard" && pathname.startsWith(item.href));
+          const isActive = activeHref === item.href;
           const { Icon } = item;
           return (
             <Link

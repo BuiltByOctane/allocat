@@ -4,6 +4,7 @@ import {
   inboxId,
   isUnseen,
   normalizeTags,
+  whatsNewIdFromUrl,
   whatsNewPushUrl,
 } from "./format";
 
@@ -53,5 +54,19 @@ describe("urls", () => {
   it("builds push url and inbox id", () => {
     expect(whatsNewPushUrl("abc")).toBe("/whats-new?e=abc");
     expect(inboxId("abc")).toBe("whats-new:abc");
+  });
+});
+
+describe("whatsNewIdFromUrl", () => {
+  it("returns the entry id from a whats-new push url", () => {
+    expect(whatsNewIdFromUrl("/whats-new?e=abc")).toBe("abc");
+  });
+  it("ignores other paths", () => {
+    expect(whatsNewIdFromUrl("/sms")).toBeUndefined();
+    expect(whatsNewIdFromUrl("/sms?e=abc")).toBeUndefined();
+  });
+  it("handles missing url or param", () => {
+    expect(whatsNewIdFromUrl(undefined)).toBeUndefined();
+    expect(whatsNewIdFromUrl("/whats-new")).toBeUndefined();
   });
 });

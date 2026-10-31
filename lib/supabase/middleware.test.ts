@@ -53,6 +53,7 @@ describe("isProtectedPath", () => {
 
   it("matches nested paths", () => {
     expect(isProtectedPath("/profile")).toBe(true);
+    expect(isProtectedPath("/whats-new")).toBe(true);
     expect(isProtectedPath("/sms/rules")).toBe(true);
     expect(isProtectedPath("/admin/users/123")).toBe(true);
   });

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { Capacitor } from "@capacitor/core";
-import { CalendarDays, ChevronRight, History, MessageSquareText, Smartphone, CheckCircle2, Lightbulb, RotateCcw, MessageSquareHeart, Receipt, FileBarChart, Sun, Moon, ShieldCheck, Trash2 } from "lucide-react";
+import { CalendarDays, ChevronRight, History, MessageSquareText, Smartphone, CheckCircle2, Lightbulb, RotateCcw, MessageSquareHeart, Sparkles, Receipt, FileBarChart, Sun, Moon, ShieldCheck, Trash2 } from "lucide-react";
 import UserAvatar from "@/components/profile/UserAvatar";
 import AvatarPickerSheet from "@/components/profile/AvatarPickerSheet";
 import { Card } from "@/components/ui/Card";
@@ -37,6 +37,8 @@ import { FeedbackSheet } from "@/components/feedback/FeedbackSheet";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import { track } from "@/lib/analytics/client";
 import { IOS_SETUP_HREF, useIosShortcut } from "@/lib/shortcut/useIosShortcut";
+import { useWhatsNewUnseen } from "@/lib/hooks/useWhatsNew";
+import { WHATS_NEW_URL } from "@/lib/whats-new/format";
 
 export default function ProfilePage() {
   const { data: profile } = useProfile();
@@ -44,6 +46,7 @@ export default function ProfilePage() {
   const tour = useTour();
   const isFoundingMember = useIsFoundingMember();
   const iosShortcut = useIosShortcut();
+  const { unseen: whatsNewUnseen } = useWhatsNewUnseen();
   const { resolvedTheme, setTheme } = useTheme();
 
   // Quick-action dock on /profile = light/dark toggle. Icon reflects the
@@ -152,6 +155,26 @@ export default function ProfilePage() {
             <div className="text-[13.5px] font-bold text-foreground">Activity</div>
             <div className="text-[10.5px] font-medium text-muted-foreground mt-0.5">
               A timeline of everything you've changed
+            </div>
+          </div>
+          <ChevronRight size={16} strokeWidth={2} className="text-muted-foreground" />
+        </Card>
+      </Link>
+
+      <Link href={WHATS_NEW_URL} className="block active:scale-[0.99] transition-transform">
+        <Card compact className="flex items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-tile text-muted-foreground">
+            <Sparkles size={18} strokeWidth={1.7} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 text-[13.5px] font-bold text-foreground">
+              What&apos;s new
+              {whatsNewUnseen && (
+                <span aria-label="New updates" className="size-2 rounded-full bg-accent" />
+              )}
+            </div>
+            <div className="text-[10.5px] font-medium text-muted-foreground mt-0.5">
+              Latest features and fixes
             </div>
           </div>
           <ChevronRight size={16} strokeWidth={2} className="text-muted-foreground" />

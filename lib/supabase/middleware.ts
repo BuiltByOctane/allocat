@@ -39,6 +39,7 @@ export const PROTECTED_PREFIXES = [
   "/transactions",
   "/notifications",
   "/reports",
+  "/whats-new",
   "/onboarding",
   // Admin portal. The allowlist check itself lives in lib/admin/guard.ts and
   // 404s non-admins; this only spares a signed-out visitor a blank render.

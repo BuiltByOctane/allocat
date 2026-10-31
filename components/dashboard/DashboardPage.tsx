@@ -13,6 +13,7 @@ import { useProfile } from "@/lib/hooks/useProfile";
 import { useIsFoundingMember } from "@/lib/hooks/useFoundingMember";
 import { FoundingBanner } from "@/components/founding/FoundingBanner";
 import { BudgetCycleCard } from "@/components/budget/BudgetCycleCard";
+import { WhatsNewCard } from "@/components/whats-new/WhatsNewCard";
 import { IosShortcutPrompt } from "@/components/sms/IosShortcutPrompt";
 import { CrownBadge } from "@/components/ui/CrownBadge";
 import NotificationBell from "@/components/notifications/NotificationBell";
@@ -311,6 +312,7 @@ export default function DashboardPage({ data }: DashboardProps) {
       {/* Manual spend — the page's primary action, kept low for one-handed reach */}
       {canLogSpend && <ManualSpendButton />}
 
+      <WhatsNewCard />
       <BudgetCycleCard />
       <FoundingBanner />
     </div>

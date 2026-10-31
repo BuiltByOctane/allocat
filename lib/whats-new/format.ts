@@ -6,6 +6,18 @@ export function whatsNewPushUrl(id: string): string {
   return `${WHATS_NEW_URL}?e=${id}`;
 }
 
+/** The entry id carried by a `/whats-new?e=<id>` push url, else undefined. */
+export function whatsNewIdFromUrl(url?: string): string | undefined {
+  if (!url) return undefined;
+  try {
+    const u = new URL(url, "http://local");
+    if (u.pathname !== WHATS_NEW_URL) return undefined;
+    return u.searchParams.get("e") || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function inboxId(id: string): string {
   return `whats-new:${id}`;
 }

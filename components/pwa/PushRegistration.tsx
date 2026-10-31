@@ -4,6 +4,8 @@ import { useEffect, useRef } from "react";
 import { Capacitor } from "@capacitor/core";
 import { useRouter } from "next/navigation";
 import { recordNotification } from "@/lib/notify/history";
+import { inboxId, whatsNewIdFromUrl } from "@/lib/whats-new/format";
+import { addInboxed } from "@/lib/whats-new/local";
 
 /**
  * Registers the native Android shell with FCM.
@@ -73,6 +75,15 @@ async function recordBroadcast(notification: RemoteNotification): Promise<void> 
     : notification.id != null
       ? String(notification.id)
       : undefined;
+
+  // A "What's new" push shares the in-app inbox id so the reconciler dedupes it,
+  // and is remembered so a user-deleted entry isn't re-seeded on next open.
+  const entryId = whatsNewIdFromUrl(url);
+  if (entryId) {
+    await recordNotification({ id: inboxId(entryId), kind: "whats-new", title, body, url });
+    addInboxed([entryId]);
+    return;
+  }
 
   await recordNotification({
     ...(messageId ? { id: `fcm:${messageId}` } : {}),

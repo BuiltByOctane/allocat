@@ -33,11 +33,14 @@ export function useWhatsNew() {
 }
 
 function subscribe(cb: () => void) {
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === null || e.key === "allocat-whats-new-seen") cb();
+  };
   window.addEventListener(WHATS_NEW_SEEN_EVENT, cb);
-  window.addEventListener("storage", cb);
+  window.addEventListener("storage", onStorage);
   return () => {
     window.removeEventListener(WHATS_NEW_SEEN_EVENT, cb);
-    window.removeEventListener("storage", cb);
+    window.removeEventListener("storage", onStorage);
   };
 }
 

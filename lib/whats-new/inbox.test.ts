@@ -26,6 +26,9 @@ const entry = (id: string, notifiedAgoDays: number | null): WhatsNewEntry => ({
 });
 
 beforeEach(() => {
+  const m = new Map<string, string>();
+  const ls = { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k) };
+  vi.stubGlobal("window", { localStorage: ls, dispatchEvent: vi.fn() });
   record.mockClear();
   existing.clear();
 });
@@ -47,5 +50,12 @@ describe("syncWhatsNewInbox", () => {
   });
   it("skips null notified_at", async () => {
     expect(await syncWhatsNewInbox([entry("a", null)], NOW)).toBe(0);
+  });
+  it("does not re-add a row the user deleted", async () => {
+    await syncWhatsNewInbox([entry("a", 1)], NOW);
+    existing.clear(); // user dismissed it
+    record.mockClear();
+    expect(await syncWhatsNewInbox([entry("a", 1)], NOW)).toBe(0);
+    expect(record).not.toHaveBeenCalled();
   });
 });

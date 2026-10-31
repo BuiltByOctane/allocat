@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { markSeen, readSeenAt, readCache, writeCache, storageAvailable } from "./local";
+import { markSeen, readSeenAt, readCache, writeCache, storageAvailable, resetStorageProbe, readInboxed, addInboxed } from "./local";
 
 function stubStorage() {
   const m = new Map<string, string>();
@@ -13,7 +13,10 @@ function stubStorage() {
   return m;
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  resetStorageProbe();
+});
 
 describe("whats-new local", () => {
   beforeEach(() => void stubStorage());
@@ -50,5 +53,15 @@ describe("throwing storage", () => {
     expect(() => markSeen("2026-10-01T00:00:00.000Z")).not.toThrow();
     expect(readCache()).toBeUndefined();
     expect(() => writeCache([])).not.toThrow();
+  });
+});
+
+describe("inboxed ids", () => {
+  it("roundtrips and caps at 100", () => {
+    stubStorage();
+    addInboxed(Array.from({ length: 120 }, (_, i) => `e${i}`));
+    const r = readInboxed();
+    expect(r).toHaveLength(100);
+    expect(r[99]).toBe("e119");
   });
 });

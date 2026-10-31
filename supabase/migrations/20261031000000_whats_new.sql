@@ -1,7 +1,7 @@
 -- "What's new" changelog. Admin-authored entries, readable by any signed-in
 -- user. Writes go through the service role only (no write policies).
 
-create table if not exists public.whats_new (
+create table if not exists public.whats_new_entries (
   id           uuid primary key default gen_random_uuid(),
   title        text        not null,
   body_md      text        not null default '',
@@ -14,18 +14,18 @@ create table if not exists public.whats_new (
   updated_at   timestamptz not null default now()
 );
 
-create index if not exists whats_new_published_at_idx
-  on public.whats_new (published_at desc);
+create index if not exists whats_new_entries_published_at_idx
+  on public.whats_new_entries (published_at desc);
 
-alter table public.whats_new enable row level security;
+alter table public.whats_new_entries enable row level security;
 
-drop policy if exists whats_new_select on public.whats_new;
-create policy whats_new_select on public.whats_new
+drop policy if exists whats_new_entries_select on public.whats_new_entries;
+create policy whats_new_entries_select on public.whats_new_entries
   for select to authenticated using (true);
 
-drop trigger if exists whats_new_set_updated_at on public.whats_new;
-create trigger whats_new_set_updated_at
-  before update on public.whats_new
+drop trigger if exists whats_new_entries_set_updated_at on public.whats_new_entries;
+create trigger whats_new_entries_set_updated_at
+  before update on public.whats_new_entries
   for each row execute function public.set_updated_at();
 
 -- Public bucket for entry images; service role uploads, public URL serves reads.

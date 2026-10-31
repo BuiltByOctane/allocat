@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/admin/support", icon: "inbox", label: "Support" },
   { href: "/admin/waitlist", icon: "phone_iphone", label: "iOS waitlist" },
   { href: "/admin/broadcast", icon: "campaign", label: "Broadcast" },
+  { href: "/admin/whats-new", icon: "new_releases", label: "What's new" },
   { href: "/admin/config", icon: "tune", label: "Config" },
 ];
 

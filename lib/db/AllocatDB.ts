@@ -42,6 +42,7 @@ export type NotifKind =
   | "pace"
   | "auto-allocate"
   | "budget-reminder"
+  | "whats-new"
   | "other";
 
 export interface NotificationRow {

@@ -12,6 +12,7 @@ import {
   Gauge,
   CheckCircle2,
   CalendarClock,
+  Sparkles,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -29,6 +30,7 @@ const ICON_FOR_KIND: Record<NotifKind, LucideIcon> = {
   pace: Gauge,
   "auto-allocate": CheckCircle2,
   "budget-reminder": CalendarClock,
+  "whats-new": Sparkles,
   other: Bell,
 };
 
